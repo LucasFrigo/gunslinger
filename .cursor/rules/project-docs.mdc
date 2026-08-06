@@ -1,0 +1,41 @@
+---
+description: Keep FEATURES, ARCHITECTURE, Roadmap, and CHANGELOG in sync when code changes
+alwaysApply: true
+---
+
+# Project documentation (mandatory)
+
+Agents must keep these files accurate when shipping meaningful work. Do not invent features that are not in code.
+
+## Canonical files
+
+| File | Purpose |
+|---|---|
+| `docs/FEATURES.md` | What exists / in progress / planned; status + key paths |
+| `docs/ARCHITECTURE.md` | How major systems work and where they live |
+| `Roadmap.md` | Future work, ordered easiest → hardest |
+| `CHANGELOG.md` | User-facing history ([Keep a Changelog](https://keepachangelog.com)) |
+| `VERSION` | Current SemVer string (single line, e.g. `0.1.0`) |
+
+Also sync `project.godot` → `application/config/version` with `VERSION`.
+
+## When to update (same PR / session as the code)
+
+- **New or changed behavior** → `docs/FEATURES.md` status + one-line note; touch `docs/ARCHITECTURE.md` if control flow, ownership, or key files moved.
+- **Finished a Roadmap item (or clearly started it)** → move/annotate in `Roadmap.md` and mirror status in `FEATURES.md`.
+- **Player-visible or shippable change** → add a `CHANGELOG.md` entry under `[Unreleased]`.
+- **Release / version bump** (only when the user asks to release or bump) → move `[Unreleased]` into a dated `## [X.Y.Z]` section, update `VERSION` + `config/version`.
+
+Skip doc churn for typos, formatting-only edits, or purely internal renames with no behavior change.
+
+## Changelog & SemVer
+
+- Categories: `Added`, `Changed`, `Fixed`, `Removed`, `Deprecated`.
+- **MAJOR**: breaking gameplay/API/net protocol. **MINOR**: new feature. **PATCH**: fixes/polish.
+- Pre-1.0: breaking changes may bump MINOR; still document them under `Changed` / `Removed`.
+
+## Style
+
+- Prefer short bullets and real paths (`gauntlet/duel_manager.gd`) over essays.
+- Status vocabulary in `FEATURES.md`: `done` | `partial` | `planned` | `blocked`.
+- If unsure whether something is implemented, grep/read code before writing docs.

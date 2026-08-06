@@ -5,6 +5,9 @@ A Godot 4.x VR dueling game: single-player gauntlet against AI gunslingers and
 slow projectiles with Superhot-style visible trajectories, and slow motion is
 fully tunable at runtime so you can A/B test what feels best.
 
+**Version:** see [`VERSION`](VERSION) · **Changelog:** [`CHANGELOG.md`](CHANGELOG.md)  
+**Feature status:** [`docs/FEATURES.md`](docs/FEATURES.md) · **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Roadmap:** [`Roadmap.md`](Roadmap.md)
+
 ## Requirements
 
 - **Godot 4.6+** (developed against 4.7 stable), standard build (GDScript).
