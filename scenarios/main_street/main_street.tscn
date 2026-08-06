@@ -1,0 +1,93 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scenarios/scenario_base.gd" id="1"]
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
+sky_top_color = Color(0.35, 0.55, 0.8, 1)
+sky_horizon_color = Color(0.82, 0.75, 0.62, 1)
+ground_bottom_color = Color(0.5, 0.42, 0.3, 1)
+ground_horizon_color = Color(0.82, 0.75, 0.62, 1)
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_mat")
+
+[sub_resource type="Environment" id="env"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 3
+ambient_light_sky_contribution = 0.7
+
+[sub_resource type="StandardMaterial3D" id="mat_sand"]
+albedo_color = Color(0.76, 0.65, 0.45, 1)
+roughness = 1.0
+
+[sub_resource type="StandardMaterial3D" id="mat_wood"]
+albedo_color = Color(0.45, 0.32, 0.2, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="mat_wood_dark"]
+albedo_color = Color(0.32, 0.22, 0.14, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="mat_trough"]
+albedo_color = Color(0.28, 0.3, 0.32, 1)
+roughness = 0.7
+
+[node name="MainStreet" type="Node3D"]
+script = ExtResource("1")
+
+[node name="PlayerSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 8)
+
+[node name="EnemySpawn" type="Marker3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, -8)
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 12, 0)
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="GND_Street" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+use_collision = true
+size = Vector3(24, 1, 46)
+material = SubResource("mat_sand")
+
+[node name="BLD_Saloon" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 3, -4)
+use_collision = true
+size = Vector3(6, 6, 12)
+material = SubResource("mat_wood")
+
+[node name="BLD_GeneralStore" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 2.5, 9)
+use_collision = true
+size = Vector3(6, 5, 10)
+material = SubResource("mat_wood_dark")
+
+[node name="BLD_Bank" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 3.5, -6)
+use_collision = true
+size = Vector3(6, 7, 10)
+material = SubResource("mat_wood_dark")
+
+[node name="BLD_Sheriff" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 2.5, 7)
+use_collision = true
+size = Vector3(6, 5, 9)
+material = SubResource("mat_wood")
+
+[node name="PRP_TroughLeft" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0.35, 2)
+use_collision = true
+size = Vector3(0.6, 0.7, 2)
+material = SubResource("mat_trough")
+
+[node name="PRP_BarrelsRight" type="CSGCylinder3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0.55, -2.5)
+use_collision = true
+radius = 0.45
+height = 1.1
+material = SubResource("mat_wood_dark")

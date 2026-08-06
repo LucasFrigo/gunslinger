@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="DuelEncounter" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://gauntlet/duel_encounter.gd" id="1"]
+[ext_resource type="Resource" path="res://ai/archetypes/ghost.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+label = "The Ghost, up close"
+archetype = ExtResource("2")
+scenario_index = 1
+health_mult = 2.0
+score_reward = 750

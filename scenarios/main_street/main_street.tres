@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ScenarioResource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenarios/scenario_resource.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenarios/main_street/main_street.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Main Street"
+description = "Classic high-noon showdown down the middle of town."
+scene = ExtResource("2")
+duel_distance = 16.0

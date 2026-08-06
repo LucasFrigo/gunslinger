@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ScenarioResource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenarios/scenario_resource.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenarios/canyon/canyon.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Canyon at Dusk"
+description = "Long shadows and long shots between the canyon walls."
+scene = ExtResource("2")
+duel_distance = 22.0

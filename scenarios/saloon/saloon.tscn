@@ -1,0 +1,101 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scenarios/scenario_base.gd" id="1"]
+
+[sub_resource type="Environment" id="env"]
+background_mode = 1
+background_color = Color(0.05, 0.04, 0.03, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.8, 0.6, 0.4, 1)
+ambient_light_energy = 0.25
+
+[sub_resource type="StandardMaterial3D" id="mat_floor"]
+albedo_color = Color(0.4, 0.28, 0.16, 1)
+roughness = 0.85
+
+[sub_resource type="StandardMaterial3D" id="mat_wall"]
+albedo_color = Color(0.35, 0.26, 0.18, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="mat_bar"]
+albedo_color = Color(0.25, 0.16, 0.1, 1)
+roughness = 0.7
+
+[sub_resource type="StandardMaterial3D" id="mat_table"]
+albedo_color = Color(0.45, 0.34, 0.22, 1)
+roughness = 0.9
+
+[node name="Saloon" type="Node3D"]
+script = ExtResource("1")
+
+[node name="PlayerSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5)
+
+[node name="EnemySpawn" type="Marker3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, -5)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="Chandelier" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.4, 0)
+light_color = Color(1, 0.8, 0.55, 1)
+light_energy = 2.5
+omni_range = 14.0
+shadow_enabled = true
+
+[node name="GND_Floor" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+use_collision = true
+size = Vector3(14, 1, 18)
+material = SubResource("mat_floor")
+
+[node name="ARC_Ceiling" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.2, 0)
+use_collision = true
+size = Vector3(14, 0.4, 18)
+material = SubResource("mat_wall")
+
+[node name="ARC_WallWest" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 2, 0)
+use_collision = true
+size = Vector3(0.4, 5, 18)
+material = SubResource("mat_wall")
+
+[node name="ARC_WallEast" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 2, 0)
+use_collision = true
+size = Vector3(0.4, 5, 18)
+material = SubResource("mat_wall")
+
+[node name="ARC_WallNorth" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -9)
+use_collision = true
+size = Vector3(14, 5, 0.4)
+material = SubResource("mat_wall")
+
+[node name="ARC_WallSouth" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 9)
+use_collision = true
+size = Vector3(14, 5, 0.4)
+material = SubResource("mat_wall")
+
+[node name="PRP_BarCounter" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.2, 0.6, 0)
+use_collision = true
+size = Vector3(1.2, 1.2, 10)
+material = SubResource("mat_bar")
+
+[node name="PRP_TableA" type="CSGCylinder3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.5, 0.45, 2.5)
+use_collision = true
+radius = 0.8
+height = 0.9
+material = SubResource("mat_table")
+
+[node name="PRP_TableB" type="CSGCylinder3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0.45, -3)
+use_collision = true
+radius = 0.8
+height = 0.9
+material = SubResource("mat_table")

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ScenarioResource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenarios/scenario_resource.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenarios/train_rooftop/train_rooftop.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Train Rooftop"
+description = "Two train cars, a gap in between, nowhere to hide."
+scene = ExtResource("2")
+duel_distance = 20.0

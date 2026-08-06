@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="AIArchetype" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://ai/ai_archetype.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+display_name = "The Sheriff"
+reaction_time = 0.45
+reaction_variance = 0.12
+draw_time = 0.45
+accuracy_angle_deg = 4.0
+followup_interval = 1.0
+bullet_speed = 55.0
+health = 2.0
+move_style = 1
+strafe_speed = 0.8
+body_color = Color(0.25, 0.3, 0.45, 1)

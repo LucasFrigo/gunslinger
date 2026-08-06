@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="DuelEncounter" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://gauntlet/duel_encounter.gd" id="1"]
+[ext_resource type="Resource" path="res://ai/archetypes/sheriff.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+label = "Deputy on the 3:10"
+archetype = ExtResource("2")
+scenario_index = 2
+health_mult = 1.5
+score_reward = 350
