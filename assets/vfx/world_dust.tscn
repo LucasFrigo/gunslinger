@@ -1,0 +1,38 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://assets/vfx/one_shot_particles.gd" id="1"]
+
+[sub_resource type="ParticleProcessMaterial" id="mat"]
+direction = Vector3(0, 0, -1)
+spread = 50.0
+initial_velocity_min = 0.8
+initial_velocity_max = 2.2
+gravity = Vector3(0, -2.5, 0)
+damping_min = 2.0
+damping_max = 4.0
+scale_min = 0.02
+scale_max = 0.06
+color = Color(0.62, 0.55, 0.4, 0.85)
+
+[sub_resource type="StandardMaterial3D" id="draw"]
+transparency = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(0.62, 0.55, 0.4, 0.8)
+
+[sub_resource type="SphereMesh" id="mesh"]
+material = SubResource("draw")
+radius = 0.025
+height = 0.05
+radial_segments = 6
+rings = 3
+
+[node name="WorldDust" type="GPUParticles3D"]
+emitting = false
+amount = 14
+lifetime = 0.55
+explosiveness = 0.95
+fixed_fps = 30
+process_material = SubResource("mat")
+draw_pass_1 = SubResource("mesh")
+script = ExtResource("1")

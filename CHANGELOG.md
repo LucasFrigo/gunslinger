@@ -11,6 +11,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Added
 
+- Combat impact feedback: spatial SFX stubs, western-grit particles (dust/wood/blood), and XR/flat haptics via `ImpactFeedback` (`AudioCatalog` / `VfxCatalog` swap path).
 - Project docs scaffold: `docs/FEATURES.md`, `docs/ARCHITECTURE.md`, agent rule for keeping them + this changelog current.
 
 ## [0.1.0] — 2026-08-06

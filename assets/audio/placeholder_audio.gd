@@ -34,6 +34,31 @@ static func dry_fire() -> AudioStreamWAV:
 		return _tone(320.0, 0.06, 0.3, 40.0))
 
 
+static func impact_flesh() -> AudioStreamWAV:
+	return _cached("impact_flesh", func() -> AudioStreamWAV:
+		return _noise_burst(0.14, 0.75, 22.0, 180.0))
+
+
+static func impact_world() -> AudioStreamWAV:
+	return _cached("impact_world", func() -> AudioStreamWAV:
+		return _noise_burst(0.12, 0.55, 28.0, 90.0))
+
+
+static func ricochet() -> AudioStreamWAV:
+	return _cached("ricochet", func() -> AudioStreamWAV:
+		return _noise_burst(0.08, 0.4, 35.0, 2400.0))
+
+
+static func hurt() -> AudioStreamWAV:
+	return _cached("hurt", func() -> AudioStreamWAV:
+		return _noise_burst(0.2, 0.65, 14.0, 140.0))
+
+
+static func near_miss_whoosh() -> AudioStreamWAV:
+	return _cached("near_miss_whoosh", func() -> AudioStreamWAV:
+		return _noise_burst(0.22, 0.3, 8.0, 1600.0))
+
+
 static func _cached(key: String, generator: Callable) -> AudioStreamWAV:
 	if not _cache.has(key):
 		_cache[key] = generator.call()

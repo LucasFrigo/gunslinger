@@ -25,7 +25,6 @@ var from_local_player := false
 var _travelled := 0.0
 var _trail: BulletTrail
 var _near_miss_done := false
-var _whizz: AudioStreamPlayer3D
 
 
 static func spawn(parent: Node, origin: Vector3, dir: Vector3, bullet_speed: float,
@@ -88,7 +87,7 @@ func _physics_process(delta: float) -> void:
 	if not hit.is_empty():
 		global_position = hit["position"]
 		_trail.add_point(hit["position"])
-		_on_impact(hit["collider"])
+		_on_impact(hit)
 		return
 
 	global_position = to
@@ -100,9 +99,17 @@ func _physics_process(delta: float) -> void:
 		_expire()
 
 
-func _on_impact(collider: Object) -> void:
-	if authoritative and collider is Hitbox and is_instance_valid(_trail):
-		(collider as Hitbox).receive_hit(_trail.points.duplicate())
+func _on_impact(hit: Dictionary) -> void:
+	var collider: Object = hit.get("collider")
+	var pos: Vector3 = hit.get("position", global_position)
+	var normal: Vector3 = hit.get("normal", Vector3.UP)
+	if collider is Hitbox:
+		var hitbox := collider as Hitbox
+		ImpactFeedback.body_impact(pos, normal, hitbox.region)
+		if authoritative and is_instance_valid(_trail):
+			hitbox.receive_hit(_trail.points.duplicate())
+	else:
+		ImpactFeedback.world_impact(pos, normal)
 	_expire()
 
 
@@ -131,13 +138,4 @@ func _check_near_miss(from: Vector3, to: Vector3) -> void:
 	if closest.distance_to(head) <= NEAR_MISS_RADIUS:
 		_near_miss_done = true
 		TimeManager.notify_near_miss()
-		_play_whizz(closest)
-
-
-func _play_whizz(at: Vector3) -> void:
-	_whizz = AudioStreamPlayer3D.new()
-	_whizz.stream = PlaceholderAudio.whizz()
-	_whizz.autoplay = true
-	get_tree().current_scene.add_child(_whizz)
-	_whizz.global_position = at
-	_whizz.finished.connect(_whizz.queue_free)
+		ImpactFeedback.near_miss(closest)

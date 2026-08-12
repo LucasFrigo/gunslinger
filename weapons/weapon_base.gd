@@ -30,7 +30,7 @@ func reset() -> void:
 func cock() -> void:
 	if drawn and not cocked:
 		cocked = true
-		_play(PlaceholderAudio.click())
+		_play(AudioCatalog.get_stream(&"click"))
 		state_changed.emit()
 
 
@@ -40,13 +40,13 @@ func try_fire(auto_cock: bool, override_direction := Vector3.ZERO) -> bool:
 	if not drawn:
 		return false
 	if rounds <= 0:
-		_play(PlaceholderAudio.dry_fire())
+		_play(AudioCatalog.get_stream(&"dry_fire"))
 		return false
 	if needs_cocking and not cocked:
 		if auto_cock:
 			cocked = true
 		else:
-			_play(PlaceholderAudio.dry_fire())
+			_play(AudioCatalog.get_stream(&"dry_fire"))
 			return false
 	rounds -= 1
 	cocked = false
@@ -54,8 +54,9 @@ func try_fire(auto_cock: bool, override_direction := Vector3.ZERO) -> bool:
 	var direction := override_direction
 	if direction.is_zero_approx():
 		direction = -muzzle.global_transform.basis.z
-	_play(PlaceholderAudio.gunshot())
+	_play(AudioCatalog.get_stream(&"gunshot"))
 	_muzzle_flash()
+	ImpactFeedback.shot_fired(muzzle.global_transform, &"right_hand")
 	fired.emit(muzzle.global_position, direction.normalized())
 	state_changed.emit()
 	return true

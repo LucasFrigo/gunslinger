@@ -120,7 +120,7 @@ func _apply_state() -> void:
 
 
 func _ring_bell() -> void:
-	_bell_player.stream = PlaceholderAudio.bell()
+	_bell_player.stream = AudioCatalog.get_stream(&"bell")
 	_bell_player.play()
 
 

@@ -17,7 +17,8 @@ Roadmap (future, by difficulty): [`../Roadmap.md`](../Roadmap.md)
 | Near-miss slow-mo hook | `done` | `TimeManager.notify_near_miss`, `weapons/bullet.gd` |
 | Gravity-drop / interactive reload | `planned` | Ammo `reset()` between duels only; see revolver comment |
 | Kill-cam / replay | `partial` | `kill_cam_requested` emits trail points; no listener yet |
-| Impact / AV polish (SFX, haptics, VFX) | `partial` | Rumble + near-miss exist; art/audio mostly placeholders |
+| Impact / AV polish (SFX, haptics, VFX) | `done` | `ImpactFeedback` + `AudioCatalog` / `VfxCatalog` stubs; combat XR/flat rumble wired |
+| Regional hit effects (arm/leg/head rules) | `planned` | Hitbox `region` export ready; gameplay rules on Roadmap |
 | Gun release / trick shots | `planned` | Roadmap |
 
 ## Modes

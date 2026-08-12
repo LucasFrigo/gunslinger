@@ -1,0 +1,38 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://assets/vfx/one_shot_particles.gd" id="1"]
+
+[sub_resource type="ParticleProcessMaterial" id="mat"]
+direction = Vector3(0, 0, -1)
+spread = 35.0
+initial_velocity_min = 0.4
+initial_velocity_max = 1.2
+gravity = Vector3(0, 0.4, 0)
+damping_min = 1.0
+damping_max = 2.5
+scale_min = 0.03
+scale_max = 0.08
+color = Color(0.55, 0.52, 0.45, 0.7)
+
+[sub_resource type="StandardMaterial3D" id="draw"]
+transparency = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(0.55, 0.52, 0.45, 0.65)
+
+[sub_resource type="SphereMesh" id="mesh"]
+material = SubResource("draw")
+radius = 0.04
+height = 0.08
+radial_segments = 8
+rings = 4
+
+[node name="MuzzleSmoke" type="GPUParticles3D"]
+emitting = false
+amount = 10
+lifetime = 0.45
+explosiveness = 0.9
+fixed_fps = 30
+process_material = SubResource("mat")
+draw_pass_1 = SubResource("mesh")
+script = ExtResource("1")

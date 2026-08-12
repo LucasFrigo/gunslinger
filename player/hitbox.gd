@@ -3,8 +3,10 @@ extends Area3D
 ## Damage-receiving zone (head/torso/limb). Bullets raycast against these.
 ## The entity that owns this hitbox must implement
 ## take_bullet_hit(damage: float, trail_points: PackedVector3Array).
+## `region` is for AV feedback and future regional gameplay (arm/leg rules).
 
 @export_range(0.1, 4.0, 0.05) var damage_mult := 1.0
+@export var region: StringName = &"torso"
 
 var owner_entity: Node
 

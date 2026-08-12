@@ -24,12 +24,14 @@ How major systems fit together. Keep this short; link to files. Update when owne
 | `GameManager` | Mode selection, scenario list, high-level flow |
 | `MovementConfig` | Flat/VR movement knobs → `user://movement.cfg` |
 | `DebugPresets` / `DebugMenu` | Live tuning + named presets |
+| `ImpactFeedback` | Combat SFX / VFX / haptics (`AudioCatalog`, `VfxCatalog`, `CombatHaptics`) |
 
 ## Combat
 
-- **Weapons:** `WeaponBase` → revolver; muzzle marker; cock/fire/holster.
-- **Bullets:** Real projectiles (`weapons/bullet.gd`), not hitscan; feed trails; near-miss check vs player head.
-- **Damage:** Host-authoritative in MP; head 2× / torso 1× via `player/hitbox.gd`.
+- **Weapons:** `WeaponBase` → revolver; muzzle marker; cock/fire/holster; fire kick via `ImpactFeedback.shot_fired`.
+- **Bullets:** Real projectiles (`weapons/bullet.gd`), not hitscan; feed trails; near-miss check vs player head; world/body impact feedback on ray hit.
+- **Damage:** Host-authoritative in MP; head 2× / torso 1× via `player/hitbox.gd` (`region` for AV + future limb rules).
+- **Feedback:** `ImpactFeedback` autoload — spatial stubs (`assets/audio/`), one-shot particles (`assets/vfx/`), XR rumble + flat joy vibration (`assets/haptics/`).
 - **Kill-cam hook:** `DuelManager.kill_cam_requested(trail_points)` — emit only until a replay consumer exists.
 
 ## AI

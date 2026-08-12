@@ -26,7 +26,6 @@ var _pose_accum := 0.0
 var _menu_panel: UIPanel3D
 var _vr_message: Label3D
 var _vr_message_timer := 0.0
-var _hit_audio: AudioStreamPlayer
 
 
 func _ready() -> void:
@@ -40,9 +39,6 @@ func _ready() -> void:
 	head_hitbox.owner_entity = self
 	torso_hitbox.owner_entity = self
 	revolver.fired.connect(_on_revolver_fired)
-
-	_hit_audio = AudioStreamPlayer.new()
-	add_child(_hit_audio)
 
 
 func _physics_process(_delta: float) -> void:
@@ -110,18 +106,13 @@ func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array) -> vo
 		play_death_feedback()
 		died.emit()
 	else:
-		_play_hurt()
+		ImpactFeedback.player_hurt(false)
 
 
 func play_death_feedback() -> void:
 	alive = false
-	_play_hurt()
+	ImpactFeedback.player_hurt(true)
 	GameManager.hud.flash_red()
-
-
-func _play_hurt() -> void:
-	_hit_audio.stream = PlaceholderAudio.click()
-	_hit_audio.play()
 
 
 # -- Gun handling -----------------------------------------------------------------

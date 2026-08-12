@@ -25,6 +25,7 @@ GameManager="*res://autoload/game_manager.gd"
 MovementConfig="*res://autoload/movement_config.gd"
 DebugPresets="*res://autoload/debug_presets.gd"
 DebugMenu="*res://autoload/debug_menu.gd"
+ImpactFeedback="*res://autoload/impact_feedback.gd"
 XRToolsUserSettings="*uid://bqgb8i74tm0t"
 XRToolsRumbleManager="*uid://by853dk86g1qw"
 

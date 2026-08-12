@@ -1,0 +1,38 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://assets/vfx/one_shot_particles.gd" id="1"]
+
+[sub_resource type="ParticleProcessMaterial" id="mat"]
+direction = Vector3(0, 0, -1)
+spread = 70.0
+initial_velocity_min = 0.3
+initial_velocity_max = 1.0
+gravity = Vector3(0, 0.1, 0)
+damping_min = 3.0
+damping_max = 5.0
+scale_min = 0.015
+scale_max = 0.04
+color = Color(0.7, 0.68, 0.6, 0.45)
+
+[sub_resource type="StandardMaterial3D" id="draw"]
+transparency = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(0.7, 0.68, 0.6, 0.4)
+
+[sub_resource type="SphereMesh" id="mesh"]
+material = SubResource("draw")
+radius = 0.03
+height = 0.06
+radial_segments = 6
+rings = 3
+
+[node name="NearMissWhoosh" type="GPUParticles3D"]
+emitting = false
+amount = 8
+lifetime = 0.35
+explosiveness = 0.85
+fixed_fps = 30
+process_material = SubResource("mat")
+draw_pass_1 = SubResource("mesh")
+script = ExtResource("1")

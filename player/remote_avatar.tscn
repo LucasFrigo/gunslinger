@@ -44,6 +44,7 @@ surface_material_override/0 = SubResource("mat_body")
 [node name="HeadHitbox" type="Area3D" parent="Head"]
 script = ExtResource("2")
 damage_mult = 2.0
+region = &"head"
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Head/HeadHitbox"]
 shape = SubResource("shape_head")
@@ -69,6 +70,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
 top_level = true
 script = ExtResource("2")
 damage_mult = 1.0
+region = &"torso"
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TorsoHitbox"]
 shape = SubResource("shape_torso")
