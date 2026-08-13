@@ -12,7 +12,7 @@ When an item below lands (or is clearly underway), update `docs/FEATURES.md` and
 
 ## 2. Medium — contained mechanics & set pieces
 * **Reload Mechanic:** ~~B-open / sustained motion dump / belt feed / bump-swing close shipped (`partial` in FEATURES).~~ Polish later: cylinder flip feel, real belt/cartridge assets. Dump/close knobs: `reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close`.
-* **Regional Hit Effects:** Arm/leg hitboxes plus region gameplay — arms disarm (force holster / drop readiness), legs apply move-speed penalty, headshots are instant death (torso non-instakill). Today: head×2 / torso×1 only; `health=1` makes both fatal. `Hitbox.region` already exists for AV; extend player/AI/remote scenes and damage rules.
+* **Regional Hit Effects:** ~~Arm/leg hitboxes + region gameplay shipped (`done` in FEATURES).~~ Head instakill; torso/limb HP; arm force-holster; leg slow. Tunables: `player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`.
 * **Train Map Concept:** A duel scene featuring a moving train passing between opponents. Players must either wait for the train to clear or attempt risky shots through open train cars. (Builds on the existing Train Rooftop arena idea.)
 * **Gun Release & Trick Shots:** Allow players to release, catch, and toss weapons mid-air to pull off stylish trick shots. (Needs reliable VR grab/release physics.)
 

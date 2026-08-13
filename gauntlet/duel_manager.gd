@@ -24,6 +24,8 @@ var _wait_duration := 0.0
 var _ai: DuelistAI
 var _peer_holstered := false
 var _bell_player: AudioStreamPlayer
+var _mp_health_host := CombatRules.DEFAULT_HEALTH
+var _mp_health_peer := CombatRules.DEFAULT_HEALTH
 
 
 func _ready() -> void:
@@ -57,11 +59,25 @@ func stop() -> void:
 
 ## Host-side bullets report authoritative hits here during MP duels.
 ## `victim_is_local` is true when the HOST player was hit.
-func mp_report_hit(victim_is_local: bool, trail_points: PackedVector3Array) -> void:
+func mp_report_hit(victim_is_local: bool, trail_points: PackedVector3Array,
+		region: StringName = CombatRules.REGION_TORSO, damage: float = 1.0) -> void:
 	if not is_mp or state == State.RESOLUTION or not NetworkManager.is_host():
 		return
-	var winner_is_host := not victim_is_local
-	_mp_finish.rpc(winner_is_host, "Clean kill", trail_points)
+	var victim_is_host := victim_is_local
+	if victim_is_host:
+		var result := CombatRules.resolve(region, _mp_health_host, damage)
+		_mp_health_host = result["health"]
+		if result["died"]:
+			_mp_finish.rpc(false, "Clean kill", trail_points)
+			return
+		_mp_wound.rpc(true, String(region), _mp_health_host)
+	else:
+		var peer_result := CombatRules.resolve(region, _mp_health_peer, damage)
+		_mp_health_peer = peer_result["health"]
+		if peer_result["died"]:
+			_mp_finish.rpc(true, "Clean kill", trail_points)
+			return
+		_mp_wound.rpc(false, String(region), _mp_health_peer)
 
 
 func notify_kill_shot(trail_points: PackedVector3Array) -> void:
@@ -199,6 +215,8 @@ func _finish_sp(local_won: bool, reason: String) -> void:
 func _mp_begin(scenario_index: int) -> void:
 	is_mp = true
 	_peer_holstered = false
+	_mp_health_host = CombatRules.player_max_health()
+	_mp_health_peer = CombatRules.player_max_health()
 	# Bind before setup: reset_for_duel emits holstered_changed, which the
 	# client must relay to the host.
 	_bind_player()
@@ -228,6 +246,15 @@ func _mp_holstered_state(holstered: bool) -> void:
 func _on_local_holster_changed(holstered: bool) -> void:
 	if is_mp and not NetworkManager.is_host():
 		_mp_holstered_state.rpc_id(1, holstered)
+
+
+@rpc("authority", "call_local", "reliable")
+func _mp_wound(victim_is_host: bool, region_str: String, new_health: float) -> void:
+	if state == State.RESOLUTION:
+		return
+	var i_am_victim := victim_is_host == NetworkManager.is_host()
+	if i_am_victim and is_instance_valid(GameManager.local_player):
+		GameManager.local_player.apply_wound(StringName(region_str), new_health)
 
 
 @rpc("authority", "call_local", "reliable")

@@ -53,7 +53,7 @@ transport differs (`netcode/enet_transport.gd` vs `netcode/steam_transport.gd`).
 | Move / lean | Left stick move, right stick turn | WASD / Q + E |
 | Debug / tuning panel | Left controller Y/menu button (wrist panel) | F3 |
 
-Reload dump/close feel: F3 → **Gunplay / AI** → **VR Reload** sliders (`reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close`), persisted in `user://tuning.cfg`.
+Reload dump/close feel: F3 → **Gunplay / AI** → **VR Reload** sliders (`reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close`), persisted in `user://tuning.cfg`. Regional hit knobs (`player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`) live under **Regional Hits** in the same panel.
 
 ## Slow motion (single-player only)
 
@@ -80,6 +80,7 @@ Delete snapshots of all tunables in `user://debug_presets.cfg`), **Reset duel**
 autoload/    game_manager, network_manager, time_manager (slow-mo),
              movement_config, debug_presets, debug_menu
 player/      player body + hitboxes, VR rig, flat rig, remote avatar
+combat/      shared hit resolution (head/torso/arm/leg)
 weapons/     weapon_base, revolver, bullet + trajectory trail
 ai/          duelist AI + data-driven archetypes (*.tres)
 scenarios/   scenario template (resource + base scene contract) + 4 greybox arenas

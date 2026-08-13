@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://player/remote_avatar.gd" id="1"]
 [ext_resource type="Script" path="res://player/hitbox.gd" id="2"]
@@ -24,6 +24,12 @@ radius = 0.14
 
 [sub_resource type="BoxShape3D" id="shape_torso"]
 size = Vector3(0.4, 0.6, 0.28)
+
+[sub_resource type="SphereShape3D" id="shape_arm"]
+radius = 0.11
+
+[sub_resource type="BoxShape3D" id="shape_leg"]
+size = Vector3(0.35, 0.7, 0.22)
 
 [node name="RemoteAvatar" type="Node3D"]
 script = ExtResource("1")
@@ -56,6 +62,13 @@ top_level = true
 mesh = SubResource("mesh_hand")
 surface_material_override/0 = SubResource("mat_body")
 
+[node name="ArmHitbox" type="Area3D" parent="LeftHand"]
+script = ExtResource("2")
+region = &"arm"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="LeftHand/ArmHitbox"]
+shape = SubResource("shape_arm")
+
 [node name="RightHand" type="Node3D" parent="."]
 top_level = true
 
@@ -64,6 +77,13 @@ mesh = SubResource("mesh_hand")
 surface_material_override/0 = SubResource("mat_body")
 
 [node name="Revolver" parent="RightHand" instance=ExtResource("3")]
+
+[node name="ArmHitbox" type="Area3D" parent="RightHand"]
+script = ExtResource("2")
+region = &"arm"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RightHand/ArmHitbox"]
+shape = SubResource("shape_arm")
 
 [node name="TorsoHitbox" type="Area3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
@@ -74,3 +94,12 @@ region = &"torso"
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TorsoHitbox"]
 shape = SubResource("shape_torso")
+
+[node name="LegHitbox" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
+top_level = true
+script = ExtResource("2")
+region = &"leg"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="LegHitbox"]
+shape = SubResource("shape_leg")

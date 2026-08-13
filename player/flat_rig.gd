@@ -89,7 +89,7 @@ func _process(delta: float) -> void:
 	# Walk (scaled time is fine here; it is gameplay movement, not physical).
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var motion := (transform.basis * Vector3(input_dir.x, 0, input_dir.y)) \
-			* MovementConfig.walk_speed * delta
+			* MovementConfig.walk_speed * _move_speed_mult() * delta
 	position += motion
 
 	# Lean.
@@ -108,3 +108,10 @@ func face_yaw(yaw: float) -> void:
 	_yaw = yaw
 	_pitch = 0.0
 	rotation.y = yaw
+
+
+func _move_speed_mult() -> float:
+	var player := GameManager.local_player
+	if player != null:
+		return player.move_speed_mult
+	return 1.0

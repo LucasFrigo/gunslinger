@@ -28,7 +28,7 @@ Briefing for business / pricing / go-to-market refinement.
 
 ### Core loop
 
-1. Standoff → bell → draw → fire → first lethal hit resolves.  
+1. Standoff → bell → draw → fire → first **lethal** hit resolves (head instakill; torso/limb HP).  
 2. Early draw = foul.  
 3. Holster / draw / cock / fire on a single-action revolver feel.  
 4. Optional slow-mo modes (SP only): CONSTANT, ON_DRAW, MOVEMENT (Superhot), NEAR_MISS.  
@@ -61,7 +61,7 @@ Status vocabulary: `done` | `partial` | `planned`. Full detail: [`FEATURES.md`](
 ### Done (playable today)
 
 - Core duel state machine (standoff → bell → draw → resolve, early-draw foul).  
-- Holster / draw / fire / cock; projectile bullets + trails; head/torso hitboxes.  
+- Holster / draw / fire / cock; projectile bullets + trails; head/torso/arm/leg hitboxes with regional rules (head instakill, arm disarm, leg slow).  
 - Free duel (arena + AI pick); gauntlet (6 rungs, 3 lives, session score).  
 - AI archetypes: Drunk / Sheriff / Ghost.  
 - 1v1 LAN multiplayer + UDP discovery.  
@@ -81,7 +81,7 @@ Status vocabulary: `done` | `partial` | `planned`. Full detail: [`FEATURES.md`](
 
 | Priority band | Items |
 |---|---|
-| Medium | Reload polish; regional hit effects (arm/leg/head rules); moving train set piece; gun release / trick shots |
+| Medium | Reload polish; moving train set piece; gun release / trick shots |
 | Hard | Horde mode; Mexican standoff (3P); ranking / leaderboards |
 | Very hard | Campaign; mod support |
 

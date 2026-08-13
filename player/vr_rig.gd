@@ -96,7 +96,7 @@ func _apply_locomotion(delta: float) -> float:
 	var head_yaw := camera.global_transform.basis.get_euler().y
 	var basis := Basis(Vector3.UP, head_yaw)
 	var motion := (basis * Vector3(move_input.x, 0.0, -move_input.y)) \
-			* MovementConfig.vr_move_speed * delta
+			* MovementConfig.vr_move_speed * _move_speed_mult() * delta
 	position += motion
 
 	_apply_turn(delta, right_hand.get_vector2("primary"))
@@ -245,3 +245,10 @@ func _update_pointer() -> void:
 		laser.position.z = -distance / 2.0
 	else:
 		laser.visible = false
+
+
+func _move_speed_mult() -> float:
+	var player := GameManager.local_player
+	if player != null:
+		return player.move_speed_mult
+	return 1.0

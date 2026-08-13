@@ -14,14 +14,19 @@ const CHAMBER_PROXIMITY := 0.14
 
 var use_vr := false
 var rig: Node3D
-var health := 1.0
+var health := CombatRules.DEFAULT_HEALTH
+var max_health := CombatRules.DEFAULT_HEALTH
 var alive := true
+var move_speed_mult := 1.0
 
 @onready var rig_holder: Node3D = $RigHolder
 @onready var holster: Node3D = $Holster
 @onready var revolver: Revolver = $Holster/Revolver
 @onready var head_hitbox: Hitbox = $HeadHitbox
 @onready var torso_hitbox: Hitbox = $TorsoHitbox
+@onready var arm_hitbox_l: Hitbox = $ArmHitboxL
+@onready var arm_hitbox_r: Hitbox = $ArmHitboxR
+@onready var leg_hitbox: Hitbox = $LegHitbox
 @onready var ammo_belt: Area3D = $AmmoBelt
 
 var _pose_accum := 0.0
@@ -37,6 +42,8 @@ var _prev_gate_open := false
 var _dump_armed := true
 var _close_armed := true
 var _dump_hold_accum := 0.0
+var _disarm_remaining := 0.0
+var _leg_remaining := 0.0
 
 
 func _ready() -> void:
@@ -55,6 +62,9 @@ func _ready() -> void:
 
 	head_hitbox.owner_entity = self
 	torso_hitbox.owner_entity = self
+	arm_hitbox_l.owner_entity = self
+	arm_hitbox_r.owner_entity = self
+	leg_hitbox.owner_entity = self
 	revolver.fired.connect(_on_revolver_fired)
 	revolver.shells_ejected.connect(_on_shells_ejected)
 	revolver.state_changed.connect(_on_revolver_state_changed)
@@ -67,6 +77,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_follow_body()
 	_update_vr_reload(delta)
+	_update_wound_status(delta)
 
 
 func _process(delta: float) -> void:
@@ -82,8 +93,18 @@ func _follow_body() -> void:
 	var yaw := Basis(Vector3.UP, head.basis.get_euler().y)
 
 	head_hitbox.global_transform = Transform3D(yaw, head.origin)
-	torso_hitbox.global_transform = Transform3D(
-		yaw, Vector3(head.origin.x, global_position.y + 1.1, head.origin.z))
+	var torso_pos := Vector3(head.origin.x, global_position.y + 1.1, head.origin.z)
+	torso_hitbox.global_transform = Transform3D(yaw, torso_pos)
+
+	var left_arm := torso_pos + yaw * Vector3(-0.32, 0.22, 0.0)
+	var right_arm := torso_pos + yaw * Vector3(0.32, 0.22, 0.0)
+	if use_vr:
+		left_arm = left_arm.lerp(rig.get_left_hand_transform().origin, 0.65)
+		right_arm = right_arm.lerp(rig.get_right_hand_transform().origin, 0.65)
+	arm_hitbox_l.global_transform = Transform3D(yaw, left_arm)
+	arm_hitbox_r.global_transform = Transform3D(yaw, right_arm)
+	leg_hitbox.global_transform = Transform3D(
+		yaw, Vector3(head.origin.x, global_position.y + 0.4, head.origin.z))
 
 	# Holster rides the right hip, following the head's yaw.
 	holster.global_transform = Transform3D(
@@ -91,9 +112,7 @@ func _follow_body() -> void:
 		Vector3(head.origin.x, global_position.y + 0.9, head.origin.z) + yaw * Vector3(0.25, 0.0, 0.05))
 
 	# Ammo belt around the waist / lower torso.
-	ammo_belt.global_transform = Transform3D(
-		yaw,
-		Vector3(head.origin.x, global_position.y + 1.1, head.origin.z))
+	ammo_belt.global_transform = Transform3D(yaw, torso_pos)
 
 
 func get_head_position() -> Vector3:
@@ -105,18 +124,29 @@ func is_gun_drawn() -> bool:
 
 
 func hitbox_rids() -> Array[RID]:
-	return [head_hitbox.get_rid(), torso_hitbox.get_rid()]
+	return [
+		head_hitbox.get_rid(),
+		torso_hitbox.get_rid(),
+		arm_hitbox_l.get_rid(),
+		arm_hitbox_r.get_rid(),
+		leg_hitbox.get_rid(),
+	]
 
 
 # -- Duel lifecycle ---------------------------------------------------------------
 
 func reset_for_duel(spawn: Transform3D) -> void:
 	global_transform = spawn
-	health = 1.0
+	max_health = CombatRules.player_max_health()
+	health = max_health
 	alive = true
+	move_speed_mult = 1.0
+	_disarm_remaining = 0.0
+	_leg_remaining = 0.0
 	_clear_held_cartridge(true)
 	_holster_gun()
 	revolver.reset()
+	_refresh_health_hud()
 	_dump_armed = true
 	_close_armed = true
 	_dump_hold_accum = 0.0
@@ -131,26 +161,50 @@ func reset_for_duel(spawn: Transform3D) -> void:
 		(rig as VRRig).reset_locomotion()
 
 
-func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array) -> void:
+func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
+		region: StringName = CombatRules.REGION_TORSO) -> void:
 	if not alive:
 		return
 	if NetworkManager.is_active():
-		# MP: the host's simulation is authoritative for hits on itself.
+		# MP: host resolves HP/status; application arrives via _mp_wound / _mp_finish.
 		if NetworkManager.is_host():
-			GameManager.duel.mp_report_hit(true, trail_points)
+			GameManager.duel.mp_report_hit(true, trail_points, region, damage_mult)
 		return
-	health -= damage_mult
-	if health <= 0.0:
+	var result := CombatRules.resolve(region, health, damage_mult)
+	health = result["health"]
+	_refresh_health_hud()
+	if result["died"]:
 		play_death_feedback()
 		died.emit(trail_points)
-	else:
-		ImpactFeedback.player_hurt(false)
+		return
+	_apply_nonfatal(region)
+
+
+## Host/client wound RPC: set HP and apply arm/leg status without re-resolving.
+func apply_wound(region: StringName, new_health: float) -> void:
+	if not alive:
+		return
+	health = new_health
+	_refresh_health_hud()
+	_apply_nonfatal(region)
+
+
+func force_holster() -> void:
+	_holster_gun()
+
+
+func is_disarmed() -> bool:
+	return _disarm_remaining > 0.0
 
 
 func play_death_feedback() -> void:
 	alive = false
+	move_speed_mult = 1.0
+	_disarm_remaining = 0.0
+	_leg_remaining = 0.0
 	ImpactFeedback.player_hurt(true)
 	GameManager.hud.flash_red()
+	_refresh_health_hud()
 
 
 # -- Gun handling -----------------------------------------------------------------
@@ -172,8 +226,42 @@ func _toggle_gun() -> void:
 		_draw_gun()
 
 
+func _apply_nonfatal(region: StringName) -> void:
+	ImpactFeedback.player_hurt(false)
+	if region == CombatRules.REGION_ARM:
+		force_holster()
+		_disarm_remaining = float(GameManager.tuning["arm_disarm_duration"])
+		GameManager.show_message("Disarmed!", 1.5)
+	elif region == CombatRules.REGION_LEG:
+		_leg_remaining = float(GameManager.tuning["leg_slow_duration"])
+		move_speed_mult = float(GameManager.tuning["leg_speed_mult"])
+		GameManager.show_message("Limp!", 1.5)
+
+
+func _update_wound_status(delta: float) -> void:
+	var real_delta := delta / maxf(Engine.time_scale, 0.001)
+	if _disarm_remaining > 0.0:
+		_disarm_remaining -= real_delta
+		if _disarm_remaining < 0.0:
+			_disarm_remaining = 0.0
+	if _leg_remaining > 0.0:
+		_leg_remaining -= real_delta
+		if _leg_remaining <= 0.0:
+			_leg_remaining = 0.0
+			move_speed_mult = 1.0
+
+
+func _refresh_health_hud() -> void:
+	if GameManager.hud == null:
+		return
+	if GameManager.mode == GameManager.GameMode.MENU or GameManager.mode == GameManager.GameMode.BOOT:
+		GameManager.hud.set_health(0.0, 0.0)
+		return
+	GameManager.hud.set_health(health, max_health)
+
+
 func _draw_gun() -> void:
-	if revolver.drawn:
+	if revolver.drawn or _disarm_remaining > 0.0:
 		return
 	revolver.drawn = true
 	revolver.reparent(rig.get_gun_attach())

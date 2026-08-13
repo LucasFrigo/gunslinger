@@ -12,6 +12,9 @@ const LERP_SPEED := 18.0
 @onready var gun: Node3D = $RightHand/Revolver
 @onready var head_hitbox: Hitbox = $Head/HeadHitbox
 @onready var torso_hitbox: Hitbox = $TorsoHitbox
+@onready var arm_hitbox_l: Hitbox = $LeftHand/ArmHitbox
+@onready var arm_hitbox_r: Hitbox = $RightHand/ArmHitbox
+@onready var leg_hitbox: Hitbox = $LegHitbox
 
 var _target_head: Transform3D
 var _target_left: Transform3D
@@ -22,6 +25,9 @@ var _has_pose := false
 func _ready() -> void:
 	head_hitbox.owner_entity = self
 	torso_hitbox.owner_entity = self
+	arm_hitbox_l.owner_entity = self
+	arm_hitbox_r.owner_entity = self
+	leg_hitbox.owner_entity = self
 	gun.visible = false
 	# Initial guess before the first pose arrives.
 	_target_head = global_transform.translated_local(Vector3.UP * 1.7)
@@ -46,12 +52,21 @@ func _process(delta: float) -> void:
 	var yaw := Basis(Vector3.UP, head.global_transform.basis.get_euler().y)
 	torso_hitbox.global_transform = Transform3D(
 		yaw, head.global_position + Vector3.DOWN * 0.55)
+	leg_hitbox.global_transform = Transform3D(
+		yaw, head.global_position + Vector3.DOWN * 1.3)
 
 
-func take_bullet_hit(_damage_mult: float, trail_points: PackedVector3Array) -> void:
+func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
+		region: StringName = CombatRules.REGION_TORSO) -> void:
 	if NetworkManager.is_host():
-		GameManager.duel.mp_report_hit(false, trail_points)
+		GameManager.duel.mp_report_hit(false, trail_points, region, damage_mult)
 
 
 func hitbox_rids() -> Array[RID]:
-	return [head_hitbox.get_rid(), torso_hitbox.get_rid()]
+	return [
+		head_hitbox.get_rid(),
+		torso_hitbox.get_rid(),
+		arm_hitbox_l.get_rid(),
+		arm_hitbox_r.get_rid(),
+		leg_hitbox.get_rid(),
+	]

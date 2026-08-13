@@ -4,6 +4,8 @@ extends Node
 
 const REGION_HEAD := &"head"
 const REGION_TORSO := &"torso"
+const REGION_ARM := &"arm"
+const REGION_LEG := &"leg"
 
 
 func shot_fired(muzzle_global: Transform3D, shooting_hand: StringName = &"right_hand") -> void:
