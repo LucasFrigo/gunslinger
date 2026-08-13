@@ -4,6 +4,7 @@ extends CanvasLayer
 ## VR player borrows into a 3D panel via UIPanel3D.
 
 @onready var message_label: Label = $Message
+@onready var reload_status: Label = $ReloadStatus
 @onready var red_flash: ColorRect = $RedFlash
 @onready var menu_holder: Control = $MenuHolder
 
@@ -14,6 +15,7 @@ var _message_timer: SceneTreeTimer
 func _ready() -> void:
 	_menu = $MenuHolder/MainMenu
 	message_label.visible = false
+	reload_status.visible = false
 	red_flash.modulate.a = 0.0
 	menu_holder.visible = false
 
@@ -59,6 +61,15 @@ func show_message(text: String, duration := 2.5) -> void:
 	timer.timeout.connect(func() -> void:
 		if _message_timer == timer:
 			message_label.visible = false)
+
+
+## Persistent reload / ammo readout. Empty string hides it.
+func set_reload_status(text: String) -> void:
+	if text.is_empty():
+		reload_status.visible = false
+		return
+	reload_status.text = text
+	reload_status.visible = true
 
 
 func flash_red() -> void:

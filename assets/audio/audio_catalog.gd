@@ -7,7 +7,7 @@ extends RefCounted
 ## Expected filenames when assets arrive (see assets/audio/README.md):
 ##   gunshot.ogg, click.ogg, dry_fire.ogg, bell.ogg, whizz.ogg,
 ##   impact_flesh.ogg, impact_world.ogg, ricochet.ogg, hurt.ogg,
-##   near_miss_whoosh.ogg
+##   near_miss_whoosh.ogg, shell_eject.ogg, chamber.ogg
 
 ## Optional: StringName cue → AudioStream. Checked before placeholders.
 static var OVERRIDES: Dictionary = {}
@@ -37,6 +37,10 @@ static func get_stream(cue: StringName) -> AudioStream:
 			return PlaceholderAudio.hurt()
 		"near_miss_whoosh":
 			return PlaceholderAudio.near_miss_whoosh()
+		"shell_eject":
+			return PlaceholderAudio.shell_eject()
+		"chamber":
+			return PlaceholderAudio.chamber()
 		_:
 			push_warning("AudioCatalog: unknown cue '%s'" % cue)
 			return PlaceholderAudio.click()

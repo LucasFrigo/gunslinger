@@ -32,6 +32,8 @@ var movement_min_factor := 0.12
 var movement_full_speed := 2.5   ## m/s of combined head+hand motion for 100% time
 var near_miss_factor := 0.2
 var near_miss_duration := 0.7
+var kill_cam_factor := 0.15
+var kill_cam_duration := 2.2
 var ramp_speed := 6.0            ## how fast time scale eases toward its target
 
 var current_scale := 1.0
@@ -109,6 +111,12 @@ func notify_near_miss() -> void:
 		_burst_time_left = near_miss_duration
 
 
+## Forced slow-mo burst for kill-cam presentation (any Mode; still MP-gated).
+func notify_kill_cam() -> void:
+	_burst_factor = kill_cam_factor
+	_burst_time_left = kill_cam_duration
+
+
 func reset() -> void:
 	_burst_time_left = 0.0
 	current_scale = 1.0
@@ -121,7 +129,8 @@ func reset() -> void:
 const TUNABLES := [
 	"constant_factor", "on_draw_factor", "on_draw_duration",
 	"movement_min_factor", "movement_full_speed",
-	"near_miss_factor", "near_miss_duration", "ramp_speed",
+	"near_miss_factor", "near_miss_duration",
+	"kill_cam_factor", "kill_cam_duration", "ramp_speed",
 ]
 
 

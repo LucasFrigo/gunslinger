@@ -1,0 +1,16 @@
+[gd_scene load_steps=3 format=3]
+
+[sub_resource type="StandardMaterial3D" id="mat_brass"]
+albedo_color = Color(0.72, 0.55, 0.22, 1)
+metallic = 0.6
+roughness = 0.4
+
+[sub_resource type="CylinderMesh" id="mesh_cartridge"]
+top_radius = 0.005
+bottom_radius = 0.005
+height = 0.032
+radial_segments = 8
+
+[node name="CartridgePlaceholder" type="MeshInstance3D"]
+mesh = SubResource("mesh_cartridge")
+surface_material_override/0 = SubResource("mat_brass")

@@ -14,6 +14,8 @@ const SLOWMO_SLIDERS := {
 	"movement_full_speed": [0.5, 6.0, 0.1],
 	"near_miss_factor": [0.05, 1.0, 0.01],
 	"near_miss_duration": [0.1, 3.0, 0.05],
+	"kill_cam_factor": [0.05, 1.0, 0.01],
+	"kill_cam_duration": [0.5, 5.0, 0.1],
 	"ramp_speed": [0.5, 20.0, 0.5],
 }
 
@@ -44,6 +46,7 @@ var _bullet_value: Label
 var _ai_slider: HSlider
 var _ai_value: Label
 var _auto_cock: CheckButton
+var _reload_sliders: Dictionary = {}
 var _movement_sliders: Dictionary = {}
 var _turn_mode_option: OptionButton
 var _preset_option: OptionButton
@@ -238,6 +241,24 @@ func _build_gunplay_section(root: Control) -> void:
 		GameManager.set_tuning("auto_cock", pressed))
 	root.add_child(_auto_cock)
 
+	_add_header(root, "VR Reload (m/s)")
+	const RELOAD_SLIDERS := {
+		"reload_dump_speed": [1.0, 12.0, 0.1],
+		"reload_dump_hold": [0.05, 1.0, 0.05],
+		"reload_swing_close": [2.0, 14.0, 0.1],
+		"reload_bump_close": [0.5, 8.0, 0.1],
+	}
+	for key in RELOAD_SLIDERS:
+		var range_def: Array = RELOAD_SLIDERS[key]
+		var tune_key: String = key
+		var widgets := _add_slider(root, key, range_def[0], range_def[1], range_def[2],
+				float(GameManager.tuning[tune_key]),
+				func(value: float) -> void:
+					if _refreshing:
+						return
+					GameManager.set_tuning(tune_key, value))
+		_reload_sliders[tune_key] = widgets
+
 
 func _build_movement_section(root: Control) -> void:
 	_add_header(root, "Movement (Flat)")
@@ -356,6 +377,11 @@ func _refresh_from_systems() -> void:
 		_ai_value.text = "%.2f" % GameManager.tuning["ai_speed_mult"]
 	if _auto_cock != null:
 		_auto_cock.button_pressed = GameManager.tuning["auto_cock"]
+	for key in _reload_sliders:
+		var rwidgets: Dictionary = _reload_sliders[key]
+		var rvalue: float = float(GameManager.tuning[key])
+		rwidgets["slider"].value = rvalue
+		rwidgets["label"].text = "%.2f" % rvalue
 	for key in _movement_sliders:
 		var mwidgets: Dictionary = _movement_sliders[key]
 		var mvalue: float = float(MovementConfig.get_value(key))

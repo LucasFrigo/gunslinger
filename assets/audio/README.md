@@ -30,6 +30,8 @@ Do **not** call `PlaceholderAudio.*` from gameplay code — use `AudioCatalog.ge
 | `ricochet` | Occasional world tick | `ricochet.ogg` |
 | `hurt` | Local player hurt/death | `hurt.ogg` |
 | `near_miss_whoosh` | Soft near-miss layer | `near_miss_whoosh.ogg` |
+| `shell_eject` | Gravity-drop dump | `shell_eject.ogg` |
+| `chamber` | Round seated in cylinder | `chamber.ogg` |
 
 VFX placeholders live under `assets/vfx/` — swap via `VfxCatalog.OVERRIDES`.
 Haptic events live under `assets/haptics/*.tres`.

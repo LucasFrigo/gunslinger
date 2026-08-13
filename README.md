@@ -6,7 +6,8 @@ slow projectiles with Superhot-style visible trajectories, and slow motion is
 fully tunable at runtime so you can A/B test what feels best.
 
 **Version:** see [`VERSION`](VERSION) · **Changelog:** [`CHANGELOG.md`](CHANGELOG.md)  
-**Feature status:** [`docs/FEATURES.md`](docs/FEATURES.md) · **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Roadmap:** [`Roadmap.md`](Roadmap.md)
+**Feature status:** [`docs/FEATURES.md`](docs/FEATURES.md) · **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Roadmap:** [`Roadmap.md`](Roadmap.md)  
+**Business / pricing brief:** [`docs/BUSINESS_BRIEF.md`](docs/BUSINESS_BRIEF.md)
 
 ## Requirements
 
@@ -46,10 +47,13 @@ transport differs (`netcode/enet_transport.gd` vs `netcode/steam_transport.gd`).
 |---|---|---|
 | Draw / holster | Grip near right hip | Right mouse button |
 | Fire | Right trigger | Left mouse button |
-| Cock hammer (single-action) | A/X button | Space |
+| Cock hammer (single-action) | A/X button | Space (closes gate if open) |
+| Reload | Right B open gate; shake to dump; left hand in belt + grip for round; release near cylinder; bump/swing close | `R` open+dump, `R` chamber, Space close |
 | Menu pointer | Right controller laser + trigger | Mouse |
 | Move / lean | Left stick move, right stick turn | WASD / Q + E |
 | Debug / tuning panel | Left controller Y/menu button (wrist panel) | F3 |
+
+Reload dump/close feel: F3 → **Gunplay / AI** → **VR Reload** sliders (`reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close`), persisted in `user://tuning.cfg`.
 
 ## Slow motion (single-player only)
 

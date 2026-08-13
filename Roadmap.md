@@ -7,10 +7,11 @@ Ordered easiest → hardest to implement, given what already exists in the codeb
 When an item below lands (or is clearly underway), update `docs/FEATURES.md` and move or strike the bullet here.
 
 ## 1. Easy — polish & finish existing hooks
-* **Kill Cam & Replay System:** Provide dynamic camera angles and slow-motion replays showing fatal shots and highlights. (`kill_cam_requested` already emits trail points — needs a listener.)
+
+*(none — kill cam shipped; see [`docs/FEATURES.md`](docs/FEATURES.md))*
 
 ## 2. Medium — contained mechanics & set pieces
-* **Reload Mechanic:** Implement an interactive reload (start with planned gravity-drop; expand later to inserting bullets / flipping). Ammo already resets between duels.
+* **Reload Mechanic:** ~~B-open / sustained motion dump / belt feed / bump-swing close shipped (`partial` in FEATURES).~~ Polish later: cylinder flip feel, real belt/cartridge assets. Dump/close knobs: `reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close`.
 * **Regional Hit Effects:** Arm/leg hitboxes plus region gameplay — arms disarm (force holster / drop readiness), legs apply move-speed penalty, headshots are instant death (torso non-instakill). Today: head×2 / torso×1 only; `health=1` makes both fatal. `Hitbox.region` already exists for AV; extend player/AI/remote scenes and damage rules.
 * **Train Map Concept:** A duel scene featuring a moving train passing between opponents. Players must either wait for the train to clear or attempt risky shots through open train cars. (Builds on the existing Train Rooftop arena idea.)
 * **Gun Release & Trick Shots:** Allow players to release, catch, and toss weapons mid-air to pull off stylish trick shots. (Needs reliable VR grab/release physics.)

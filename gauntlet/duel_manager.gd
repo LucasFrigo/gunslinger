@@ -174,7 +174,7 @@ func _on_enemy_died(trail_points: PackedVector3Array) -> void:
 	_finish_sp(true, "Clean kill")
 
 
-func _on_player_died() -> void:
+func _on_player_died(trail_points: PackedVector3Array) -> void:
 	if state == State.IDLE:
 		return
 	if is_mp:
@@ -182,6 +182,7 @@ func _on_player_died() -> void:
 	var reason := "Shot down"
 	if state == State.WAIT_SIGNAL:
 		reason = "Shot down before the bell"
+	notify_kill_shot(trail_points)
 	_finish_sp(false, reason)
 
 

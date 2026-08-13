@@ -1,13 +1,14 @@
 class_name FlatRig
 extends Node3D
 ## Non-VR test harness for the notebook: mouse-look, WASD walk, Q/E lean,
-## RMB draw/holster, LMB fire, Space cock. Deliberately minimal -- it exists
-## so multiplayer can be tested against the Quest without a second headset.
-## Walk / look / lean speeds come from MovementConfig (debug panel).
+## RMB draw/holster, LMB fire, Space cock (or close gate), R reload. Deliberately
+## minimal -- it exists so multiplayer can be tested against the Quest without a
+## second headset. Walk / look / lean speeds come from MovementConfig (debug panel).
 
 signal trigger_changed(pressed: bool)
 signal grip_pressed
 signal cock_pressed
+signal reload_pressed
 signal menu_button_pressed
 
 const EYE_HEIGHT := 1.7
@@ -67,6 +68,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		grip_pressed.emit()
 	elif event.is_action_pressed("cock_hammer"):
 		cock_pressed.emit()
+	elif event.is_action_pressed("reload"):
+		reload_pressed.emit()
 	elif event.is_action_pressed("toggle_debug"):
 		menu_button_pressed.emit()
 	elif event.is_action_pressed("ui_cancel"):

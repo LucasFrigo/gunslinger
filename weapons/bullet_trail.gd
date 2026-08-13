@@ -39,6 +39,18 @@ func finish() -> void:
 	_finished = true
 
 
+## Keep the ribbon alive longer (e.g. during kill-cam). Real-time seconds.
+func extend_fade(seconds: float) -> void:
+	_fade_left = maxf(_fade_left, seconds)
+
+
+static func extend_all_fades(seconds: float) -> void:
+	if Engine.get_main_loop() is SceneTree:
+		for trail in (Engine.get_main_loop() as SceneTree).get_nodes_in_group(GROUP):
+			if trail.has_method("extend_fade"):
+				trail.extend_fade(seconds)
+
+
 func _process(delta: float) -> void:
 	if _finished:
 		# Fade in real time so the trail lingers correctly during slow-mo.
@@ -46,7 +58,7 @@ func _process(delta: float) -> void:
 		if _fade_left <= 0.0:
 			queue_free()
 			return
-		_material.albedo_color = Color(_base_color, _fade_left / FADE_TIME)
+		_material.albedo_color = Color(_base_color, clampf(_fade_left / FADE_TIME, 0.0, 1.0))
 	_rebuild_ribbon()
 
 

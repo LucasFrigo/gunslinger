@@ -15,8 +15,8 @@ Roadmap (future, by difficulty): [`../Roadmap.md`](../Roadmap.md)
 | Head / torso hitboxes (head 2×) | `done` | `player/hitbox.gd` |
 | Early-draw foul | `done` | duel state machine |
 | Near-miss slow-mo hook | `done` | `TimeManager.notify_near_miss`, `weapons/bullet.gd` |
-| Gravity-drop / interactive reload | `planned` | Ammo `reset()` between duels only; see revolver comment |
-| Kill-cam / replay | `partial` | `kill_cam_requested` emits trail points; no listener yet |
+| Gravity-drop / interactive reload | `partial` | B open; sustained shake dump; torso belt + physical `CartridgePhysical`; bump/swing close (Flat `R`/Space). Dump/close thresholds in `GameManager.tuning` + debug sliders. Flip polish TBD |
+| Kill-cam / replay | `done` | SP only: `KillCam` + `TimeManager.notify_kill_cam`; flat cinematic trail fly-along, VR HMD + slow-mo |
 | Impact / AV polish (SFX, haptics, VFX) | `done` | `ImpactFeedback` + `AudioCatalog` / `VfxCatalog` stubs; combat XR/flat rumble wired |
 | Regional hit effects (arm/leg/head rules) | `planned` | Hitbox `region` export ready; gameplay rules on Roadmap |
 | Gun release / trick shots | `planned` | Roadmap |

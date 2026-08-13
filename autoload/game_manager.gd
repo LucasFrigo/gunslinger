@@ -36,6 +36,14 @@ var tuning := {
 	"bullet_speed": 55.0,    # m/s
 	"auto_cock": true,       # double-action revolver (no manual hammer)
 	"ai_speed_mult": 1.0,    # global multiplier on AI reaction/draw speed
+	## VR reload: gun-hand speed (m/s) that must be sustained to dump shells.
+	"reload_dump_speed": 4.5,
+	## Seconds the dump speed must be held before shells eject.
+	"reload_dump_hold": 0.25,
+	## VR reload: gun-hand flick speed (m/s) that closes the gate.
+	"reload_swing_close": 6.0,
+	## VR reload: left-hand bump speed (m/s) near chamber that closes the gate.
+	"reload_bump_close": 2.8,
 }
 
 var mode: int = GameMode.BOOT
@@ -94,6 +102,7 @@ func setup(main: Node3D, use_vr: bool) -> void:
 
 func go_to_menu() -> void:
 	_bump_action_generation()
+	KillCam.cancel()
 	NetworkManager.leave()
 	duel.stop()
 	gauntlet.stop()
@@ -257,14 +266,22 @@ func _on_shot_received(_peer_id: int, origin: Vector3, direction: Vector3) -> vo
 func _on_duel_finished(local_player_won: bool, reason: String) -> void:
 	var headline := "YOU WIN" if local_player_won else "YOU LOSE"
 	show_message("%s\n%s" % [headline, reason], 3.0)
-	match mode:
-		GameMode.FREE_DUEL:
-			_after_delay(4.0, go_to_menu)
-		GameMode.GAUNTLET:
-			_after_delay(3.5, gauntlet.on_duel_finished.bind(local_player_won))
-		GameMode.MULTIPLAYER:
-			if NetworkManager.is_host():
-				_after_delay(5.0, _mp_rematch)
+	var generation_at_finish := _action_generation
+	var schedule_next := func() -> void:
+		if _action_generation != generation_at_finish:
+			return
+		match mode:
+			GameMode.FREE_DUEL:
+				_after_delay(4.0, go_to_menu)
+			GameMode.GAUNTLET:
+				_after_delay(3.5, gauntlet.on_duel_finished.bind(local_player_won))
+			GameMode.MULTIPLAYER:
+				if NetworkManager.is_host():
+					_after_delay(5.0, _mp_rematch)
+	if KillCam.is_playing:
+		KillCam.finished.connect(schedule_next, CONNECT_ONE_SHOT)
+	else:
+		schedule_next.call()
 
 
 func _mp_rematch() -> void:

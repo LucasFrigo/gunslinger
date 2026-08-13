@@ -59,6 +59,16 @@ static func near_miss_whoosh() -> AudioStreamWAV:
 		return _noise_burst(0.22, 0.3, 8.0, 1600.0))
 
 
+static func shell_eject() -> AudioStreamWAV:
+	return _cached("shell_eject", func() -> AudioStreamWAV:
+		return _noise_burst(0.12, 0.45, 25.0, 600.0))
+
+
+static func chamber() -> AudioStreamWAV:
+	return _cached("chamber", func() -> AudioStreamWAV:
+		return _tone(480.0, 0.05, 0.35, 50.0))
+
+
 static func _cached(key: String, generator: Callable) -> AudioStreamWAV:
 	if not _cache.has(key):
 		_cache[key] = generator.call()
