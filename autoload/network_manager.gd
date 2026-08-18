@@ -72,7 +72,7 @@ func host_lan() -> Error:
 	if err != OK:
 		var hint := error_string(err)
 		if OS.get_name() == "Android" and err == ERR_CANT_CREATE:
-			hint += " — APK needs INTERNET permission (re-export Quest preset)"
+			hint += " — APK missing INTERNET (re-export Quest 3 after enabling LAN permissions)"
 		network_error.emit("Could not host LAN game: %s" % hint)
 		transport = null
 		return err

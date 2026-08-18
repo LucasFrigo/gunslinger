@@ -26,9 +26,11 @@ func _ready() -> void:
 	%HostLanButton.pressed.connect(func() -> void: NetworkManager.host_lan())
 	%JoinIpButton.pressed.connect(func() -> void: NetworkManager.join_lan(ip_edit.text))
 	%JoinLanButton.pressed.connect(_join_selected_lan)
+	lan_list.item_activated.connect(_join_lan_at)
 	%HostSteamButton.pressed.connect(func() -> void: NetworkManager.host_steam())
 	%RefreshSteamButton.pressed.connect(NetworkManager.refresh_steam_lobbies)
 	%JoinSteamButton.pressed.connect(_join_selected_steam)
+	steam_list.item_activated.connect(_join_steam_at)
 	%QuitButton.pressed.connect(func() -> void: get_tree().quit())
 
 	NetworkManager.lan_hosts_updated.connect(_on_lan_hosts)
@@ -55,7 +57,13 @@ func _join_selected_lan() -> void:
 	if selected.is_empty():
 		_set_status("Select a LAN host first.")
 		return
-	var host: Dictionary = _lan_hosts[selected[0]]
+	_join_lan_at(selected[0])
+
+
+func _join_lan_at(index: int) -> void:
+	if index < 0 or index >= _lan_hosts.size():
+		return
+	var host: Dictionary = _lan_hosts[index]
 	_set_status("Joining %s..." % host["ip"])
 	NetworkManager.join_lan(host["ip"])
 
@@ -65,7 +73,13 @@ func _join_selected_steam() -> void:
 	if selected.is_empty():
 		_set_status("Select a Steam lobby first.")
 		return
-	var lobby: Dictionary = _steam_lobbies[selected[0]]
+	_join_steam_at(selected[0])
+
+
+func _join_steam_at(index: int) -> void:
+	if index < 0 or index >= _steam_lobbies.size():
+		return
+	var lobby: Dictionary = _steam_lobbies[index]
 	_set_status("Joining lobby %s..." % lobby["name"])
 	NetworkManager.join_steam(lobby["id"])
 

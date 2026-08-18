@@ -86,11 +86,14 @@ func _process(delta: float) -> void:
 	rotation.y = _yaw
 	camera.rotation.x = _pitch
 
-	# Walk (scaled time is fine here; it is gameplay movement, not physical).
+	# Walk in world XZ from look yaw (not local basis + local position). The
+	# joiner's Player root is yawed 180° with EnemySpawn; mixing a world-facing
+	# camera with parent-local motion inverted A/D (BUG-006).
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-	var motion := (transform.basis * Vector3(input_dir.x, 0, input_dir.y)) \
+	var look_yaw := atan2(global_transform.basis.z.x, global_transform.basis.z.z)
+	var motion := (Basis(Vector3.UP, look_yaw) * Vector3(input_dir.x, 0, input_dir.y)) \
 			* MovementConfig.walk_speed * _move_speed_mult() * delta
-	position += motion
+	global_position += motion
 
 	# Lean.
 	var lean_target := Input.get_action_strength("lean_right") - Input.get_action_strength("lean_left")
@@ -104,10 +107,17 @@ func _process(delta: float) -> void:
 		TimeManager.report_player_motion(motion.length() / real_delta)
 
 
-func face_yaw(yaw: float) -> void:
-	_yaw = yaw
+## Face a world-space yaw (radians). The Player root already carries the spawn
+## marker rotation, so this stores the *local* remainder — applying the marker
+## yaw as local would double it (joiner 180°+180° = looking away).
+func face_yaw(world_yaw: float) -> void:
+	var parent_yaw := 0.0
+	var parent_node := get_parent() as Node3D
+	if parent_node != null:
+		parent_yaw = parent_node.global_transform.basis.get_euler().y
+	_yaw = wrapf(world_yaw - parent_yaw, -PI, PI)
 	_pitch = 0.0
-	rotation.y = yaw
+	rotation.y = _yaw
 
 
 func _move_speed_mult() -> float:

@@ -11,15 +11,19 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Added
 
+- Double-click (or Enter) a LAN host or Steam lobby in the main menu list to join; the Join button still works.
 - Interactive revolver reload: VR opens gate with B, sustained shake to dump, grabs physical rounds from a torso ammo belt, closes with left-hand bump or gun swing; Flat uses `R` / Space. Reload status HUD. Dump/close thresholds live-tunable (`reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close` in debug panel).
 - Reload status readout (ammo, gate open/closed, round in hand, empty/dry-fire/chambered events) on flat HUD and VR view.
 - Regional hit effects: arm/leg hitboxes on player, AI, and remote avatar. Headshots are instant death; torso and limbs deal 1 HP (default HP 2 so a single torso is not fatal). Arm hits force-holster and block redraw for a window; leg hits apply a timed move-speed penalty. 1v1 MP tracks HP on the host and syncs non-fatal wounds. Tunable in the debug panel (`player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`).
 
 ### Fixed
 
-- Quest 3 LAN: hosting no longer fails with "Can't create", and a PC host shows up in the headset list. The Android export was missing `INTERNET` / Wi-Fi multicast permissions; discovery now announces on subnet broadcasts and includes the host IP ([BUG-003](docs/BUGS.md)). Re-export the Quest APK.
+- LAN joiner strafe (A/D, left stick) matches the view after spawning on `EnemySpawn`. Stick/WASD motion is applied in world XZ from look yaw so the 180° spawn root is not applied twice ([BUG-006](docs/BUGS.md)).
+- PvP opponent now has a readable greybox body (torso, legs, arms) and a holstered revolver until they draw, instead of a floating head and hands ([BUG-005](docs/BUGS.md)).
+- Quest 3 LAN: hosting no longer fails with "Can't create", and a PC host shows up in the headset list. The sideloaded APK had no `INTERNET` permission (Steam Link + Godot editor worked because that path runs on Windows). Permissions are now injected at Android export so the dialog cannot drop them; ENet/discovery bind IPv4 ([BUG-003](docs/BUGS.md)).
 - Bullet trails no longer draw as a bent double-V (first point was recorded before the slug reached the muzzle; camera-facing ribbon side vector flipped along the shot).
 - Strafing AI (Sheriff, Ghost) no longer teleport toward the world origin when the bell rings ([BUG-002](docs/BUGS.md)). Spawn for strafing is captured after they are placed on the arena marker.
+- LAN joiner no longer spawns with their back to the host ([BUG-004](docs/BUGS.md)). Flat was applying EnemySpawn yaw twice (player root + look); VR now yaws the origin so the HMD faces the marker.
 
 ### Changed
 

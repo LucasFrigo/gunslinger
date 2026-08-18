@@ -7,6 +7,7 @@ extends Node
 signal hosts_updated(hosts: Array)
 
 const DISCOVERY_PORT := 9100
+const BIND_IPV4 := "0.0.0.0"
 const PING := "GUNSLINGER_DISCOVER"
 const PONG := "GUNSLINGER_HOST:"
 const BROWSE_INTERVAL := 1.0
@@ -29,7 +30,7 @@ func start_beacon(host_name: String) -> void:
 	# Android drops inbound broadcasts unless the socket has this on
 	# (Godot then takes a Wi-Fi multicast lock).
 	_socket.set_broadcast_enabled(true)
-	var err := _socket.bind(DISCOVERY_PORT, "*")
+	var err := _socket.bind(DISCOVERY_PORT, BIND_IPV4)
 	if err != OK:
 		push_warning("LanDiscovery: could not bind beacon port %d (%s)" % [DISCOVERY_PORT, error_string(err)])
 		_socket = null
@@ -44,9 +45,9 @@ func start_browse() -> void:
 	_socket.set_broadcast_enabled(true)
 	# Prefer the well-known port so we receive host announcements. Fall
 	# back to an ephemeral port when 9100 is taken (second local instance).
-	var err := _socket.bind(DISCOVERY_PORT, "*")
+	var err := _socket.bind(DISCOVERY_PORT, BIND_IPV4)
 	if err != OK:
-		err = _socket.bind(0, "*")
+		err = _socket.bind(0, BIND_IPV4)
 	if err != OK:
 		push_warning("LanDiscovery: could not bind browse socket (%s)" % error_string(err))
 		_socket = null

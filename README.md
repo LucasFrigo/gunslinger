@@ -35,9 +35,10 @@ fully tunable at runtime so you can A/B test what feels best.
    UDP **9100** discovery) on a private network.
 2. Notebook: run the flat build, click **HOST (LAN)**. The HUD shows the LAN
    IP to type if discovery misses.
-3. Quest: deploy/launch a **fresh export** of the APK (the Quest preset needs
-   `INTERNET` + Wi-Fi multicast permissions), the notebook appears in the LAN
+3. Quest: deploy/launch a **fresh export** of the APK (LAN permissions are injected at export by `addons/gunslinger_lan_permissions/`), the notebook appears in the LAN
    host list — select it and **JOIN**. The IP field is a fallback.
+   Steam Link + Play from the Godot editor is PCVR on Windows and does **not**
+   test the Quest APK.
 4. The host starts the duel automatically when the peer connects.
 
 Steam flow (two desktop machines with Steam running): **HOST (STEAM)** on one,

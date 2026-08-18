@@ -29,7 +29,7 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Free duel (arena + AI pick) | `done` | `GameManager`, main menu |
 | Gauntlet (6 rungs, 3 lives, session score) | `done` | `gauntlet/gauntlet_controller.gd`, ladder `.tres` |
 | Persistent gauntlet high scores | `planned` | Score is session-only today |
-| 1v1 LAN multiplayer | `done` | `netcode/enet_transport.gd` + UDP discovery; Quest APK needs `INTERNET` + `CHANGE_WIFI_MULTICAST_STATE` |
+| 1v1 LAN multiplayer | `done` | `netcode/enet_transport.gd` + UDP discovery; Quest APK gets `INTERNET` + Wi-Fi multicast from `addons/gunslinger_lan_permissions/` at export. Remote avatar is a full greybox (torso/legs/arms + holstered gun). Joiner on `EnemySpawn` faces the host; walk/strafe is world-XZ from look yaw so the 180° spawn root does not invert A/D. Main menu: double-click a LAN host (or Steam lobby) to join |
 | 1v1 Steam lobbies | `partial` | `netcode/steam_transport.gd`; addon optional / may be absent |
 | Horde mode | `planned` | Roadmap |
 | Mexican standoff (3P) | `planned` | Needs netcode beyond 1v1 |

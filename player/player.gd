@@ -155,6 +155,8 @@ func reset_for_duel(spawn: Transform3D) -> void:
 	_prev_gate_open = revolver.gate_open
 	_refresh_reload_status()
 	if rig is FlatRig:
+		# World yaw: FlatRig subtracts the Player root's spawn rotation so the
+		# joiner is not spun 180° twice (BUG-004).
 		(rig as FlatRig).face_yaw(spawn.basis.get_euler().y)
 		rig.position = Vector3.ZERO
 	elif rig is VRRig:

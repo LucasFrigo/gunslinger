@@ -44,9 +44,11 @@ How major systems fit together. Keep this short; link to files. Update when owne
 ## Multiplayer
 
 - Interface in `netcode/`; `enet_transport.gd` (LAN + UDP discovery), `steam_transport.gd` (optional addon).
-- LAN discovery (`lan_discovery.gd`): host beacon on UDP 9100 answers pings and announces `ip|name` on `255.255.255.255` plus subnet `.255`. Gameplay ENet is UDP 9099.
-- Quest Android export must enable `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, and `CHANGE_WIFI_MULTICAST_STATE` (`export_presets.cfg`) so sockets and broadcast receive work.
+- LAN discovery (`lan_discovery.gd`): host beacon on UDP 9100 answers pings and announces `ip|name` on `255.255.255.255` plus subnet `.255`. Gameplay ENet is UDP 9099, bound to IPv4 `0.0.0.0`.
+- Quest Android export: `addons/gunslinger_lan_permissions/` injects `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, and `CHANGE_WIFI_MULTICAST_STATE` into the manifest at gradle export (also set on `export_presets.cfg`). Without `INTERNET`, `create_server` fails with "Can't create" on device. Steam Link + editor is Windows networking, not the APK.
 - Pose / shot sync; host validates hits and HP; non-fatal wounds via `_mp_wound`; auto rematch. Slow-mo off while networked.
+- `RemoteAvatar` (`player/remote_avatar.tscn`): pose-driven head/hands plus torso/leg meshes and shoulder-to-hand arms. Revolver sits on a hip holster until `POSE_FLAG_GUN_DRAWN`.
+- MP spawn: host on `PlayerSpawn`, joiner on `EnemySpawn`. `reset_for_duel` copies the marker transform onto the Player root. Flat look yaw is stored local to that root (do not apply marker yaw twice). VR `reset_locomotion` yaws the origin so the HMD faces the marker -Z. Flat walk and VR stick locomotion apply in world XZ (`global_position`) from look yaw so the joiner's 180° root does not invert strafe.
 
 ## Config / user data
 

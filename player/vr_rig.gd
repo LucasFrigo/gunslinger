@@ -72,7 +72,8 @@ func get_aim_override() -> Vector3:
 	return Vector3.ZERO
 
 
-## Called when a duel places the player at a spawn; clears artificial locomotion.
+## Called when a duel places the player at a spawn; clears stick locomotion and
+## yaws the origin around the HMD so the player looks along the spawn -Z.
 func reset_locomotion() -> void:
 	position = Vector3.ZERO
 	rotation.y = 0.0
@@ -82,6 +83,9 @@ func reset_locomotion() -> void:
 	_hands_motion_initialized = false
 	right_hand_speed = 0.0
 	left_hand_speed = 0.0
+	var desired_yaw := global_transform.basis.get_euler().y
+	var head_yaw := camera.global_transform.basis.get_euler().y
+	_rotate_around_head(wrapf(desired_yaw - head_yaw, -PI, PI))
 
 
 func _process(delta: float) -> void:
@@ -95,9 +99,11 @@ func _apply_locomotion(delta: float) -> float:
 	var move_input := _deadzone(left_hand.get_vector2("primary"), MovementConfig.stick_deadzone)
 	var head_yaw := camera.global_transform.basis.get_euler().y
 	var basis := Basis(Vector3.UP, head_yaw)
+	# World XZ from HMD yaw, applied via global_position. Adding that vector to
+	# local `position` under EnemySpawn's 180° Player yaw inverted strafe (BUG-006).
 	var motion := (basis * Vector3(move_input.x, 0.0, -move_input.y)) \
 			* MovementConfig.vr_move_speed * _move_speed_mult() * delta
-	position += motion
+	global_position += motion
 
 	_apply_turn(delta, right_hand.get_vector2("primary"))
 
