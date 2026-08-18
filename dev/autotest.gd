@@ -74,7 +74,7 @@ func _test_host() -> void:
 		return _fail("MP duel never reached DRAW (holster relay?)")
 	print("AUTOTEST: MP DRAW reached, host shoots the avatar")
 	var result := _arm_duel_listener()
-	GameManager.remote_avatar.take_bullet_hit(1.0, PackedVector3Array())
+	GameManager.remote_avatar.take_bullet_hit(99.0, PackedVector3Array(), &"head")
 	await _await_result(result, 10.0)
 	if result.is_empty() or result[0] != true:
 		return _fail("host did not win the MP duel")

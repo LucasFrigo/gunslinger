@@ -44,6 +44,14 @@ var tuning := {
 	"reload_swing_close": 6.0,
 	## VR reload: left-hand bump speed (m/s) near chamber that closes the gate.
 	"reload_bump_close": 2.8,
+	## Starting HP so one torso/limb hit is not fatal (head is always lethal).
+	"player_health": 2.0,
+	## Seconds the gun stays holstered after an arm hit.
+	"arm_disarm_duration": 1.5,
+	## Seconds a leg hit slows locomotion.
+	"leg_slow_duration": 2.5,
+	## Move-speed multiplier while limping (1 = no penalty).
+	"leg_speed_mult": 0.45,
 }
 
 var mode: int = GameMode.BOOT

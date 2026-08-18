@@ -31,7 +31,7 @@ How major systems fit together. Keep this short; link to files. Update when owne
 
 - **Weapons:** `WeaponBase` → revolver; muzzle marker; cock/fire/holster; fire kick via `ImpactFeedback.shot_fired`. Mid-duel reload: `open_gate` / `dump_rounds` / `try_chamber` / `close_gate`. VR: right B opens; **sustained** gun-hand shake dumps (`reload_dump_speed` + `reload_dump_hold`); torso `AmmoBelt` + left grip spawns physical `CartridgePhysical`; bump (`reload_bump_close`) or swing (`reload_swing_close`) closes. Flat: `R` open+dump / chamber, Space closes. Thresholds live in `GameManager.tuning` / debug panel. Fire blocked while gate open; duel `reset()` still refills. Status on `Hud.ReloadStatus` + VR `Label3D`.
 - **Bullets:** Real projectiles (`weapons/bullet.gd`), not hitscan; feed trails; near-miss check vs player head; world/body impact feedback on ray hit.
-- **Damage:** Host-authoritative in MP; head 2× / torso 1× via `player/hitbox.gd` (`region` for AV + future limb rules).
+- **Damage:** Host-authoritative in MP. `CombatRules` (`combat/combat_rules.gd`): head always kills; torso/arm/leg subtract `Hitbox.damage_mult` HP (default player HP 2). Surviving arm hits force-holster + block redraw; leg hits apply a timed move-speed penalty. Non-fatal MP wounds sync via `DuelManager._mp_wound`. `Hitbox.region` also drives AV.
 - **Feedback:** `ImpactFeedback` autoload — spatial stubs (`assets/audio/`), one-shot particles (`assets/vfx/`), XR rumble + flat joy vibration (`assets/haptics/`).
 - **Kill cam:** `DuelManager.kill_cam_requested(trail_points)` → `KillCam` (SP). Flat: cinematic fly-along; VR: `TimeManager.notify_kill_cam` with HMD kept. Skipped while networked.
 
@@ -43,7 +43,7 @@ How major systems fit together. Keep this short; link to files. Update when owne
 ## Multiplayer
 
 - Interface in `netcode/`; `enet_transport.gd` (LAN + UDP discovery), `steam_transport.gd` (optional addon).
-- Pose / shot sync; host validates hits; auto rematch. Slow-mo off while networked.
+- Pose / shot sync; host validates hits and HP; non-fatal wounds via `_mp_wound`; auto rematch. Slow-mo off while networked.
 
 ## Config / user data
 

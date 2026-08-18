@@ -6,11 +6,12 @@ extends Node3D
 
 signal died(trail_points: PackedVector3Array)
 
-enum AIState { IDLE, REACTING, DRAWING, SHOOTING, DEAD }
+enum AIState { IDLE, REACTING, DRAWING, SHOOTING, DISARMED, DEAD }
 
 var archetype: AIArchetype
-var health := 1.0
+var health := CombatRules.DEFAULT_HEALTH
 var state: int = AIState.IDLE
+var move_speed_mult := 1.0
 
 var _target: Player
 var _timer := 0.0
@@ -18,11 +19,15 @@ var _draw_progress := 0.0
 var _rest_arm_basis: Basis
 var _spawn_position := Vector3.ZERO
 var _strafe_phase := 0.0
+var _disarm_remaining := 0.0
+var _leg_remaining := 0.0
 
 @onready var arm: Node3D = $Arm
 @onready var revolver: Revolver = $Arm/Revolver
 @onready var head_hitbox: Hitbox = $Head/HeadHitbox
 @onready var torso_hitbox: Hitbox = $TorsoHitbox
+@onready var arm_hitbox: Hitbox = $Arm/ArmHitbox
+@onready var leg_hitbox: Hitbox = $LegHitbox
 
 
 func setup(new_archetype: AIArchetype, health_mult: float, target: Player) -> void:
@@ -36,6 +41,8 @@ func setup(new_archetype: AIArchetype, health_mult: float, target: Player) -> vo
 func _ready() -> void:
 	head_hitbox.owner_entity = self
 	torso_hitbox.owner_entity = self
+	arm_hitbox.owner_entity = self
+	leg_hitbox.owner_entity = self
 	revolver.fired.connect(_on_fired)
 	revolver.drawn = false
 	_rest_arm_basis = arm.transform.basis
@@ -56,6 +63,9 @@ func begin_draw() -> void:
 func on_duel_over(_player_won: bool) -> void:
 	if state != AIState.DEAD:
 		state = AIState.IDLE
+		_disarm_remaining = 0.0
+		_leg_remaining = 0.0
+		move_speed_mult = 1.0
 
 
 func _process(delta: float) -> void:
@@ -63,6 +73,7 @@ func _process(delta: float) -> void:
 		return
 	_face_target()
 	_strafe(delta)
+	_tick_wounds(delta)
 	match state:
 		AIState.REACTING:
 			_timer -= delta
@@ -82,6 +93,8 @@ func _process(delta: float) -> void:
 			if _timer <= 0.0:
 				_fire()
 				_timer = archetype.followup_interval
+		AIState.DISARMED:
+			pass
 
 
 func _start_drawing() -> void:
@@ -102,7 +115,7 @@ func _face_target() -> void:
 func _strafe(delta: float) -> void:
 	if archetype.move_style != AIArchetype.MoveStyle.STRAFE or state == AIState.IDLE:
 		return
-	_strafe_phase += delta * archetype.strafe_speed
+	_strafe_phase += delta * archetype.strafe_speed * move_speed_mult
 	var right := global_transform.basis.x
 	global_position = _spawn_position + right * sin(_strafe_phase) * 1.5
 
@@ -142,12 +155,46 @@ func _on_fired(origin: Vector3, direction: Vector3) -> void:
 			archetype.bullet_speed, true, hitbox_rids(), false)
 
 
-func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array) -> void:
+func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
+		region: StringName = CombatRules.REGION_TORSO) -> void:
 	if state == AIState.DEAD:
 		return
-	health -= damage_mult
-	if health <= 0.0:
+	var result := CombatRules.resolve(region, health, damage_mult)
+	health = result["health"]
+	if result["died"]:
 		_die(trail_points)
+		return
+	if result["disarm"]:
+		_disarm()
+	if result["slow"]:
+		_leg_remaining = float(GameManager.tuning["leg_slow_duration"])
+		move_speed_mult = float(GameManager.tuning["leg_speed_mult"])
+
+
+func _disarm() -> void:
+	revolver.drawn = false
+	_draw_progress = 0.0
+	arm.transform.basis = _rest_arm_basis
+	state = AIState.DISARMED
+	_disarm_remaining = float(GameManager.tuning["arm_disarm_duration"])
+
+
+func _tick_wounds(delta: float) -> void:
+	var real_delta := delta / maxf(Engine.time_scale, 0.001)
+	if _leg_remaining > 0.0:
+		_leg_remaining -= real_delta
+		if _leg_remaining <= 0.0:
+			_leg_remaining = 0.0
+			move_speed_mult = 1.0
+	if state != AIState.DISARMED:
+		return
+	_disarm_remaining -= real_delta
+	if _disarm_remaining > 0.0:
+		return
+	_disarm_remaining = 0.0
+	state = AIState.IDLE
+	if GameManager.duel != null and GameManager.duel.state == DuelManager.State.DRAW:
+		begin_draw()
 
 
 func _die(trail_points: PackedVector3Array) -> void:
@@ -155,6 +202,8 @@ func _die(trail_points: PackedVector3Array) -> void:
 	revolver.drawn = false
 	head_hitbox.set_deferred("monitorable", false)
 	torso_hitbox.set_deferred("monitorable", false)
+	arm_hitbox.set_deferred("monitorable", false)
+	leg_hitbox.set_deferred("monitorable", false)
 	var tween := create_tween()
 	tween.tween_property(self, "rotation:x", -PI / 2.0, 0.6) \
 			.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
@@ -162,7 +211,12 @@ func _die(trail_points: PackedVector3Array) -> void:
 
 
 func hitbox_rids() -> Array[RID]:
-	return [head_hitbox.get_rid(), torso_hitbox.get_rid()]
+	return [
+		head_hitbox.get_rid(),
+		torso_hitbox.get_rid(),
+		arm_hitbox.get_rid(),
+		leg_hitbox.get_rid(),
+	]
 
 
 func _tint(color: Color) -> void:

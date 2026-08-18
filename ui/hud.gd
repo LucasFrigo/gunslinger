@@ -5,6 +5,7 @@ extends CanvasLayer
 
 @onready var message_label: Label = $Message
 @onready var reload_status: Label = $ReloadStatus
+@onready var health_status: Label = $HealthStatus
 @onready var red_flash: ColorRect = $RedFlash
 @onready var menu_holder: Control = $MenuHolder
 
@@ -16,6 +17,7 @@ func _ready() -> void:
 	_menu = $MenuHolder/MainMenu
 	message_label.visible = false
 	reload_status.visible = false
+	health_status.visible = false
 	red_flash.modulate.a = 0.0
 	menu_holder.visible = false
 
@@ -70,6 +72,15 @@ func set_reload_status(text: String) -> void:
 		return
 	reload_status.text = text
 	reload_status.visible = true
+
+
+## One-line HP. Hidden when max_hp <= 0 (menu / boot).
+func set_health(current: float, max_hp: float) -> void:
+	if max_hp <= 0.0:
+		health_status.visible = false
+		return
+	health_status.text = "HP %d / %d" % [ceili(current), ceili(max_hp)]
+	health_status.visible = true
 
 
 func flash_red() -> void:

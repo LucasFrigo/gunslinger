@@ -47,6 +47,7 @@ var _ai_slider: HSlider
 var _ai_value: Label
 var _auto_cock: CheckButton
 var _reload_sliders: Dictionary = {}
+var _combat_sliders: Dictionary = {}
 var _movement_sliders: Dictionary = {}
 var _turn_mode_option: OptionButton
 var _preset_option: OptionButton
@@ -241,6 +242,24 @@ func _build_gunplay_section(root: Control) -> void:
 		GameManager.set_tuning("auto_cock", pressed))
 	root.add_child(_auto_cock)
 
+	_add_header(root, "Regional Hits")
+	const COMBAT_SLIDERS := {
+		"player_health": [1.0, 6.0, 0.5],
+		"arm_disarm_duration": [0.2, 4.0, 0.1],
+		"leg_slow_duration": [0.2, 6.0, 0.1],
+		"leg_speed_mult": [0.1, 1.0, 0.05],
+	}
+	for combat_key in COMBAT_SLIDERS:
+		var combat_range: Array = COMBAT_SLIDERS[combat_key]
+		var tune_combat: String = combat_key
+		var combat_widgets := _add_slider(root, combat_key, combat_range[0], combat_range[1],
+				combat_range[2], float(GameManager.tuning[tune_combat]),
+				func(value: float) -> void:
+					if _refreshing:
+						return
+					GameManager.set_tuning(tune_combat, value))
+		_combat_sliders[tune_combat] = combat_widgets
+
 	_add_header(root, "VR Reload (m/s)")
 	const RELOAD_SLIDERS := {
 		"reload_dump_speed": [1.0, 12.0, 0.1],
@@ -382,6 +401,11 @@ func _refresh_from_systems() -> void:
 		var rvalue: float = float(GameManager.tuning[key])
 		rwidgets["slider"].value = rvalue
 		rwidgets["label"].text = "%.2f" % rvalue
+	for key in _combat_sliders:
+		var cwidgets: Dictionary = _combat_sliders[key]
+		var cvalue: float = float(GameManager.tuning[key])
+		cwidgets["slider"].value = cvalue
+		cwidgets["label"].text = "%.2f" % cvalue
 	for key in _movement_sliders:
 		var mwidgets: Dictionary = _movement_sliders[key]
 		var mvalue: float = float(MovementConfig.get_value(key))

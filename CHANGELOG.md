@@ -13,10 +13,12 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 - Interactive revolver reload: VR opens gate with B, sustained shake to dump, grabs physical rounds from a torso ammo belt, closes with left-hand bump or gun swing; Flat uses `R` / Space. Reload status HUD. Dump/close thresholds live-tunable (`reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close` in debug panel).
 - Reload status readout (ammo, gate open/closed, round in hand, empty/dry-fire/chambered events) on flat HUD and VR view.
+- Regional hit effects: arm/leg hitboxes on player, AI, and remote avatar. Headshots are instant death; torso and limbs deal 1 HP (default HP 2 so a single torso is not fatal). Arm hits force-holster and block redraw for a window; leg hits apply a timed move-speed penalty. 1v1 MP tracks HP on the host and syncs non-fatal wounds. Tunable in the debug panel (`player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`).
 
 ### Changed
 
 - VR reload dump/close are less hair-trigger: dump requires sustained shake; swing/bump close thresholds raised (still tunable).
+- Default duelist HP raised so torso is not instakill (drunk/ghost 2, sheriff 3, player 2). Headshots remain instantly fatal.
 
 ### Added (earlier unreleased)
 
