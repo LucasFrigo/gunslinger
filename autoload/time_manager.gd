@@ -2,7 +2,7 @@ extends Node
 ## Autoload. Customizable slow motion for A/B testing which speed feels best.
 ## Drives Engine.time_scale and AudioServer.playback_speed_scale. XR head
 ## tracking is unaffected by time_scale, which produces the Superhot feel.
-## Hard-disabled while a multiplayer session is active.
+## Gameplay modes are SP-only; kill-cam burst is allowed in MP after RESOLUTION.
 
 signal mode_changed(mode: int)
 signal scale_changed(scale: float)
@@ -39,6 +39,7 @@ var ramp_speed := 6.0            ## how fast time scale eases toward its target
 var current_scale := 1.0
 var _burst_time_left := 0.0
 var _burst_factor := 1.0
+var _kill_cam_burst := false
 var _reported_motion := 0.0
 var _save_timer := 0.0
 var _dirty := false
@@ -55,6 +56,8 @@ func _process(delta: float) -> void:
 
 	if _burst_time_left > 0.0:
 		_burst_time_left -= real_delta
+		if _burst_time_left <= 0.0:
+			_kill_cam_burst = false
 
 	var target := _target_scale()
 	current_scale = lerpf(current_scale, target, clampf(ramp_speed * real_delta, 0.0, 1.0))
@@ -76,11 +79,11 @@ func _process(delta: float) -> void:
 
 
 func _target_scale() -> float:
-	# Slow motion is a single-player feature only.
+	# Kill-cam burst is presentation-only (SP + MP). Other slow-mo is SP only.
+	if _burst_time_left > 0.0 and (_kill_cam_burst or not NetworkManager.is_active()):
+		return _burst_factor
 	if NetworkManager.is_active():
 		return 1.0
-	if _burst_time_left > 0.0:
-		return _burst_factor
 	match mode:
 		Mode.CONSTANT:
 			return constant_factor
@@ -111,13 +114,15 @@ func notify_near_miss() -> void:
 		_burst_time_left = near_miss_duration
 
 
-## Forced slow-mo burst for kill-cam presentation (any Mode; still MP-gated).
+## Forced slow-mo burst for kill-cam presentation (any Mode; allowed in MP).
 func notify_kill_cam() -> void:
+	_kill_cam_burst = true
 	_burst_factor = kill_cam_factor
 	_burst_time_left = kill_cam_duration
 
 
 func reset() -> void:
+	_kill_cam_burst = false
 	_burst_time_left = 0.0
 	current_scale = 1.0
 	Engine.time_scale = 1.0

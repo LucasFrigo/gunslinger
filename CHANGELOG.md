@@ -12,6 +12,8 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 ### Added
 
 - Double-click (or Enter) a LAN host or Steam lobby in the main menu list to join; the Join button still works.
+- VR kill cam: spectator `XROrigin3D` flies along the killing trail (player rig stays put); short fade in/out; locomotion frozen. Same cinematic in 1v1 MP from synced trail points.
+- Duel-end sting (`assets/audio/duel_end.wav`) at the lethal hit (not on fouls); pitch stays concert under slow-mo.
 - Interactive revolver reload: VR opens gate with B, sustained shake to dump, grabs physical rounds from a torso ammo belt, closes with left-hand bump or gun swing; Flat uses `R` / Space. Reload status HUD. Dump/close thresholds live-tunable (`reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close` in debug panel).
 - Reload status readout (ammo, gate open/closed, round in hand, empty/dry-fire/chambered events) on flat HUD and VR view.
 - Regional hit effects: arm/leg hitboxes on player, AI, and remote avatar. Headshots are instant death; torso and limbs deal 1 HP (default HP 2 so a single torso is not fatal). Arm hits force-holster and block redraw for a window; leg hits apply a timed move-speed penalty. 1v1 MP tracks HP on the host and syncs non-fatal wounds. Tunable in the debug panel (`player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`).

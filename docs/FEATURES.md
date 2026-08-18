@@ -18,7 +18,7 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Early-draw foul | `done` | duel state machine |
 | Near-miss slow-mo hook | `done` | `TimeManager.notify_near_miss`, `weapons/bullet.gd` |
 | Gravity-drop / interactive reload | `partial` | B open; sustained shake dump; torso belt + physical `CartridgePhysical`; bump/swing close (Flat `R`/Space). Dump/close thresholds in `GameManager.tuning` + debug sliders. Flip polish TBD |
-| Kill-cam / replay | `done` | SP only: `KillCam` + `TimeManager.notify_kill_cam`; flat cinematic trail fly-along, VR HMD + slow-mo |
+| Kill-cam / replay | `done` | SP + 1v1 MP: `KillCam` + `TimeManager.notify_kill_cam`; flat `Camera3D` fly-along, VR spectator `XROrigin3D` ride; `duel_end` sting on lethal hit |
 | Impact / AV polish (SFX, haptics, VFX) | `done` | `ImpactFeedback` + `AudioCatalog` / `VfxCatalog` stubs; combat XR/flat rumble wired |
 | Gun release / trick shots | `planned` | Roadmap |
 

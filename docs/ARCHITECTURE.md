@@ -19,13 +19,13 @@ How major systems fit together. Keep this short; link to files. Update when owne
 
 | Autoload | Role |
 |---|---|
-| `TimeManager` | `Engine.time_scale` slow-mo modes + kill-cam burst; SP only (disabled in network sessions) |
+| `TimeManager` | `Engine.time_scale` slow-mo modes (SP); kill-cam burst also in MP after RESOLUTION |
 | `NetworkManager` | Session lifecycle; picks ENet or Steam transport |
 | `GameManager` | Mode selection, scenario list, high-level flow |
 | `MovementConfig` | Flat/VR movement knobs → `user://movement.cfg` |
 | `DebugPresets` / `DebugMenu` | Live tuning + named presets |
 | `ImpactFeedback` | Combat SFX / VFX / haptics (`AudioCatalog`, `VfxCatalog`, `CombatHaptics`) |
-| `KillCam` | SP kill-cam: flat trail-follow `Camera3D`, VR slow-mo only; gates post-duel delays |
+| `KillCam` | Trail fly-along kill cam (flat `Camera3D`, VR spectator `XROrigin3D`); SP + 1v1 MP; gates post-duel delays |
 
 ## Combat
 
@@ -33,7 +33,7 @@ How major systems fit together. Keep this short; link to files. Update when owne
 - **Bullets:** Real projectiles (`weapons/bullet.gd`), not hitscan; feed trails; near-miss check vs player head; world/body impact feedback on ray hit.
 - **Damage:** Host-authoritative in MP. `CombatRules` (`combat/combat_rules.gd`): head always kills; torso/arm/leg subtract `Hitbox.damage_mult` HP (default player HP 2). Surviving arm hits force-holster + block redraw; leg hits apply a timed move-speed penalty. Non-fatal MP wounds sync via `DuelManager._mp_wound`. `Hitbox.region` also drives AV.
 - **Feedback:** `ImpactFeedback` autoload — spatial stubs (`assets/audio/`), one-shot particles (`assets/vfx/`), XR rumble + flat joy vibration (`assets/haptics/`).
-- **Kill cam:** `DuelManager.kill_cam_requested(trail_points)` → `KillCam` (SP). Flat: cinematic fly-along; VR: `TimeManager.notify_kill_cam` with HMD kept. Skipped while networked.
+- **Kill cam:** `DuelManager.kill_cam_requested(trail_points)` → `KillCam` (SP and 1v1 MP). Flat: cinematic fly-along `Camera3D`. VR: spectator `XROrigin3D` ride (player rig stays put) + `XRToolsFade`. `TimeManager.notify_kill_cam` burst allowed in MP; other slow-mo stays SP. Lethal sting: `AudioCatalog` `&"duel_end"` on `notify_kill_shot`.
 
 ## AI
 
@@ -46,7 +46,7 @@ How major systems fit together. Keep this short; link to files. Update when owne
 - Interface in `netcode/`; `enet_transport.gd` (LAN + UDP discovery), `steam_transport.gd` (optional addon).
 - LAN discovery (`lan_discovery.gd`): host beacon on UDP 9100 answers pings and announces `ip|name` on `255.255.255.255` plus subnet `.255`. Gameplay ENet is UDP 9099, bound to IPv4 `0.0.0.0`.
 - Quest Android export: `addons/gunslinger_lan_permissions/` injects `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, and `CHANGE_WIFI_MULTICAST_STATE` into the manifest at gradle export (also set on `export_presets.cfg`). Without `INTERNET`, `create_server` fails with "Can't create" on device. Steam Link + editor is Windows networking, not the APK.
-- Pose / shot sync; host validates hits and HP; non-fatal wounds via `_mp_wound`; auto rematch. Slow-mo off while networked.
+- Pose / shot sync; host validates hits and HP; non-fatal wounds via `_mp_wound`; auto rematch. Gameplay slow-mo off while networked; kill-cam burst still plays after `RESOLUTION` from `_mp_finish` trail points.
 - `RemoteAvatar` (`player/remote_avatar.tscn`): pose-driven head/hands plus torso/leg meshes and shoulder-to-hand arms. Revolver sits on a hip holster until `POSE_FLAG_GUN_DRAWN`.
 - MP spawn: host on `PlayerSpawn`, joiner on `EnemySpawn`. `reset_for_duel` copies the marker transform onto the Player root. Flat look yaw is stored local to that root (do not apply marker yaw twice). VR `reset_locomotion` yaws the origin so the HMD faces the marker -Z. Flat walk and VR stick locomotion apply in world XZ (`global_position`) from look yaw so the joiner's 180° root does not invert strafe.
 

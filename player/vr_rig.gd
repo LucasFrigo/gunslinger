@@ -96,6 +96,8 @@ func _process(delta: float) -> void:
 
 
 func _apply_locomotion(delta: float) -> float:
+	if KillCam.is_playing:
+		return 0.0
 	var move_input := _deadzone(left_hand.get_vector2("primary"), MovementConfig.stick_deadzone)
 	var head_yaw := camera.global_transform.basis.get_euler().y
 	var basis := Basis(Vector3.UP, head_yaw)
