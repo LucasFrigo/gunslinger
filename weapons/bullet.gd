@@ -25,6 +25,7 @@ var from_local_player := false
 var _travelled := 0.0
 var _trail: BulletTrail
 var _near_miss_done := false
+var _spawn_origin := Vector3.ZERO
 
 
 static func spawn(parent: Node, origin: Vector3, dir: Vector3, bullet_speed: float,
@@ -35,8 +36,10 @@ static func spawn(parent: Node, origin: Vector3, dir: Vector3, bullet_speed: flo
 	bullet.authoritative = is_authoritative
 	bullet.exclude = exclude_rids
 	bullet.from_local_player = local_shooter
+	# Position must be known before `_ready`: that is when the trail records
+	# its first point. `add_child` runs `_ready` immediately.
+	bullet._spawn_origin = origin
 	parent.add_child(bullet)
-	bullet.global_position = origin
 	return bullet
 
 
@@ -50,6 +53,7 @@ static func clear_all() -> void:
 
 func _ready() -> void:
 	add_to_group(GROUP)
+	global_position = _spawn_origin
 	# Visible slug.
 	if _bullet_mesh == null:
 		_bullet_mesh = SphereMesh.new()

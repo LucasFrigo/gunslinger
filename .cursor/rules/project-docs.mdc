@@ -1,5 +1,5 @@
 ---
-description: Keep FEATURES, ARCHITECTURE, Roadmap, and CHANGELOG in sync when code changes
+description: Keep FEATURES, ARCHITECTURE, BUGS, Roadmap, and CHANGELOG in sync when code changes
 alwaysApply: true
 ---
 
@@ -13,6 +13,7 @@ Agents must keep these files accurate when shipping meaningful work. Do not inve
 |---|---|
 | `docs/FEATURES.md` | What exists / in progress / planned; status + key paths |
 | `docs/ARCHITECTURE.md` | How major systems work and where they live |
+| `docs/BUGS.md` | Open / fixed defect tracker (`BUG-NNN`); screenshots in `docs/bugs/` |
 | `Roadmap.md` | Future work, ordered easiest → hardest |
 | `CHANGELOG.md` | User-facing history ([Keep a Changelog](https://keepachangelog.com)) |
 | `VERSION` | Current SemVer string (single line, e.g. `0.1.0`) |
@@ -24,6 +25,7 @@ Also sync `project.godot` → `application/config/version` with `VERSION`.
 - **New or changed behavior** → `docs/FEATURES.md` status + one-line note; touch `docs/ARCHITECTURE.md` if control flow, ownership, or key files moved.
 - **Finished a Roadmap item (or clearly started it)** → move/annotate in `Roadmap.md` and mirror status in `FEATURES.md`.
 - **Player-visible or shippable change** → add a `CHANGELOG.md` entry under `[Unreleased]`.
+- **New confirmed bug** → add `BUG-NNN` under Open in `docs/BUGS.md`. **Fixing a tracked bug** → move it to Fixed in the same session; changelog `Fixed` if player-visible.
 - **Release / version bump** (only when the user asks to release or bump) → move `[Unreleased]` into a dated `## [X.Y.Z]` section, update `VERSION` + `config/version`.
 
 Skip doc churn for typos, formatting-only edits, or purely internal renames with no behavior change.

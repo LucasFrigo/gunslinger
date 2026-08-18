@@ -1,0 +1,41 @@
+---
+description: Commit and manage GitHub branches only when the user explicitly confirms
+alwaysApply: true
+---
+
+# Git and GitHub (explicit confirmation required)
+
+Agents **may and should** commit, branch, push, and open PRs for this repo **when the user explicitly asks**. Do not refuse git/GitHub work that was requested.
+
+## Hard gate
+
+**No commit and no remote change without explicit confirmation from the user in this conversation.**
+
+Do not treat silence, “looks good”, implementing a feature, or finishing a task as permission to commit or touch the remote.
+
+| Allowed without asking | Needs an explicit ask |
+|---|---|
+| `git status`, `git diff`, `git log`, `git fetch` | `git commit`, `git add` (staging for a commit) |
+| Inspecting branches / remotes | `git push`, `git pull` (if it will merge/rebase local) |
+| Local read-only git | Create / rename / delete / checkout branches |
+| | `gh pr create` / merge / close; any `gh` write |
+| | Force push, reset, rebase onto published history, amend |
+
+“Explicit” means a clear request such as: “commit this”, “push”, “create a branch”, “open a PR”, “delete that remote branch”. If ambiguous, **ask first**.
+
+## When confirmed, do the work
+
+- Follow the user’s commit / PR instructions (message, files, branch name).
+- Use `gh` for GitHub issues, PRs, checks, and releases.
+- Do not update git config.
+- Do not skip hooks unless the user explicitly says to.
+- Never force-push `main` / `master`. Warn before any force push.
+- Never commit secrets (`.env`, credentials, keys).
+- Never run interactive git (`-i`).
+- After a commit or remote change, verify with `git status`.
+
+## Safety
+
+- No destructive/irreversible commands (`push --force`, hard reset, branch delete on origin) unless the user named that action.
+- Do not amend a commit unless the user asked **and** it is safe (your commit, not pushed, or user requested amend after push).
+- Do not push unless the user asked to push (creating a PR implies push is allowed for that branch).

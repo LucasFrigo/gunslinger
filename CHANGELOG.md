@@ -15,6 +15,10 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 - Reload status readout (ammo, gate open/closed, round in hand, empty/dry-fire/chambered events) on flat HUD and VR view.
 - Regional hit effects: arm/leg hitboxes on player, AI, and remote avatar. Headshots are instant death; torso and limbs deal 1 HP (default HP 2 so a single torso is not fatal). Arm hits force-holster and block redraw for a window; leg hits apply a timed move-speed penalty. 1v1 MP tracks HP on the host and syncs non-fatal wounds. Tunable in the debug panel (`player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`).
 
+### Fixed
+
+- Bullet trails no longer draw as a bent double-V (first point was recorded before the slug reached the muzzle; camera-facing ribbon side vector flipped along the shot).
+
 ### Changed
 
 - VR reload dump/close are less hair-trigger: dump requires sustained shake; swing/bump close thresholds raised (still tunable).

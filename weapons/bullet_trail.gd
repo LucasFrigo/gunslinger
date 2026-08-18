@@ -13,6 +13,7 @@ var _material := StandardMaterial3D.new()
 var _finished := false
 var _fade_left := FADE_TIME
 var _base_color := Color(1.0, 0.85, 0.35)
+var _side_ref := Vector3.ZERO
 
 
 func _init() -> void:
@@ -64,23 +65,41 @@ func _process(delta: float) -> void:
 
 func _rebuild_ribbon() -> void:
 	_immediate.clear_surfaces()
-	if points.size() < 2:
+	var count := points.size()
+	if count < 2:
 		return
 	var camera := get_viewport().get_camera_3d()
-	var eye := camera.global_position if camera != null else Vector3.UP * 1.7
+	var eye := Vector3.UP * 1.7
+	var cam_up := Vector3.UP
+	if camera != null:
+		eye = camera.global_position
+		cam_up = camera.global_transform.basis.y
+
+	# One side vector for the whole strip. Per-vertex `forward.cross(to_eye)`
+	# flips along the shot (especially when looking down the barrel, where
+	# far points make to_eye ≈ -forward) and folds the ribbon into a V.
+	var chord := points[count - 1] - points[0]
+	if chord.length_squared() < 0.0000001:
+		return
+	var forward := chord.normalized()
+	# Un-normalized eye offset: |forward × (eye - p)| is the camera's
+	# distance to the shot line, so far vertices stay well-defined.
+	var side := forward.cross(eye - points[0])
+	if side.length_squared() < 0.0001:
+		side = forward.cross(cam_up)
+	if side.length_squared() < 0.0001:
+		side = forward.cross(Vector3.RIGHT)
+	if not side.is_finite() or side.is_zero_approx():
+		return
+	side = side.normalized()
+	if _side_ref.dot(side) < 0.0:
+		side = -side
+	_side_ref = side
+
+	var half := side * (WIDTH * 0.5)
 	_immediate.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
-	for i in points.size():
+	for i in count:
 		var point := points[i]
-		var forward: Vector3
-		if i < points.size() - 1:
-			forward = points[i + 1] - point
-		else:
-			forward = point - points[i - 1]
-		var to_eye := (eye - point).normalized()
-		var side := forward.cross(to_eye).normalized()
-		if not side.is_finite() or side.is_zero_approx():
-			side = Vector3.UP
-		var half := side * WIDTH * 0.5
 		_immediate.surface_add_vertex(point - half)
 		_immediate.surface_add_vertex(point + half)
 	_immediate.surface_end()

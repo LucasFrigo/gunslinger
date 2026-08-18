@@ -3,7 +3,8 @@
 Living checklist of what the game can do. Agents update this when behavior lands or status changes.
 
 Status: `done` | `partial` | `planned` | `blocked`  
-Roadmap (future, by difficulty): [`../Roadmap.md`](../Roadmap.md)
+Roadmap (future, by difficulty): [`../Roadmap.md`](../Roadmap.md)  
+Open bugs: [`BUGS.md`](BUGS.md)
 
 ## Core duel
 
@@ -11,7 +12,7 @@ Roadmap (future, by difficulty): [`../Roadmap.md`](../Roadmap.md)
 |---|---|---|
 | Standoff → bell → draw → resolve | `done` | `gauntlet/duel_manager.gd` |
 | Holster / draw / fire / cock | `done` | `weapons/revolver/revolver.gd`, player rigs |
-| Projectile bullets + trails | `done` | `weapons/bullet.gd`, `weapons/bullet_trail.gd` |
+| Projectile bullets + trails | `done` | `weapons/bullet.gd`, `weapons/bullet_trail.gd`; ribbon uses one camera-facing side vector, first point at muzzle |
 | Head / torso / arm / leg hitboxes | `done` | `player/hitbox.gd`, `combat/combat_rules.gd` |
 | Regional hit effects | `done` | Head instakill; torso/limb 1 HP (default HP 2); arm force-holsters + redraw lock; leg slows move. MP host HP + `_mp_wound` |
 | Early-draw foul | `done` | duel state machine |
