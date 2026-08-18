@@ -35,6 +35,7 @@ func setup(new_archetype: AIArchetype, health_mult: float, target: Player) -> vo
 	health = archetype.health * health_mult
 	_target = target
 	_tint(archetype.body_color)
+	capture_spawn()
 	GameManager.show_message(archetype.display_name, 2.0)
 
 
@@ -46,13 +47,18 @@ func _ready() -> void:
 	revolver.fired.connect(_on_fired)
 	revolver.drawn = false
 	_rest_arm_basis = arm.transform.basis
-	_spawn_position = position
+
+
+## Store current world position as the strafe origin. Call after placing on the marker.
+func capture_spawn() -> void:
+	_spawn_position = global_position
 
 
 ## Called by the DuelManager when the bell rings.
 func begin_draw() -> void:
 	if state != AIState.IDLE or archetype == null:
 		return
+	capture_spawn()
 	state = AIState.REACTING
 	var speed_mult: float = maxf(GameManager.tuning["ai_speed_mult"], 0.05)
 	_timer = (archetype.reaction_time

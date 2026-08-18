@@ -187,6 +187,7 @@ func _begin_ai_duel(scenario_index: int, archetype: AIArchetype, health_mult: fl
 	current_ai = load(AI_SCENE).instantiate()
 	world_root.add_child(current_ai)
 	current_ai.global_transform = current_scenario.get_enemy_spawn()
+	current_ai.capture_spawn()
 	current_ai.setup(archetype, health_mult, local_player)
 
 	duel.start_ai_duel(current_ai)

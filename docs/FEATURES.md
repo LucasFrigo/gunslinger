@@ -41,7 +41,7 @@ Open bugs: [`BUGS.md`](BUGS.md)
 |---|---|---|
 | Arenas (Main Street, Saloon, Train Rooftop, Canyon) | `partial` | Greybox CSG; real art TBD |
 | Moving train duel set piece | `planned` | Roadmap; rooftop arena exists as greybox |
-| AI archetypes (Drunk / Sheriff / Ghost) | `done` | `ai/*.tres` |
+| AI archetypes (Drunk / Sheriff / Ghost) | `done` | `ai/*.tres`; Sheriff/Ghost strafe around the enemy spawn marker (not scene origin) |
 | Quest 3 / PCVR / flat harness | `done` | OpenXR + `--flat` |
 | Ranking / leaderboards | `planned` | Roadmap |
 | Mod support | `planned` | Roadmap |

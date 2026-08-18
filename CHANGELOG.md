@@ -18,6 +18,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 ### Fixed
 
 - Bullet trails no longer draw as a bent double-V (first point was recorded before the slug reached the muzzle; camera-facing ribbon side vector flipped along the shot).
+- Strafing AI (Sheriff, Ghost) no longer teleport toward the world origin when the bell rings ([BUG-002](docs/BUGS.md)). Spawn for strafing is captured after they are placed on the arena marker.
 
 ### Changed
 

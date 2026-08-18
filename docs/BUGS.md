@@ -11,13 +11,20 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
+*(none)*
+
+---
+
+## Fixed
+
 ### BUG-002 — NPC teleports at draw (countdown pose ≠ duel pose)
 
 | | |
 |---|---|
-| Status | `open` |
+| Status | `fixed` |
 | Severity | `major` |
 | Filed | 2026-08-18 |
+| Fixed | 2026-08-18 |
 | Platforms | SP AI duels; map-dependent |
 | Areas | `ai/duelist_ai.gd`, `autoload/game_manager.gd`, spawn markers in `scenarios/` |
 
@@ -28,11 +35,7 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 2. Watch the NPC through “Holster” / “Wait for the bell…”.
 3. On DRAW, note whether they jump.
 
-**Notes for fix:** `_spawn_position` is set in `DuelistAI._ready()` from local `position` (scene origin `0,0,0`) *before* `GameManager` assigns `get_enemy_spawn()`. Strafing archetypes (Sheriff, Ghost) then do `global_position = _spawn_position + right * sin(...)` once state leaves `IDLE` at the bell — that would snap them off the marker toward world origin / closer to the player. Drunk uses `STAND` and should not strafe; if they still teleport, look at spawn parent transforms vs `global_transform`. Recapture spawn after placement (`global_position` after `current_ai.global_transform = ...`).
-
----
-
-## Fixed
+**Fix:** `_spawn_position` was captured in `_ready` from local `position` (packed-scene origin) before `GameManager` applied `get_enemy_spawn()`. Sheriff/Ghost strafe then wrote `global_position = _spawn_position + right * sin(...)` and snapped toward world origin. Spawn is now recaptured as `global_position` after placement, and again when the bell rings.
 
 ### BUG-001 — Double / bent bullet traces
 
