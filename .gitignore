@@ -5,6 +5,7 @@ export_credentials.cfg
 
 # Builds
 build/
+builds/
 android/
 
 # Misc

@@ -26,7 +26,7 @@ fully tunable at runtime so you can A/B test what feels best.
 |---|---|
 | Flat (desktop test harness) | Run the project. Without an OpenXR runtime it falls back to flat mode automatically; force it with `--flat` or the `Windows (Flat Test)` export. |
 | PCVR | Have an OpenXR runtime active (SteamVR / Quest Link) and run the project. |
-| Quest 3 standalone | Use the `Quest 3 (Android)` export preset with one-click deploy (headset connected over USB, gradle build enabled). |
+| Quest 3 standalone | Use the `Quest 3 (Android)` export preset with one-click deploy (headset connected over USB, gradle build enabled). After export, `dev\install-quest.bat` sideloads `builds/vr/gunslinger-quest.apk` over ADB. |
 
 ### Multiplayer test loop (Quest 3 vs notebook)
 

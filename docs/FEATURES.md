@@ -52,3 +52,4 @@ Open bugs: [`BUGS.md`](BUGS.md)
 |---|---|---|
 | Debug panel + presets | `done` | `autoload/debug_menu.gd`, `user://*.cfg` |
 | Headless autotests | `done` | `dev/autotest.gd` |
+| Quest APK sideload | `done` | `dev/install-quest.bat` (`adb install -r` → `builds/vr/gunslinger-quest.apk`) |
