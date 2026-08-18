@@ -203,7 +203,9 @@ func _on_session_started(as_host: bool) -> void:
 	duel.stop()
 	_clear_combatants()
 	if as_host:
-		show_message("Waiting for a challenger...")
+		var ips := NetworkManager.lan_addresses()
+		var ip_hint := ", ".join(ips) if not ips.is_empty() else "(no LAN IPv4)"
+		show_message("Waiting for a challenger… LAN %s" % ip_hint, 12.0)
 		_load_scenario(current_scenario_index)
 		_place_local_player(current_scenario.get_player_spawn())
 	else:

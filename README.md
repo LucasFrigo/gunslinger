@@ -30,11 +30,14 @@ fully tunable at runtime so you can A/B test what feels best.
 
 ### Multiplayer test loop (Quest 3 vs notebook)
 
-1. Both devices on the same Wi-Fi network.
-2. Notebook: run the flat build, click **HOST (LAN)**.
-3. Quest: deploy/launch the APK, the notebook appears in the LAN host list
-   (UDP broadcast discovery) — select it and **JOIN**. No IP typing needed;
-   the IP field is a fallback.
+1. Both devices on the **same Wi-Fi** (not a guest/client-isolation SSID). The
+   notebook's Windows Firewall must allow the game (UDP **9099** gameplay,
+   UDP **9100** discovery) on a private network.
+2. Notebook: run the flat build, click **HOST (LAN)**. The HUD shows the LAN
+   IP to type if discovery misses.
+3. Quest: deploy/launch a **fresh export** of the APK (the Quest preset needs
+   `INTERNET` + Wi-Fi multicast permissions), the notebook appears in the LAN
+   host list — select it and **JOIN**. The IP field is a fallback.
 4. The host starts the duel automatically when the peer connects.
 
 Steam flow (two desktop machines with Steam running): **HOST (STEAM)** on one,

@@ -44,6 +44,8 @@ How major systems fit together. Keep this short; link to files. Update when owne
 ## Multiplayer
 
 - Interface in `netcode/`; `enet_transport.gd` (LAN + UDP discovery), `steam_transport.gd` (optional addon).
+- LAN discovery (`lan_discovery.gd`): host beacon on UDP 9100 answers pings and announces `ip|name` on `255.255.255.255` plus subnet `.255`. Gameplay ENet is UDP 9099.
+- Quest Android export must enable `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, and `CHANGE_WIFI_MULTICAST_STATE` (`export_presets.cfg`) so sockets and broadcast receive work.
 - Pose / shot sync; host validates hits and HP; non-fatal wounds via `_mp_wound`; auto rematch. Slow-mo off while networked.
 
 ## Config / user data

@@ -70,7 +70,10 @@ func host_lan() -> Error:
 	transport = ENetTransport.new(multiplayer)
 	var err := transport.host()
 	if err != OK:
-		network_error.emit("Could not host LAN game: %s" % error_string(err))
+		var hint := error_string(err)
+		if OS.get_name() == "Android" and err == ERR_CANT_CREATE:
+			hint += " — APK needs INTERNET permission (re-export Quest preset)"
+		network_error.emit("Could not host LAN game: %s" % hint)
 		transport = null
 		return err
 	discovery.start_beacon(_local_host_name())
@@ -90,9 +93,15 @@ func join_lan(ip: String) -> Error:
 
 func browse_lan(enable: bool) -> void:
 	if enable:
+		if session_active:
+			return
 		discovery.start_browse()
 	elif not session_active:
 		discovery.stop()
+
+
+func lan_addresses() -> PackedStringArray:
+	return LanDiscovery.lan_ipv4_addresses()
 
 
 # -- Steam -------------------------------------------------------------------

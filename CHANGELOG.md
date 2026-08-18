@@ -17,6 +17,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Fixed
 
+- Quest 3 LAN: hosting no longer fails with "Can't create", and a PC host shows up in the headset list. The Android export was missing `INTERNET` / Wi-Fi multicast permissions; discovery now announces on subnet broadcasts and includes the host IP ([BUG-003](docs/BUGS.md)). Re-export the Quest APK.
 - Bullet trails no longer draw as a bent double-V (first point was recorded before the slug reached the muzzle; camera-facing ribbon side vector flipped along the shot).
 - Strafing AI (Sheriff, Ghost) no longer teleport toward the world origin when the bell rings ([BUG-002](docs/BUGS.md)). Spawn for strafing is captured after they are placed on the arena marker.
 

@@ -41,6 +41,8 @@ func _ready() -> void:
 		%SteamNote.text = "Steam: GodotSteam extension not installed (LAN still works)."
 
 	visibility_changed.connect(_on_visibility_changed)
+	_on_lan_hosts([])
+	_on_visibility_changed()
 
 
 func _on_visibility_changed() -> void:
