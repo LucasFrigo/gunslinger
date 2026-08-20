@@ -24,6 +24,7 @@ var _wait_duration := 0.0
 var _ai: DuelistAI
 var _peer_holstered := false
 var _bell_player: AudioStreamPlayer
+var _end_player: AudioStreamPlayer
 var _mp_health_host := CombatRules.DEFAULT_HEALTH
 var _mp_health_peer := CombatRules.DEFAULT_HEALTH
 
@@ -32,6 +33,10 @@ func _ready() -> void:
 	_bell_player = AudioStreamPlayer.new()
 	_bell_player.bus = "Master"
 	add_child(_bell_player)
+	_end_player = AudioStreamPlayer.new()
+	_end_player.bus = "Master"
+	add_child(_end_player)
+	TimeManager.scale_changed.connect(_sync_end_pitch)
 
 
 # -- Public API ---------------------------------------------------------------
@@ -81,7 +86,20 @@ func mp_report_hit(victim_is_local: bool, trail_points: PackedVector3Array,
 
 
 func notify_kill_shot(trail_points: PackedVector3Array) -> void:
+	_play_duel_end()
 	kill_cam_requested.emit(trail_points)
+
+
+func _play_duel_end() -> void:
+	_end_player.stream = AudioCatalog.get_stream(&"duel_end")
+	_end_player.pitch_scale = 1.0 / maxf(AudioServer.playback_speed_scale, 0.001)
+	_end_player.play()
+
+
+func _sync_end_pitch(_scale: float) -> void:
+	if _end_player == null or not _end_player.playing:
+		return
+	_end_player.pitch_scale = 1.0 / maxf(AudioServer.playback_speed_scale, 0.001)
 
 
 # -- State machine ------------------------------------------------------------

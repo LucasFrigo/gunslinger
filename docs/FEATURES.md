@@ -18,7 +18,7 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Early-draw foul | `done` | duel state machine |
 | Near-miss slow-mo hook | `done` | `TimeManager.notify_near_miss`, `weapons/bullet.gd` |
 | Gravity-drop / interactive reload | `partial` | B open; sustained shake dump; torso belt + physical `CartridgePhysical`; bump/swing close (Flat `R`/Space). Dump/close thresholds in `GameManager.tuning` + debug sliders. Flip polish TBD |
-| Kill-cam / replay | `done` | SP only: `KillCam` + `TimeManager.notify_kill_cam`; flat cinematic trail fly-along, VR HMD + slow-mo |
+| Kill-cam / replay | `done` | SP + 1v1 MP: `KillCam` + `TimeManager.notify_kill_cam`; flat `Camera3D` fly-along, VR spectator `XROrigin3D` ride; `duel_end` sting on lethal hit |
 | Impact / AV polish (SFX, haptics, VFX) | `done` | `ImpactFeedback` + `AudioCatalog` / `VfxCatalog` stubs; combat XR/flat rumble wired |
 | Gun release / trick shots | `planned` | Roadmap |
 
@@ -27,12 +27,14 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Feature | Status | Notes / key paths |
 |---|---|---|
 | Free duel (arena + AI pick) | `done` | `GameManager`, main menu |
+| Duel vs up to 3 NPCs | `planned` | Roadmap (Medium); local 1–3 AI in one standoff |
 | Gauntlet (6 rungs, 3 lives, session score) | `done` | `gauntlet/gauntlet_controller.gd`, ladder `.tres` |
 | Persistent gauntlet high scores | `planned` | Score is session-only today |
 | 1v1 LAN multiplayer | `done` | `netcode/enet_transport.gd` + UDP discovery; Quest APK gets `INTERNET` + Wi-Fi multicast from `addons/gunslinger_lan_permissions/` at export. Remote avatar is a full greybox (torso/legs/arms + holstered gun). Joiner on `EnemySpawn` faces the host; walk/strafe is world-XZ from look yaw so the 180° spawn root does not invert A/D. Main menu: double-click a LAN host (or Steam lobby) to join |
 | 1v1 Steam lobbies | `partial` | `netcode/steam_transport.gd`; addon optional / may be absent |
+| 4-player multiplayer | `planned` | Roadmap (Hard); 2–4 humans (FFA / 2v2 / 1v3); netcode is 1v1 today |
 | Horde mode | `planned` | Roadmap |
-| Mexican standoff (3P) | `planned` | Needs netcode beyond 1v1 |
+| Mexican standoff (3P) | `planned` | Needs netcode beyond 1v1; related to 4-player MP |
 | Campaign | `planned` | Roadmap |
 
 ## Content & platforms

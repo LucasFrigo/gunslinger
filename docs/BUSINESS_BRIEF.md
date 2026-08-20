@@ -33,13 +33,13 @@ Briefing for business / pricing / go-to-market refinement.
 3. Holster / draw / cock / fire on a single-action revolver feel.  
 4. Optional slow-mo modes (SP only): CONSTANT, ON_DRAW, MOVEMENT (Superhot), NEAR_MISS.  
 5. SP: free duel or 6-rung gauntlet (3 lives, session score).  
-6. MP: 1v1 over LAN or Steam; slow-mo hard-disabled in network sessions.
+6. MP: 1v1 over LAN or Steam; gameplay slow-mo hard-disabled in network sessions (kill-cam burst still plays after a lethal hit).
 
 ### Differentiators (marketing hooks)
 
 - Visible bullet trajectories + tunable bullet-time (SUPERHOT-adjacent fantasy in a western).  
 - Physical VR gunplay: hip draw/holster, interactive reload (B open, belt feed, bump/swing close; dump/close thresholds tunable).  
-- Kill cam (SP): cinematic trail fly-along (flat) / HMD + slow-mo (VR).  
+- Kill cam: cinematic trail fly-along (flat `Camera3D` / VR spectator origin); SP and 1v1 MP.  
 - Data-driven AI archetypes and arenas (easy to expand content without rewrites).  
 - Dual ship: Quest standalone volume + Steam PCVR / lobby culture.
 
@@ -65,7 +65,8 @@ Status vocabulary: `done` | `partial` | `planned`. Full detail: [`FEATURES.md`](
 - Free duel (arena + AI pick); gauntlet (6 rungs, 3 lives, session score).  
 - AI archetypes: Drunk / Sheriff / Ghost.  
 - 1v1 LAN multiplayer + UDP discovery.  
-- Slow-mo modes (SP); near-miss hook; kill cam (SP).  
+- Slow-mo modes (SP); near-miss hook; kill cam (SP + 1v1 MP, VR spectator ride).  
+- Duel-end sting on lethal hit (`duel_end.wav`). 
 - Impact feedback stubs (SFX / VFX / haptics).  
 - Quest 3 / PCVR / flat harness.  
 - Debug panel + presets; headless autotests.

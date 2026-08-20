@@ -276,8 +276,13 @@ func _on_shot_received(_peer_id: int, origin: Vector3, direction: Vector3) -> vo
 
 func _on_duel_finished(local_player_won: bool, reason: String) -> void:
 	var headline := "YOU WIN" if local_player_won else "YOU LOSE"
-	show_message("%s\n%s" % [headline, reason], 3.0)
+	var message := "%s\n%s" % [headline, reason]
 	var generation_at_finish := _action_generation
+	var delay_vr_banner := is_vr and KillCam.is_playing
+	if delay_vr_banner:
+		hud.show_message(message, 3.0)
+	else:
+		show_message(message, 3.0)
 	var schedule_next := func() -> void:
 		if _action_generation != generation_at_finish:
 			return
@@ -290,6 +295,13 @@ func _on_duel_finished(local_player_won: bool, reason: String) -> void:
 				if NetworkManager.is_host():
 					_after_delay(5.0, _mp_rematch)
 	if KillCam.is_playing:
+		if delay_vr_banner:
+			KillCam.finished.connect(func() -> void:
+				if _action_generation != generation_at_finish:
+					return
+				if is_instance_valid(local_player):
+					local_player.show_vr_message(message, 3.0)
+			, CONNECT_ONE_SHOT)
 		KillCam.finished.connect(schedule_next, CONNECT_ONE_SHOT)
 	else:
 		schedule_next.call()

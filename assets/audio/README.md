@@ -32,6 +32,7 @@ Do **not** call `PlaceholderAudio.*` from gameplay code — use `AudioCatalog.ge
 | `near_miss_whoosh` | Soft near-miss layer | `near_miss_whoosh.ogg` |
 | `shell_eject` | Gravity-drop dump | `shell_eject.ogg` |
 | `chamber` | Round seated in cylinder | `chamber.ogg` |
+| `duel_end` | Lethal hit / duel resolve sting | `duel_end.wav` |
 
 VFX placeholders live under `assets/vfx/` — swap via `VfxCatalog.OVERRIDES`.
 Haptic events live under `assets/haptics/*.tres`.
