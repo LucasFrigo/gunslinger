@@ -33,6 +33,7 @@ Do not treat silence, “looks good”, implementing a feature, or finishing a t
 - Never commit secrets (`.env`, credentials, keys).
 - Never run interactive git (`-i`).
 - After a commit or remote change, verify with `git status`.
+- If the commit lands **code** on `main` (direct commit or merge), include a version bump per `.cursor/rules/version-bump.mdc` (`python dev/bump_version.py patch|minor`) unless `VERSION` was already updated or the user said `[skip bump]`.
 
 ## Safety
 

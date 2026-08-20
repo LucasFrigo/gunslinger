@@ -2,7 +2,7 @@
 
 Briefing for business / pricing / go-to-market refinement.  
 **Audience:** planning agents or humans. **Source of truth for features:** [`FEATURES.md`](FEATURES.md), [`../Roadmap.md`](../Roadmap.md), [`../README.md`](../README.md).  
-**As of:** 2026-08-13 · **Code version:** `0.1.0` (see [`../VERSION`](../VERSION))
+**As of:** 2026-08-20 · **Code version:** `0.1.0-alpha` (see [`../VERSION`](../VERSION))
 
 ---
 

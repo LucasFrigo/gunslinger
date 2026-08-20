@@ -57,7 +57,7 @@ transport differs (`netcode/enet_transport.gd` vs `netcode/steam_transport.gd`).
 | Move / lean | Left stick move, right stick turn | WASD / Q + E |
 | Debug / tuning panel | Left controller Y/menu button (wrist panel) | F3 |
 
-Reload dump/close feel: F3 → **Gunplay / AI** → **VR Reload** sliders (`reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close`), persisted in `user://tuning.cfg`. Regional hit knobs (`player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`) live under **Regional Hits** in the same panel.
+Reload dump/close feel: F3 → **Gunplay / AI** → **VR Reload** sliders (`reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close`), persisted in `user://tuning.cfg`. **Show reload volumes** draws the belt / chamber / bump / left-hand probe shapes (edit those `CollisionShape3D`s in the scenes to fit future meshes). Regional hit knobs (`player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`) live under **Regional Hits** in the same panel.
 
 ## Slow motion (single-player only)
 

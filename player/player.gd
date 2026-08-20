@@ -10,7 +10,7 @@ const VR_RIG := "res://player/vr_rig.tscn"
 const FLAT_RIG := "res://player/flat_rig.tscn"
 const HOLSTER_GRAB_RADIUS := 0.45
 const POSE_SEND_HZ := 30.0
-const CHAMBER_PROXIMITY := 0.14
+const RELOAD_VIZ_NAME := "_ReloadVolumeViz"
 
 var use_vr := false
 var rig: Node3D
@@ -72,6 +72,7 @@ func _ready() -> void:
 	_prev_gate_open = revolver.gate_open
 	ammo_belt.visible = use_vr
 	_refresh_reload_status()
+	set_reload_volume_debug(DebugMenu.show_reload_volumes)
 
 
 func _physics_process(delta: float) -> void:
@@ -109,7 +110,7 @@ func _follow_body() -> void:
 	# Holster rides the right hip, following the head's yaw.
 	holster.global_transform = Transform3D(
 		yaw,
-		Vector3(head.origin.x, global_position.y + 0.9, head.origin.z) + yaw * Vector3(0.25, 0.0, 0.05))
+		Vector3(head.origin.x, global_position.y + 1.0, head.origin.z) + yaw * Vector3(0.25, 0.0, 0.05))
 
 	# Ammo belt around the waist / lower torso.
 	ammo_belt.global_transform = Transform3D(yaw, torso_pos)
@@ -398,10 +399,8 @@ func _release_held_cartridge() -> void:
 	if not _holding_cartridge():
 		return
 	var chambered := false
-	if revolver.gate_open and revolver.drawn:
-		var hand_pos: Vector3 = rig.get_left_hand_transform().origin
-		if hand_pos.distance_to(revolver.get_chamber_point()) <= CHAMBER_PROXIMITY:
-			chambered = revolver.try_chamber()
+	if revolver.gate_open and revolver.drawn and _probe_overlaps(revolver.chamber_area):
+		chambered = revolver.try_chamber()
 	if chambered:
 		_held_cartridge.queue_free()
 		_held_cartridge = null
@@ -450,10 +449,8 @@ func _update_vr_reload(delta: float) -> void:
 		_dump_armed = true
 		_dump_hold_accum = 0.0
 
-	# Close: swing gun-hand or bump left hand into chamber.
-	var hand_pos: Vector3 = vr.get_left_hand_transform().origin
-	var near_chamber := hand_pos.distance_to(revolver.get_chamber_point()) <= CHAMBER_PROXIMITY
-	var bump := near_chamber and left_speed >= bump_close
+	# Close: swing gun-hand or bump left hand into the bump volume.
+	var bump := _probe_overlaps(revolver.bump_area) and left_speed >= bump_close
 	var swing := gun_speed >= swing_close
 	if (bump or swing) and _close_armed:
 		var how := "bumped shut" if bump else "swung shut"
@@ -473,16 +470,99 @@ func _close_gate_from_player(how: String) -> void:
 
 
 func _hand_in_ammo_belt() -> bool:
-	var shape_node := ammo_belt.get_node_or_null("CollisionShape3D") as CollisionShape3D
-	if shape_node == null or shape_node.shape == null:
+	return _probe_overlaps(ammo_belt)
+
+
+func _reload_probe() -> Area3D:
+	if rig != null and rig.has_method("get_reload_probe"):
+		return rig.get_reload_probe()
+	return null
+
+
+func _probe_overlaps(area: Area3D) -> bool:
+	var probe := _reload_probe()
+	if probe == null or area == null:
 		return false
-	var hand: Vector3 = rig.get_left_hand_transform().origin
-	var local := ammo_belt.global_transform.affine_inverse() * hand
-	var box := shape_node.shape as BoxShape3D
-	if box == null:
-		return false
-	var half := box.size * 0.5
-	return absf(local.x) <= half.x and absf(local.y) <= half.y and absf(local.z) <= half.z
+	return probe.overlaps_area(area)
+
+
+func set_reload_volume_debug(show: bool) -> void:
+	for shape in _reload_volume_shapes():
+		_set_reload_shape_viz(shape, show)
+
+
+func _reload_volume_shapes() -> Array[CollisionShape3D]:
+	var shapes: Array[CollisionShape3D] = []
+	_collect_reload_shape(shapes, ammo_belt)
+	if revolver != null:
+		_collect_reload_shape(shapes, revolver.chamber_area)
+		_collect_reload_shape(shapes, revolver.bump_area)
+	_collect_reload_shape(shapes, _reload_probe())
+	return shapes
+
+
+func _collect_reload_shape(shapes: Array[CollisionShape3D], area: Area3D) -> void:
+	if area == null:
+		return
+	var shape_node := area.get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if shape_node != null:
+		shapes.append(shape_node)
+
+
+func _set_reload_shape_viz(shape_node: CollisionShape3D, show: bool) -> void:
+	var existing := shape_node.get_node_or_null(RELOAD_VIZ_NAME)
+	if not show:
+		if existing != null:
+			existing.queue_free()
+		return
+	if existing != null:
+		return
+	var mesh := _mesh_for_reload_shape(shape_node.shape)
+	if mesh == null:
+		return
+	var vis := MeshInstance3D.new()
+	vis.name = RELOAD_VIZ_NAME
+	vis.mesh = mesh
+	vis.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = _reload_viz_color(shape_node)
+	mat.no_depth_test = true
+	vis.material_override = mat
+	shape_node.add_child(vis)
+
+
+func _mesh_for_reload_shape(shape: Shape3D) -> Mesh:
+	if shape is SphereShape3D:
+		var sphere := SphereMesh.new()
+		sphere.radius = (shape as SphereShape3D).radius
+		sphere.height = (shape as SphereShape3D).radius * 2.0
+		sphere.radial_segments = 16
+		sphere.rings = 8
+		return sphere
+	if shape is BoxShape3D:
+		var box := BoxMesh.new()
+		box.size = (shape as BoxShape3D).size
+		return box
+	if shape is CapsuleShape3D:
+		var capsule := CapsuleMesh.new()
+		var cap := shape as CapsuleShape3D
+		capsule.radius = cap.radius
+		capsule.height = cap.height
+		return capsule
+	return null
+
+
+func _reload_viz_color(shape_node: CollisionShape3D) -> Color:
+	var area := shape_node.get_parent()
+	if area == ammo_belt:
+		return Color(0.85, 0.55, 0.2, 0.35)
+	if revolver != null and area == revolver.chamber_area:
+		return Color(0.2, 0.9, 0.35, 0.4)
+	if revolver != null and area == revolver.bump_area:
+		return Color(0.2, 0.7, 1.0, 0.35)
+	return Color(0.95, 0.3, 0.85, 0.4)
 
 
 func _cartridge_attach() -> Node3D:

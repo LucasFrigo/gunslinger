@@ -15,6 +15,7 @@ var _steam_lobbies: Array = []
 
 
 func _ready() -> void:
+	%VersionLabel.text = "v%s" % str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
 	for path in GameManager.SCENARIOS:
 		scenario_option.add_item((load(path) as ScenarioResource).display_name)
 	for path in GameManager.ARCHETYPES:

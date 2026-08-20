@@ -5,12 +5,13 @@ All notable changes to **Gunslinger VR** are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
-The current version is the single line in [`VERSION`](VERSION) (mirrored in `project.godot` → `application/config/version`).
+The current version is the single line in [`VERSION`](VERSION) (mirrored in `project.godot` → `application/config/version`). Code landing on `main` auto-bumps that string (agent rule + `.github/workflows/bump-version.yml`); `[Unreleased]` is only frozen into a dated section on a named release.
 
 ## [Unreleased]
 
 ### Added
 
+- In-game version tag (`v` + `application/config/version`) on the main menu and as a small HUD watermark.
 - Double-click (or Enter) a LAN host or Steam lobby in the main menu list to join; the Join button still works.
 - VR kill cam: spectator `XROrigin3D` flies along the killing trail (player rig stays put); short fade in/out; locomotion frozen. Same cinematic in 1v1 MP from synced trail points.
 - Duel-end sting (`assets/audio/duel_end.wav`) at the lethal hit (not on fouls); pitch stays concert under slow-mo.
@@ -29,8 +30,10 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Changed
 
+- Project identity is now `0.1.0-alpha` (`VERSION` / `application/config/version`).
 - VR reload dump/close are less hair-trigger: dump requires sustained shake; swing/bump close thresholds raised (still tunable).
 - Default duelist HP raised so torso is not instakill (drunk/ghost 2, sheriff 3, player 2). Headshots remain instantly fatal.
+- VR reload grab / seat / bump use `Area3D` collision shapes on physics layer `reload` (`AmmoBelt`, revolver `ChamberArea` + `BumpArea`, left-hand `ReloadProbe`). Resize the shapes in the scenes to fit future meshes. F3 **Show reload volumes** draws translucent gizmos on device.
 
 ### Added (earlier unreleased)
 

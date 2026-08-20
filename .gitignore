@@ -8,6 +8,10 @@ build/
 builds/
 android/
 
+# Python (dev/bump_version.py)
+__pycache__/
+*.py[cod]
+
 # Misc
 *.tmp
 .DS_Store

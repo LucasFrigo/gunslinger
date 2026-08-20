@@ -11,7 +11,7 @@ How major systems fit together. Keep this short; link to files. Update when owne
 ## Entry & scene flow
 
 1. `main.tscn` / `main.gd` boots, chooses VR vs flat rig.
-2. Main menu (`ui/`) → free duel / gauntlet / host-join MP.
+2. Main menu (`ui/`) → free duel / gauntlet / host-join MP. Menu and flat HUD show `v` + `application/config/version`.
 3. `GameManager` loads a scenario (`scenarios/`) and wires player + AI or remote peer.
 4. `gauntlet/duel_manager.gd` owns the duel state machine (standoff → bell → draw → resolve).
 
@@ -29,7 +29,7 @@ How major systems fit together. Keep this short; link to files. Update when owne
 
 ## Combat
 
-- **Weapons:** `WeaponBase` → revolver; muzzle marker; cock/fire/holster; fire kick via `ImpactFeedback.shot_fired`. Mid-duel reload: `open_gate` / `dump_rounds` / `try_chamber` / `close_gate`. VR: right B opens; **sustained** gun-hand shake dumps (`reload_dump_speed` + `reload_dump_hold`); torso `AmmoBelt` + left grip spawns physical `CartridgePhysical`; bump (`reload_bump_close`) or swing (`reload_swing_close`) closes. Flat: `R` open+dump / chamber, Space closes. Thresholds live in `GameManager.tuning` / debug panel. Fire blocked while gate open; duel `reset()` still refills. Status on `Hud.ReloadStatus` + VR `Label3D`.
+- **Weapons:** `WeaponBase` → revolver; muzzle marker; cock/fire/holster; fire kick via `ImpactFeedback.shot_fired`. Mid-duel reload: `open_gate` / `dump_rounds` / `try_chamber` / `close_gate`. VR: right B opens; **sustained** gun-hand shake dumps (`reload_dump_speed` + `reload_dump_hold`); torso `AmmoBelt` Area3D + left `ReloadProbe` overlap to spawn `CartridgePhysical`; `ChamberArea` overlap seats a round; `BumpArea` overlap + `reload_bump_close` or swing (`reload_swing_close`) closes. Volumes live on physics layer `reload` (edit `CollisionShape3D` in the scenes). Flat: `R` open+dump / chamber, Space closes. Dump/swing thresholds in `GameManager.tuning` / debug panel; **Show reload volumes** draws translucent meshes on device. Fire blocked while gate open; duel `reset()` still refills. Status on `Hud.ReloadStatus` + VR `Label3D`.
 - **Bullets:** Real projectiles (`weapons/bullet.gd`), not hitscan; feed trails; near-miss check vs player head; world/body impact feedback on ray hit.
 - **Damage:** Host-authoritative in MP. `CombatRules` (`combat/combat_rules.gd`): head always kills; torso/arm/leg subtract `Hitbox.damage_mult` HP (default player HP 2). Surviving arm hits force-holster + block redraw; leg hits apply a timed move-speed penalty. Non-fatal MP wounds sync via `DuelManager._mp_wound`. `Hitbox.region` also drives AV.
 - **Feedback:** `ImpactFeedback` autoload — spatial stubs (`assets/audio/`), one-shot particles (`assets/vfx/`), XR rumble + flat joy vibration (`assets/haptics/`).
@@ -53,6 +53,8 @@ How major systems fit together. Keep this short; link to files. Update when owne
 ## Config / user data
 
 Persisted under `user://`: `slowmo.cfg`, `movement.cfg`, `tuning.cfg`, `debug_presets.cfg`.
+
+Build identity is `VERSION` (mirrored in `project.godot` → `application/config/version`). `python dev/bump_version.py patch|minor` updates both; pushes to `main` that change code also auto-bump via `.github/workflows/bump-version.yml` if `VERSION` was not already updated.
 
 ## Tests
 

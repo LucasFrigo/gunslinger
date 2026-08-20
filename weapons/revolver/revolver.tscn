@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://weapons/revolver/revolver.gd" id="1"]
 
@@ -17,6 +17,12 @@ size = Vector3(0.03, 0.045, 0.22)
 [sub_resource type="BoxMesh" id="mesh_grip"]
 size = Vector3(0.03, 0.09, 0.04)
 
+[sub_resource type="SphereShape3D" id="shape_chamber"]
+radius = 0.14
+
+[sub_resource type="SphereShape3D" id="shape_bump"]
+radius = 0.14
+
 [node name="Revolver" type="Node3D"]
 script = ExtResource("1")
 
@@ -32,6 +38,25 @@ surface_material_override/0 = SubResource("mat_metal")
 
 [node name="Chamber" type="Marker3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.04, 0.01, 0.0)
+
+[node name="ChamberArea" type="Area3D" parent="Chamber" groups=["reload_volume"]]
+collision_layer = 16
+collision_mask = 16
+monitoring = true
+monitorable = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Chamber/ChamberArea"]
+shape = SubResource("shape_chamber")
+
+[node name="BumpArea" type="Area3D" parent="." groups=["reload_volume"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.01, 0)
+collision_layer = 16
+collision_mask = 16
+monitoring = true
+monitorable = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="BumpArea"]
+shape = SubResource("shape_bump")
 
 [node name="Grip" type="MeshInstance3D" parent="."]
 transform = Transform3D(0.96, 0, -0.28, 0, 1, 0, 0.28, 0, 0.96, 0, -0.045, 0.045)

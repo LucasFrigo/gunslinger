@@ -1,0 +1,71 @@
+name: Bump version
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether to bump
+        id: check
+        env:
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          if printf '%s' "$MSG" | grep -q '\[skip bump\]'; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "Skip: commit message has [skip bump]"
+            exit 0
+          fi
+          if [[ "$BEFORE" =~ ^0+$ ]]; then
+            RANGE="$SHA"
+          else
+            RANGE="$BEFORE..$SHA"
+          fi
+          mapfile -t files < <(git diff --name-only "$RANGE")
+          if printf '%s\n' "${files[@]}" | grep -qx 'VERSION'; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "Skip: VERSION already changed in this push"
+            exit 0
+          fi
+          code=false
+          for f in "${files[@]}"; do
+            case "$f" in
+              docs/*|*.md|.cursor/*|.github/*|dev/bump_version.py|CHANGELOG.md|Roadmap.md|VERSION|LICENSE)
+                ;;
+              *.gd|*.tscn|*.tres|*.shader|*.cfg|project.godot|export_presets.cfg|assets/*)
+                code=true
+                ;;
+              *)
+                ;;
+            esac
+          done
+          if [[ "$code" != true ]]; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "Skip: no gameplay/code files in this push"
+            exit 0
+          fi
+          echo "needed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Bump patch and push
+        if: steps.check.outputs.needed == 'true'
+        run: |
+          set -euo pipefail
+          NEW=$(python3 dev/bump_version.py patch)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add VERSION project.godot
+          git commit -m "chore: bump version to ${NEW} [skip bump]"
+          git push
