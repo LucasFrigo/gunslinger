@@ -17,7 +17,8 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Regional hit effects | `done` | Head instakill; torso/limb 1 HP (default HP 2); arm force-holsters + redraw lock; leg slows move. MP host HP + `_mp_wound` |
 | Early-draw foul | `done` | duel state machine |
 | Near-miss slow-mo hook | `done` | `TimeManager.notify_near_miss`, `weapons/bullet.gd` |
-| Gravity-drop / interactive reload | `partial` | B open; sustained shake dump; torso belt + physical `CartridgePhysical`; bump/swing close (Flat `R`/Space). Dump/close thresholds in `GameManager.tuning` + debug sliders. Flip polish TBD |
+| Gravity-drop / interactive reload | `partial` | B open; sustained shake dump; torso belt + physical `CartridgePhysical`; bump/swing close (Flat `R`/Space). VR volumes: belt AABB 0.9×0.55×0.55 m, chamber 0.14 m. Dump/close thresholds in `GameManager.tuning` + debug sliders. Flip + VR volume polish TBD |
+| Rapid-fire jam | `planned` | Roadmap (Medium); jam chance scales with shot cadence (Flat spam vs VR) |
 | Kill-cam / replay | `done` | SP + 1v1 MP: `KillCam` + `TimeManager.notify_kill_cam`; flat `Camera3D` fly-along, VR spectator `XROrigin3D` ride; `duel_end` sting on lethal hit |
 | Impact / AV polish (SFX, haptics, VFX) | `done` | `ImpactFeedback` + `AudioCatalog` / `VfxCatalog` stubs; combat XR/flat rumble wired |
 | Gun release / trick shots | `planned` | Roadmap |
