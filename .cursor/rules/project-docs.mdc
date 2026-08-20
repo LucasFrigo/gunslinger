@@ -23,7 +23,7 @@ Also sync `project.godot` → `application/config/version` with `VERSION`.
 ## When to update (same PR / session as the code)
 
 - **New or changed behavior** → `docs/FEATURES.md` status + one-line note; touch `docs/ARCHITECTURE.md` if control flow, ownership, or key files moved.
-- **Finished a Roadmap item (or clearly started it)** → move/annotate in `Roadmap.md` and mirror status in `FEATURES.md`.
+- **Finished a Roadmap item** → move the bullet to **Completed** at the bottom of `Roadmap.md` (do not leave strikethrough in the active lists) and set `FEATURES.md` to `done`. **Started but not done** → annotate in place and set `FEATURES.md` to `partial`.
 - **Player-visible or shippable change** → add a `CHANGELOG.md` entry under `[Unreleased]`.
 - **New confirmed bug** → add `BUG-NNN` under Open in `docs/BUGS.md`. **Fixing a tracked bug** → move it to Fixed in the same session; changelog `Fixed` if player-visible.
 - **Code landing on `main`** → bump `VERSION` + `config/version` in that commit (see `version-bump.mdc`). Do not wait for the user to ask.

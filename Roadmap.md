@@ -4,16 +4,14 @@ Ordered easiest → hardest to implement, given what already exists in the codeb
 
 **Living status of what already ships:** [`docs/FEATURES.md`](docs/FEATURES.md) · **How systems work:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Bugs:** [`docs/BUGS.md`](docs/BUGS.md) · **Versions:** [`CHANGELOG.md`](CHANGELOG.md) / [`VERSION`](VERSION)
 
-When an item below lands (or is clearly underway), update `docs/FEATURES.md` and move or strike the bullet here.
+When an item below lands (or is clearly underway), update `docs/FEATURES.md`. When it is **done**, move the bullet to **Completed** at the bottom (do not leave strikethrough items in the active lists).
 
 ## 1. Easy — polish & finish existing hooks
 
-*(none — kill cam shipped; see [`docs/FEATURES.md`](docs/FEATURES.md))*
+*(none)*
 
 ## 2. Medium — contained mechanics & set pieces
-* **Reload Mechanic:** ~~B-open / sustained motion dump / belt feed / bump-swing close shipped (`partial` in FEATURES).~~ Spatial checks are Area3D on layer `reload` (`AmmoBelt`, `ChamberArea`, `BumpArea`, left `ReloadProbe`) — resize shapes to match real meshes. Polish later: cylinder flip feel, real belt/cartridge assets. Dump/close knobs: `reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close`.
 * **Rapid-fire jam:** Chance to jam on successive shots; higher rate of fire (especially Flat `auto_cock` spam) raises jam chance. Clearing a jam should cost time vs. a clean reload. Tunable fire-interval / chance knobs.
-* **Regional Hit Effects:** ~~Arm/leg hitboxes + region gameplay shipped (`done` in FEATURES).~~ Head instakill; torso/limb HP; arm force-holster; leg slow. Tunables: `player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`.
 * **Train Map Concept:** A duel scene featuring a moving train passing between opponents. Players must either wait for the train to clear or attempt risky shots through open train cars. (Builds on the existing Train Rooftop arena idea.)
 * **Gun Release & Trick Shots:** Allow players to release, catch, and toss weapons mid-air to pull off stylish trick shots. (Needs reliable VR grab/release physics.)
 * **Duel vs up to 3 NPCs:** Free-duel option to face 1–3 AI opponents in one standoff (local, no netcode). Needs extra spawn marks, multi-combatant targeting, and resolve when more than two duelists fire. Reuses `ai/duelist.tscn` + archetypes.
@@ -27,3 +25,11 @@ When an item below lands (or is clearly underway), update `docs/FEATURES.md` and
 ## 4. Very hard — content & platform systems
 * **Campaign Mode:** Develop a narrative-driven or level-based single-player story mode.
 * **Mod Support:** Provide community modding capabilities (custom gun skins, custom maps, sound packs, and duel scenarios).
+
+## Completed
+
+Newest at the top. Keep a one-line note of what shipped and where; details live in [`docs/FEATURES.md`](docs/FEATURES.md).
+
+* **Reload Mechanic:** VR B-open / sustained shake dump / torso `AmmoBelt` + left `ReloadProbe` / `ChamberArea` seat / bump or swing close; Flat `R` / Space. Area3D volumes on layer `reload`; dump/close knobs in debug panel. Mesh-fit / cylinder-flip polish can land later without reopening this item. (`done` in FEATURES)
+* **Regional Hit Effects:** Head instakill; torso/limb HP; arm force-holster; leg slow. Tunables: `player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`. (`done` in FEATURES)
+* **Kill cam:** Flat trail fly-along + VR spectator ride; SP and 1v1 MP. (`done` in FEATURES)

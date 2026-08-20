@@ -17,7 +17,7 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Regional hit effects | `done` | Head instakill; torso/limb 1 HP (default HP 2); arm force-holsters + redraw lock; leg slows move. MP host HP + `_mp_wound` |
 | Early-draw foul | `done` | duel state machine |
 | Near-miss slow-mo hook | `done` | `TimeManager.notify_near_miss`, `weapons/bullet.gd` |
-| Gravity-drop / interactive reload | `partial` | B open; sustained shake dump; torso `AmmoBelt` + left `ReloadProbe` overlap; `ChamberArea` seats; `BumpArea` bump or swing close (Flat `R`/Space). Layer `reload`. F3 **Show reload volumes**. Dump/swing in `GameManager.tuning`. Flip + real-mesh fit TBD |
+| Gravity-drop / interactive reload | `done` | B open; sustained shake dump; torso `AmmoBelt` + left `ReloadProbe` overlap; `ChamberArea` seats; `BumpArea` bump or swing close (Flat `R`/Space). Layer `reload`. F3 **Show reload volumes**. Dump/swing in `GameManager.tuning`. Mesh-fit / cylinder-flip are art polish, not blockers |
 | Rapid-fire jam | `planned` | Roadmap (Medium); jam chance scales with shot cadence (Flat spam vs VR) |
 | Kill-cam / replay | `done` | SP + 1v1 MP: `KillCam` + `TimeManager.notify_kill_cam`; flat `Camera3D` fly-along, VR spectator `XROrigin3D` ride; `duel_end` sting on lethal hit |
 | Impact / AV polish (SFX, haptics, VFX) | `done` | `ImpactFeedback` + `AudioCatalog` / `VfxCatalog` stubs; combat XR/flat rumble wired |
