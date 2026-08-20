@@ -103,6 +103,7 @@ toggle_debug={
 3d_physics/layer_2="player_body"
 3d_physics/layer_3="hitbox"
 3d_physics/layer_4="interactable"
+3d_physics/layer_5="reload"
 
 [physics]
 

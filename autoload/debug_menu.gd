@@ -52,6 +52,9 @@ var _movement_sliders: Dictionary = {}
 var _turn_mode_option: OptionButton
 var _preset_option: OptionButton
 var _preset_name_edit: LineEdit
+var _reload_volume_toggle: CheckButton
+## Session-only: translucent meshes on belt / chamber / bump / hand probe.
+var show_reload_volumes := false
 
 
 func _ready() -> void:
@@ -278,6 +281,17 @@ func _build_gunplay_section(root: Control) -> void:
 					GameManager.set_tuning(tune_key, value))
 		_reload_sliders[tune_key] = widgets
 
+	_reload_volume_toggle = CheckButton.new()
+	_reload_volume_toggle.text = "Show reload volumes"
+	_reload_volume_toggle.button_pressed = show_reload_volumes
+	_reload_volume_toggle.toggled.connect(func(pressed: bool) -> void:
+		if _refreshing:
+			return
+		show_reload_volumes = pressed
+		if GameManager.local_player != null:
+			GameManager.local_player.set_reload_volume_debug(pressed))
+	root.add_child(_reload_volume_toggle)
+
 
 func _build_movement_section(root: Control) -> void:
 	_add_header(root, "Movement (Flat)")
@@ -401,6 +415,8 @@ func _refresh_from_systems() -> void:
 		var rvalue: float = float(GameManager.tuning[key])
 		rwidgets["slider"].value = rvalue
 		rwidgets["label"].text = "%.2f" % rvalue
+	if _reload_volume_toggle != null:
+		_reload_volume_toggle.button_pressed = show_reload_volumes
 	for key in _combat_sliders:
 		var cwidgets: Dictionary = _combat_sliders[key]
 		var cvalue: float = float(GameManager.tuning[key])

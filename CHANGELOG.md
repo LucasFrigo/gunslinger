@@ -31,6 +31,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 - VR reload dump/close are less hair-trigger: dump requires sustained shake; swing/bump close thresholds raised (still tunable).
 - Default duelist HP raised so torso is not instakill (drunk/ghost 2, sheriff 3, player 2). Headshots remain instantly fatal.
+- VR reload grab / seat / bump use `Area3D` collision shapes on physics layer `reload` (`AmmoBelt`, revolver `ChamberArea` + `BumpArea`, left-hand `ReloadProbe`). Resize the shapes in the scenes to fit future meshes. F3 **Show reload volumes** draws translucent gizmos on device.
 
 ### Added (earlier unreleased)
 

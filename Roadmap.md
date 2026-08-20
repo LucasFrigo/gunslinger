@@ -11,7 +11,7 @@ When an item below lands (or is clearly underway), update `docs/FEATURES.md` and
 *(none — kill cam shipped; see [`docs/FEATURES.md`](docs/FEATURES.md))*
 
 ## 2. Medium — contained mechanics & set pieces
-* **Reload Mechanic:** ~~B-open / sustained motion dump / belt feed / bump-swing close shipped (`partial` in FEATURES).~~ Polish later: cylinder flip feel, real belt/cartridge assets; VR belt/chamber volumes feel tight at speed (`CHAMBER_PROXIMITY` 0.14 m, belt box 0.9×0.55×0.55 m). Dump/close knobs: `reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close`.
+* **Reload Mechanic:** ~~B-open / sustained motion dump / belt feed / bump-swing close shipped (`partial` in FEATURES).~~ Spatial checks are Area3D on layer `reload` (`AmmoBelt`, `ChamberArea`, `BumpArea`, left `ReloadProbe`) — resize shapes to match real meshes. Polish later: cylinder flip feel, real belt/cartridge assets. Dump/close knobs: `reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close`.
 * **Rapid-fire jam:** Chance to jam on successive shots; higher rate of fire (especially Flat `auto_cock` spam) raises jam chance. Clearing a jam should cost time vs. a clean reload. Tunable fire-interval / chance knobs.
 * **Regional Hit Effects:** ~~Arm/leg hitboxes + region gameplay shipped (`done` in FEATURES).~~ Head instakill; torso/limb HP; arm force-holster; leg slow. Tunables: `player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`.
 * **Train Map Concept:** A duel scene featuring a moving train passing between opponents. Players must either wait for the train to clear or attempt risky shots through open train cars. (Builds on the existing Train Rooftop arena idea.)

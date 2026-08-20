@@ -132,7 +132,7 @@ mesh = SubResource("mesh_leg")
 surface_material_override/0 = SubResource("mat_body")
 
 [node name="Holster" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0.9, 0.05)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 1.0, 0.05)
 top_level = true
 
 [node name="Revolver" parent="Holster" instance=ExtResource("3")]

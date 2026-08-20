@@ -67,6 +67,10 @@ func get_cartridge_attach() -> Node3D:
 	return $LeftHand/CartridgeAttach
 
 
+func get_reload_probe() -> Area3D:
+	return $LeftHand/ReloadProbe as Area3D
+
+
 ## Flat mode aims along the camera; VR aims along the muzzle.
 func get_aim_override() -> Vector3:
 	return Vector3.ZERO

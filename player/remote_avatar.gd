@@ -82,7 +82,7 @@ func _process(delta: float) -> void:
 	leg_hitbox.global_transform = Transform3D(
 		yaw, head_pos + Vector3.DOWN * 1.3)
 	holster.global_transform = Transform3D(
-		yaw, Vector3(head_pos.x, global_position.y + 0.9, head_pos.z) + yaw * HOLSTER_LOCAL)
+		yaw, Vector3(head_pos.x, global_position.y + 1.0, head_pos.z) + yaw * HOLSTER_LOCAL)
 	var torso_pos := torso_hitbox.global_position
 	_place_limb(left_arm, torso_pos + yaw * Vector3(-SHOULDER_LOCAL.x, SHOULDER_LOCAL.y, 0.0),
 			left_hand.global_position)
