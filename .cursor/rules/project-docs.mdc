@@ -16,7 +16,7 @@ Agents must keep these files accurate when shipping meaningful work. Do not inve
 | `docs/BUGS.md` | Open / fixed defect tracker (`BUG-NNN`); screenshots in `docs/bugs/` |
 | `Roadmap.md` | Future work, ordered easiest → hardest |
 | `CHANGELOG.md` | User-facing history ([Keep a Changelog](https://keepachangelog.com)) |
-| `VERSION` | Current SemVer string (single line, e.g. `0.1.0`) |
+| `VERSION` | Current SemVer string (single line, e.g. `0.1.0-alpha`) |
 
 Also sync `project.godot` → `application/config/version` with `VERSION`.
 
@@ -26,7 +26,8 @@ Also sync `project.godot` → `application/config/version` with `VERSION`.
 - **Finished a Roadmap item (or clearly started it)** → move/annotate in `Roadmap.md` and mirror status in `FEATURES.md`.
 - **Player-visible or shippable change** → add a `CHANGELOG.md` entry under `[Unreleased]`.
 - **New confirmed bug** → add `BUG-NNN` under Open in `docs/BUGS.md`. **Fixing a tracked bug** → move it to Fixed in the same session; changelog `Fixed` if player-visible.
-- **Release / version bump** (only when the user asks to release or bump) → move `[Unreleased]` into a dated `## [X.Y.Z]` section, update `VERSION` + `config/version`.
+- **Code landing on `main`** → bump `VERSION` + `config/version` in that commit (see `version-bump.mdc`). Do not wait for the user to ask.
+- **Named release** (only when the user asks to release) → move `[Unreleased]` into a dated `## [X.Y.Z]` section; drop `-alpha` only if they asked.
 
 Skip doc churn for typos, formatting-only edits, or purely internal renames with no behavior change.
 

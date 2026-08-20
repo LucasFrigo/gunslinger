@@ -6,6 +6,7 @@ extends CanvasLayer
 @onready var message_label: Label = $Message
 @onready var reload_status: Label = $ReloadStatus
 @onready var health_status: Label = $HealthStatus
+@onready var version_tag: Label = $VersionTag
 @onready var red_flash: ColorRect = $RedFlash
 @onready var menu_holder: Control = $MenuHolder
 
@@ -20,6 +21,7 @@ func _ready() -> void:
 	health_status.visible = false
 	red_flash.modulate.a = 0.0
 	menu_holder.visible = false
+	version_tag.text = "v%s" % str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
 
 
 func get_menu_control() -> Control:

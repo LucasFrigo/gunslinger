@@ -11,7 +11,7 @@ How major systems fit together. Keep this short; link to files. Update when owne
 ## Entry & scene flow
 
 1. `main.tscn` / `main.gd` boots, chooses VR vs flat rig.
-2. Main menu (`ui/`) → free duel / gauntlet / host-join MP.
+2. Main menu (`ui/`) → free duel / gauntlet / host-join MP. Menu and flat HUD show `v` + `application/config/version`.
 3. `GameManager` loads a scenario (`scenarios/`) and wires player + AI or remote peer.
 4. `gauntlet/duel_manager.gd` owns the duel state machine (standoff → bell → draw → resolve).
 
@@ -53,6 +53,8 @@ How major systems fit together. Keep this short; link to files. Update when owne
 ## Config / user data
 
 Persisted under `user://`: `slowmo.cfg`, `movement.cfg`, `tuning.cfg`, `debug_presets.cfg`.
+
+Build identity is `VERSION` (mirrored in `project.godot` → `application/config/version`). `python dev/bump_version.py patch|minor` updates both; pushes to `main` that change code also auto-bump via `.github/workflows/bump-version.yml` if `VERSION` was not already updated.
 
 ## Tests
 
