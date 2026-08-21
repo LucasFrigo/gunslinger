@@ -6,12 +6,22 @@ Ordered easiest → hardest to implement, given what already exists in the codeb
 
 When an item below lands (or is clearly underway), update `docs/FEATURES.md`. When it is **done**, move the bullet to **Completed** at the bottom (do not leave strikethrough items in the active lists).
 
+## Polish / visual
+
+VFX, trail, and presentation tweaks. Not new mechanics.
+
+* **Shorter bullet trails:** Trails linger too long after the slug is gone. Drop `FADE_TIME` in `weapons/bullet_trail.gd` (currently 1.6s) so the ribbon disappears faster; optional debug knob.
+* **Barrel smoke:** Visible smoke coming out of the barrel after a shot. A short stub already plays (`VfxCatalog` `&"muzzle_smoke"` from `ImpactFeedback.shot_fired` / `assets/vfx/muzzle_smoke.tscn`); this is a lingering plume that reads as gunsmoke, not a 0.45s puff.
+
 ## 1. Easy — polish & finish existing hooks
 
 *(none)*
 
 ## 2. Medium — contained mechanics & set pieces
 * **Rapid-fire jam:** Chance to jam on successive shots; higher rate of fire (especially Flat `auto_cock` spam) raises jam chance. Clearing a jam should cost time vs. a clean reload. Tunable fire-interval / chance knobs.
+* **Revolver Ocelot spin:** A held twirl flourish (wrist flick or dedicated input) in the Revolver Ocelot style. Visual / haptic first; can share spin with the airborne trick-shot idea below.
+* **Self-damage:** Player (and peer) bullets can hit the shooter. Self-wounds use the same regional HP / arm-disarm / leg-slow rules; a self-kill should lose the duel. Shots currently exclude the shooter's hitbox RIDs (`weapons/bullet.gd`).
+* **Airborne fire / mystic trick shots:** Optional tech/mystic branch: allow firing while the revolver is tossed and spinning, so you can go for mid-air trick shots. Today fire/reload require `held` (`weapons/weapon_base.gd`). Gate behind a flag so the grounded western default stays.
 * **Train Map Concept:** A duel scene featuring a moving train passing between opponents. Players must either wait for the train to clear or attempt risky shots through open train cars. (Builds on the existing Train Rooftop arena idea.)
 * **Duel vs up to 3 NPCs:** Free-duel option to face 1–3 AI opponents in one standoff (local, no netcode). Needs extra spawn marks, multi-combatant targeting, and resolve when more than two duelists fire. Reuses `ai/duelist.tscn` + archetypes.
 

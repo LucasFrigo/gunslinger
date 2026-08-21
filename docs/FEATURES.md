@@ -12,16 +12,21 @@ Open bugs: [`BUGS.md`](BUGS.md)
 |---|---|---|
 | Standoff → bell → draw → resolve | `done` | `gauntlet/duel_manager.gd` |
 | Holster / draw / fire / cock | `done` | `weapons/revolver/revolver.gd`, player rigs. VR grip is hold-to-hold; Flat RMB still toggles |
-| Projectile bullets + trails | `done` | `weapons/bullet.gd`, `weapons/bullet_trail.gd`; ribbon uses one camera-facing side vector, first point at muzzle |
+| Projectile bullets + trails | `done` | `weapons/bullet.gd`, `weapons/bullet_trail.gd`; ribbon uses one camera-facing side vector, first point at muzzle. Shorter linger is planned (`FADE_TIME` 1.6s) |
+| Shorter bullet-trail fade | `planned` | Roadmap (Polish / visual); `weapons/bullet_trail.gd` |
+| Barrel smoke | `planned` | Roadmap (Polish / visual); stub `muzzle_smoke` already fires from `ImpactFeedback.shot_fired` — wants a lingering plume from the barrel |
 | Head / torso / arm / leg hitboxes | `done` | `player/hitbox.gd`, `combat/combat_rules.gd` |
 | Regional hit effects | `done` | Head instakill; torso/limb 1 HP (default HP 2); arm force-holsters + redraw lock; leg slows move. MP host HP + `_mp_wound` |
-| Early-draw foul | `done` | duel state machine |
+| Self-damage | `planned` | Roadmap (Medium); shots exclude shooter hitboxes today |
+| Early-draw foul | `done` | duel state machine. Open: a post-foul hit can overwrite the loss ([BUG-007](BUGS.md)) |
 | Near-miss slow-mo hook | `done` | `TimeManager.notify_near_miss`, `weapons/bullet.gd` |
 | Gravity-drop / interactive reload | `done` | Gun-hand B opens; sustained shake dump; torso `AmmoBelt` + **off-hand** `ReloadProbe` overlap; `ChamberArea` seats; `BumpArea` bump or swing close (Flat `R`/Space). Layer `reload`. F3 **Show reload volumes**. Dump/swing in `GameManager.tuning`. Mesh-fit / cylinder-flip are art polish, not blockers |
 | Rapid-fire jam | `planned` | Roadmap (Medium); jam chance scales with shot cadence (Flat spam vs VR) |
 | Kill-cam / replay | `done` | SP + 1v1 MP: `KillCam` + `TimeManager.notify_kill_cam`; flat `Camera3D` fly-along, VR spectator `XROrigin3D` ride; `duel_end` sting on lethal hit |
 | Impact / AV polish (SFX, haptics, VFX) | `done` | `ImpactFeedback` + `AudioCatalog` / `VfxCatalog` stubs; combat XR/flat rumble wired |
 | Gun release / trick shots | `done` | VR hold-to-hold: toss with hand velocity, catch either hand (or take from the other), holster snap on chosen hip (`holster_side`). Fire/reload only while held; airborne still counts as drawn for fouls. Frozen `RigidBody3D` copies the hand/hip pose (`follow_parent` in `weapons/weapon_base.gd`). MP pose sends free-gun transform + hand/hip flags |
+| Revolver Ocelot spin | `planned` | Roadmap (Medium); held twirl flourish |
+| Airborne fire / mystic trick shots | `planned` | Roadmap (Medium); fire while tossed/spinning; optional tech/mystic flag |
 
 ## Modes
 
