@@ -26,8 +26,12 @@ const HOLSTER_LOCAL := Vector3(0.25, 0.0, 0.05)
 var _target_head: Transform3D
 var _target_left: Transform3D
 var _target_right: Transform3D
+var _target_gun: Transform3D
 var _has_pose := false
 var _gun_drawn := false
+var _gun_free := false
+var _gun_held_left := false
+var _holster_left := false
 
 
 func _ready() -> void:
@@ -37,6 +41,7 @@ func _ready() -> void:
 	arm_hitbox_r.owner_entity = self
 	leg_hitbox.owner_entity = self
 	gun.visible = true
+	_freeze_gun()
 	# Rest pose before the first packet: head at spawn, hands by the hips.
 	_target_head = global_transform.translated_local(Vector3.UP * 1.7)
 	_target_left = global_transform.translated_local(Vector3(-0.25, 1.15, 0.05))
@@ -46,27 +51,47 @@ func _ready() -> void:
 	right_hand.global_transform = _target_right
 
 
-func apply_pose(head_t: Transform3D, left_t: Transform3D, right_t: Transform3D, flags: int) -> void:
+func apply_pose(head_t: Transform3D, left_t: Transform3D, right_t: Transform3D, flags: int,
+		gun_t := Transform3D.IDENTITY) -> void:
 	_target_head = head_t
 	_target_left = left_t
 	_target_right = right_t
-	_set_gun_drawn(flags & NetworkManager.POSE_FLAG_GUN_DRAWN != 0)
+	_target_gun = gun_t
+	_gun_free = flags & NetworkManager.POSE_FLAG_GUN_FREE != 0
+	_gun_held_left = flags & NetworkManager.POSE_FLAG_GUN_HELD_LEFT != 0
+	_holster_left = flags & NetworkManager.POSE_FLAG_HOLSTER_LEFT != 0
+	_apply_gun_parent(flags & NetworkManager.POSE_FLAG_GUN_DRAWN != 0)
 	_has_pose = true
 
 
-func _set_gun_drawn(drawn: bool) -> void:
-	if drawn == _gun_drawn and gun.get_parent() == (right_hand if drawn else holster):
-		return
-	_gun_drawn = drawn
+func _freeze_gun() -> void:
+	if gun is RigidBody3D:
+		var body := gun as RigidBody3D
+		body.freeze = true
+		body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+		body.collision_layer = 0
+		body.collision_mask = 0
+
+
+func _apply_gun_parent(drawn: bool) -> void:
+	_freeze_gun()
 	gun.visible = true
+	if _gun_free:
+		if gun is WeaponBase:
+			(gun as WeaponBase).follow_parent = false
+		if gun.get_parent() != self:
+			gun.reparent(self, true)
+		_gun_drawn = true
+		return
+	if gun is WeaponBase:
+		(gun as WeaponBase).follow_parent = true
+	var attach: Node3D = holster
 	if drawn:
-		if gun.get_parent() != right_hand:
-			gun.reparent(right_hand)
-		gun.transform = Transform3D.IDENTITY
-	else:
-		if gun.get_parent() != holster:
-			gun.reparent(holster)
-		gun.transform = Transform3D.IDENTITY
+		attach = left_hand if _gun_held_left else right_hand
+	if gun.get_parent() != attach:
+		gun.reparent(attach)
+	gun.transform = Transform3D.IDENTITY
+	_gun_drawn = drawn
 
 
 func _process(delta: float) -> void:
@@ -81,13 +106,17 @@ func _process(delta: float) -> void:
 		yaw, head_pos + Vector3.DOWN * 0.55)
 	leg_hitbox.global_transform = Transform3D(
 		yaw, head_pos + Vector3.DOWN * 1.3)
+	var hip := HOLSTER_LOCAL
+	hip.x = -absf(hip.x) if _holster_left else absf(hip.x)
 	holster.global_transform = Transform3D(
-		yaw, Vector3(head_pos.x, global_position.y + 1.0, head_pos.z) + yaw * HOLSTER_LOCAL)
+		yaw, Vector3(head_pos.x, global_position.y + 1.0, head_pos.z) + yaw * hip)
 	var torso_pos := torso_hitbox.global_position
 	_place_limb(left_arm, torso_pos + yaw * Vector3(-SHOULDER_LOCAL.x, SHOULDER_LOCAL.y, 0.0),
 			left_hand.global_position)
 	_place_limb(right_arm, torso_pos + yaw * Vector3(SHOULDER_LOCAL.x, SHOULDER_LOCAL.y, 0.0),
 			right_hand.global_position)
+	if _gun_free:
+		gun.global_transform = gun.global_transform.interpolate_with(_target_gun, weight)
 
 
 func _place_limb(node: Node3D, from: Vector3, to: Vector3) -> void:

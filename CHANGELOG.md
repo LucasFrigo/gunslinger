@@ -11,6 +11,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Added
 
+- VR gun release: hold grip to keep the revolver, release to toss with hand velocity, catch with either hand (or take it from the other). Fire and reload only while held. Chosen hip via debug **Holster side** (`holster_side`). Tunables: `gun_catch_radius`, `gun_holster_max_speed`, `gun_throw_scale`, `gun_throw_spin_scale`.
 - In-game version tag (`v` + `application/config/version`) on the main menu and as a small HUD watermark.
 - Double-click (or Enter) a LAN host or Steam lobby in the main menu list to join; the Join button still works.
 - VR kill cam: spectator `XROrigin3D` flies along the killing trail (player rig stays put); short fade in/out; locomotion frozen. Same cinematic in 1v1 MP from synced trail points.
@@ -21,6 +22,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Fixed
 
+- VR held revolver stays on the controller: a frozen `RigidBody3D` does not inherit parent motion, so attached guns copy the holster / `GunAttach` transform each frame (`follow_parent`).
 - LAN joiner strafe (A/D, left stick) matches the view after spawning on `EnemySpawn`. Stick/WASD motion is applied in world XZ from look yaw so the 180° spawn root is not applied twice ([BUG-006](docs/BUGS.md)).
 - PvP opponent now has a readable greybox body (torso, legs, arms) and a holstered revolver until they draw, instead of a floating head and hands ([BUG-005](docs/BUGS.md)).
 - Quest 3 LAN: hosting no longer fails with "Can't create", and a PC host shows up in the headset list. The sideloaded APK had no `INTERNET` permission (Steam Link + Godot editor worked because that path runs on Windows). Permissions are now injected at Android export so the dialog cannot drop them; ENet/discovery bind IPv4 ([BUG-003](docs/BUGS.md)).
@@ -30,6 +32,8 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Changed
 
+- VR draw/holster is hold-to-hold on grip (release near a still hip holsters; a flick tosses). Gun-hand trigger/A/B and off-hand reload swap when the revolver is in the left hand. Left B opens the gate only while left-held; Quest menu button still opens debug.
+- 1v1 pose RPC now includes a gun transform plus `GUN_FREE` / `HOLSTER_LEFT` / `GUN_HELD_LEFT` flags so a tossed gun is visible on the remote avatar.
 - Project identity is now `0.1.0-alpha` (`VERSION` / `application/config/version`).
 - VR reload dump/close are less hair-trigger: dump requires sustained shake; swing/bump close thresholds raised (still tunable).
 - Default duelist HP raised so torso is not instakill (drunk/ghost 2, sheriff 3, player 2). Headshots remain instantly fatal.

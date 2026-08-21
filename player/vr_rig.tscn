@@ -39,6 +39,9 @@ transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0
 [node name="CartridgeAttach" type="Node3D" parent="LeftHand" unique_id=1040003277]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, -0.08)
 
+[node name="GunAttach" type="Node3D" parent="LeftHand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.045824308, -0.044601202)
+
 [node name="ReloadProbe" type="Area3D" parent="LeftHand" groups=["reload_volume"]]
 collision_layer = 16
 collision_mask = 16
@@ -58,6 +61,18 @@ surface_material_override/0 = SubResource("mat_hand")
 
 [node name="GunAttach" type="Node3D" parent="RightHand" unique_id=199187415]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.045824308, -0.044601202)
+
+[node name="CartridgeAttach" type="Node3D" parent="RightHand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, -0.08)
+
+[node name="ReloadProbe" type="Area3D" parent="RightHand" groups=["reload_volume"]]
+collision_layer = 16
+collision_mask = 16
+monitoring = true
+monitorable = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RightHand/ReloadProbe"]
+shape = SubResource("shape_reload_probe")
 
 [node name="PointerRay" type="RayCast3D" parent="RightHand" unique_id=1040354523]
 target_position = Vector3(0, 0, -6)

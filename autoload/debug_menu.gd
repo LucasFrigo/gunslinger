@@ -47,6 +47,8 @@ var _ai_slider: HSlider
 var _ai_value: Label
 var _auto_cock: CheckButton
 var _reload_sliders: Dictionary = {}
+var _release_sliders: Dictionary = {}
+var _holster_side_option: OptionButton
 var _combat_sliders: Dictionary = {}
 var _movement_sliders: Dictionary = {}
 var _turn_mode_option: OptionButton
@@ -292,6 +294,36 @@ func _build_gunplay_section(root: Control) -> void:
 			GameManager.local_player.set_reload_volume_debug(pressed))
 	root.add_child(_reload_volume_toggle)
 
+	_add_header(root, "VR Gun Release")
+	var holster_label := Label.new()
+	holster_label.text = "holster_side"
+	root.add_child(holster_label)
+	_holster_side_option = OptionButton.new()
+	_holster_side_option.add_item("Right")
+	_holster_side_option.add_item("Left")
+	_holster_side_option.selected = int(GameManager.tuning["holster_side"])
+	_holster_side_option.item_selected.connect(func(index: int) -> void:
+		if _refreshing:
+			return
+		GameManager.set_tuning("holster_side", index))
+	root.add_child(_holster_side_option)
+	const RELEASE_SLIDERS := {
+		"gun_catch_radius": [0.08, 0.4, 0.01],
+		"gun_holster_max_speed": [0.3, 3.0, 0.05],
+		"gun_throw_scale": [0.5, 2.5, 0.05],
+		"gun_throw_spin_scale": [0.5, 2.5, 0.05],
+	}
+	for release_key in RELEASE_SLIDERS:
+		var release_range: Array = RELEASE_SLIDERS[release_key]
+		var tune_release: String = release_key
+		var release_widgets := _add_slider(root, release_key, release_range[0], release_range[1],
+				release_range[2], float(GameManager.tuning[tune_release]),
+				func(value: float) -> void:
+					if _refreshing:
+						return
+					GameManager.set_tuning(tune_release, value))
+		_release_sliders[tune_release] = release_widgets
+
 
 func _build_movement_section(root: Control) -> void:
 	_add_header(root, "Movement (Flat)")
@@ -417,6 +449,13 @@ func _refresh_from_systems() -> void:
 		rwidgets["label"].text = "%.2f" % rvalue
 	if _reload_volume_toggle != null:
 		_reload_volume_toggle.button_pressed = show_reload_volumes
+	if _holster_side_option != null:
+		_holster_side_option.selected = int(GameManager.tuning["holster_side"])
+	for key in _release_sliders:
+		var rel_widgets: Dictionary = _release_sliders[key]
+		var rel_value: float = float(GameManager.tuning[key])
+		rel_widgets["slider"].value = rel_value
+		rel_widgets["label"].text = "%.2f" % rel_value
 	for key in _combat_sliders:
 		var cwidgets: Dictionary = _combat_sliders[key]
 		var cvalue: float = float(GameManager.tuning[key])

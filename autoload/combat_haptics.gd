@@ -1,7 +1,7 @@
 class_name CombatHaptics
 extends RefCounted
 ## Maps combat events to XRToolsRumbleManager and flat-mode joy vibration.
-## Shooting hand defaults to right (revolver is right-hand today).
+## Shooting / catch hand is the holding controller (`left_hand` / `right_hand`).
 
 const FIRE_EVENT := preload("res://assets/haptics/fire_rumble.tres")
 const NEAR_MISS_EVENT := preload("res://assets/haptics/near_miss_rumble.tres")
@@ -14,6 +14,10 @@ const LEFT := &"left_hand"
 
 static func fire(shooting_hand: StringName = RIGHT) -> void:
 	_pulse("combat_fire", FIRE_EVENT, [shooting_hand], 0.35, 0.7, 0.08)
+
+
+static func catch_gun(hand: StringName) -> void:
+	_pulse("gun_catch", NEAR_MISS_EVENT, [hand], 0.2, 0.4, 0.08)
 
 
 static func near_miss() -> void:

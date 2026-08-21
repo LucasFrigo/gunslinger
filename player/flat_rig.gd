@@ -5,9 +5,9 @@ extends Node3D
 ## minimal -- it exists so multiplayer can be tested against the Quest without a
 ## second headset. Walk / look / lean speeds come from MovementConfig (debug panel).
 
-signal trigger_changed(pressed: bool)
-signal grip_pressed
-signal cock_pressed
+signal trigger_changed(hand: StringName, pressed: bool)
+signal grip_changed(hand: StringName, pressed: bool)
+signal cock_pressed(hand: StringName)
 signal reload_pressed
 signal menu_button_pressed
 
@@ -61,13 +61,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			if not _pointer_over_ui():
 				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		else:
-			trigger_changed.emit(true)
+			trigger_changed.emit(&"right_hand", true)
 	elif event.is_action_released("fire"):
-		trigger_changed.emit(false)
+		trigger_changed.emit(&"right_hand", false)
 	elif event.is_action_pressed("draw_toggle"):
-		grip_pressed.emit()
+		grip_changed.emit(&"right_hand", true)
 	elif event.is_action_pressed("cock_hammer"):
-		cock_pressed.emit()
+		cock_pressed.emit(&"right_hand")
 	elif event.is_action_pressed("reload"):
 		reload_pressed.emit()
 	elif event.is_action_pressed("toggle_debug"):

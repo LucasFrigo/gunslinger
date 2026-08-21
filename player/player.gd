@@ -9,8 +9,15 @@ signal holstered_changed(holstered: bool)
 const VR_RIG := "res://player/vr_rig.tscn"
 const FLAT_RIG := "res://player/flat_rig.tscn"
 const HOLSTER_GRAB_RADIUS := 0.45
+const HOLSTER_HIP := Vector3(0.25, 0.0, 0.05)
 const POSE_SEND_HZ := 30.0
 const RELOAD_VIZ_NAME := "_ReloadVolumeViz"
+const GUN_RECOVER_Y := -5.0
+const GUN_RECOVER_DIST := 20.0
+const HAND_LEFT := &"left_hand"
+const HAND_RIGHT := &"right_hand"
+
+enum GunHand { NONE, LEFT, RIGHT }
 
 var use_vr := false
 var rig: Node3D
@@ -33,7 +40,7 @@ var _pose_accum := 0.0
 var _menu_panel: UIPanel3D
 var _vr_message: Label3D
 var _vr_message_timer := 0.0
-var _left_grip_held := false
+var _holding_hand: int = GunHand.NONE
 var _held_cartridge: CartridgePhysical = null
 var _reload_event := ""
 var _reload_event_timer := 0.0
@@ -50,13 +57,11 @@ func _ready() -> void:
 	rig = load(VR_RIG if use_vr else FLAT_RIG).instantiate()
 	rig_holder.add_child(rig)
 	rig.trigger_changed.connect(_on_trigger_changed)
-	rig.grip_pressed.connect(_on_grip_pressed)
+	rig.grip_changed.connect(_on_grip_changed)
 	rig.cock_pressed.connect(_on_cock_pressed)
 	rig.menu_button_pressed.connect(DebugMenu.toggle)
 	if rig.has_signal("reload_pressed"):
 		rig.reload_pressed.connect(_on_reload_pressed)
-	if rig.has_signal("left_grip_changed"):
-		rig.left_grip_changed.connect(_on_left_grip_changed)
 	if rig.has_signal("gate_pressed"):
 		rig.gate_pressed.connect(_on_gate_pressed)
 
@@ -71,12 +76,15 @@ func _ready() -> void:
 	revolver.dry_fired.connect(_on_revolver_dry_fired)
 	_prev_gate_open = revolver.gate_open
 	ammo_belt.visible = use_vr
+	revolver.holster_to(holster)
+	_holding_hand = GunHand.NONE
 	_refresh_reload_status()
 	set_reload_volume_debug(DebugMenu.show_reload_volumes)
 
 
 func _physics_process(delta: float) -> void:
 	_follow_body()
+	_recover_free_gun()
 	_update_vr_reload(delta)
 	_update_wound_status(delta)
 
@@ -107,10 +115,13 @@ func _follow_body() -> void:
 	leg_hitbox.global_transform = Transform3D(
 		yaw, Vector3(head.origin.x, global_position.y + 0.4, head.origin.z))
 
-	# Holster rides the right hip, following the head's yaw.
+	# Holster rides the chosen hip, following the head's yaw.
+	var hip := HOLSTER_HIP
+	if int(GameManager.tuning["holster_side"]) != 0:
+		hip.x = -hip.x
 	holster.global_transform = Transform3D(
 		yaw,
-		Vector3(head.origin.x, global_position.y + 1.0, head.origin.z) + yaw * Vector3(0.25, 0.0, 0.05))
+		Vector3(head.origin.x, global_position.y + 1.0, head.origin.z) + yaw * hip)
 
 	# Ammo belt around the waist / lower torso.
 	ammo_belt.global_transform = Transform3D(yaw, torso_pos)
@@ -212,21 +223,126 @@ func play_death_feedback() -> void:
 
 # -- Gun handling -----------------------------------------------------------------
 
-func _on_grip_pressed() -> void:
+func _on_grip_changed(hand: StringName, pressed: bool) -> void:
 	if not use_vr:
-		# Flat harness: RMB toggles draw/holster directly.
-		_toggle_gun()
+		if pressed:
+			_toggle_gun()
 		return
-	var hand: Vector3 = rig.get_right_hand_transform().origin
-	if hand.distance_to(holster.global_position) <= HOLSTER_GRAB_RADIUS:
-		_toggle_gun()
+	if pressed:
+		_on_vr_grip_press(hand)
+	else:
+		_on_vr_grip_release(hand)
+
+
+func _on_vr_grip_press(hand: StringName) -> void:
+	if not alive:
+		return
+	if revolver.held and _holding_hand_name() == hand:
+		return
+	var near_gun := _hand_near_gun(hand)
+	var near_holster := _hand_near_holster(hand)
+	if revolver.drawn and near_gun:
+		if _holding_cartridge() and rig is VRRig:
+			var attach := (rig as VRRig).get_cartridge_attach(hand)
+			if _held_cartridge.get_parent() == attach:
+				_drop_held_cartridge()
+		_attach_gun_to_hand(hand)
+		return
+	if not revolver.drawn:
+		if near_holster:
+			_attach_gun_to_hand(hand)
+		return
+	if revolver.held:
+		_try_grab_from_belt()
+
+
+func _on_vr_grip_release(hand: StringName) -> void:
+	if revolver.held and _holding_hand_name() == hand:
+		var speed := 0.0
+		if rig is VRRig:
+			speed = (rig as VRRig).hand_speed(hand)
+		var max_speed := float(GameManager.tuning["gun_holster_max_speed"])
+		var near_holster := _hand_near_holster(hand)
+		if near_holster and speed < max_speed:
+			_holster_gun()
+		else:
+			_toss_gun(hand)
+		return
+	_release_held_cartridge()
 
 
 func _toggle_gun() -> void:
 	if revolver.drawn:
 		_holster_gun()
 	else:
-		_draw_gun()
+		_attach_gun_to_hand(HAND_RIGHT)
+
+
+func _attach_gun_to_hand(hand: StringName) -> void:
+	var was_holstered := not revolver.drawn
+	if was_holstered and _disarm_remaining > 0.0:
+		return
+	revolver.attach_to(_gun_attach_node(hand), hand)
+	_holding_hand = GunHand.LEFT if hand == HAND_LEFT else GunHand.RIGHT
+	_dump_armed = true
+	_close_armed = true
+	_dump_hold_accum = 0.0
+	if was_holstered:
+		holstered_changed.emit(false)
+	else:
+		CombatHaptics.catch_gun(hand)
+	_refresh_reload_status()
+
+
+func _toss_gun(hand: StringName) -> void:
+	var vel := Vector3.ZERO
+	var spin := Vector3.ZERO
+	if rig is VRRig:
+		var vr := rig as VRRig
+		vel = vr.hand_velocity(hand) * float(GameManager.tuning["gun_throw_scale"])
+		spin = vr.hand_angular_velocity(hand) * float(GameManager.tuning["gun_throw_spin_scale"])
+	revolver.release_into_world(get_tree().current_scene, vel, spin)
+	_holding_hand = GunHand.NONE
+	_refresh_reload_status()
+
+
+func _gun_attach_node(hand: StringName) -> Node3D:
+	if rig is VRRig:
+		return (rig as VRRig).get_gun_attach(hand)
+	return rig.get_gun_attach()
+
+
+func _holding_hand_name() -> StringName:
+	return HAND_LEFT if _holding_hand == GunHand.LEFT else HAND_RIGHT
+
+
+func _off_hand_name() -> StringName:
+	return HAND_RIGHT if _holding_hand == GunHand.LEFT else HAND_LEFT
+
+
+func _hand_position(hand: StringName) -> Vector3:
+	if rig is VRRig:
+		return (rig as VRRig).get_hand_transform(hand).origin
+	return rig.get_right_hand_transform().origin
+
+
+func _hand_near_holster(hand: StringName) -> bool:
+	return _hand_position(hand).distance_to(holster.global_position) <= HOLSTER_GRAB_RADIUS
+
+
+func _hand_near_gun(hand: StringName) -> bool:
+	var radius := float(GameManager.tuning["gun_catch_radius"])
+	return _hand_position(hand).distance_to(revolver.global_position) <= radius
+
+
+func _recover_free_gun() -> void:
+	if not revolver.drawn or revolver.held:
+		return
+	if revolver.global_position.y < GUN_RECOVER_Y:
+		_holster_gun()
+		return
+	if revolver.global_position.distance_to(global_position) > GUN_RECOVER_DIST:
+		_holster_gun()
 
 
 func _apply_nonfatal(region: StringName) -> void:
@@ -264,57 +380,57 @@ func _refresh_health_hud() -> void:
 
 
 func _draw_gun() -> void:
-	if revolver.drawn or _disarm_remaining > 0.0:
-		return
-	revolver.drawn = true
-	revolver.reparent(rig.get_gun_attach())
-	revolver.transform = Transform3D.IDENTITY
-	_dump_armed = true
-	_close_armed = true
-	_dump_hold_accum = 0.0
-	holstered_changed.emit(false)
-	_refresh_reload_status()
+	_attach_gun_to_hand(HAND_RIGHT)
 
 
 func _holster_gun() -> void:
 	_clear_held_cartridge(true)
 	if revolver.gate_open:
 		revolver.close_gate()
-	revolver.drawn = false
-	if revolver.get_parent() != holster:
-		revolver.reparent(holster)
-	revolver.transform = Transform3D.IDENTITY
+	revolver.holster_to(holster)
+	_holding_hand = GunHand.NONE
 	holstered_changed.emit(true)
 	_refresh_reload_status()
 
 
-func _on_trigger_changed(pressed: bool) -> void:
-	if pressed and alive:
-		revolver.try_fire(GameManager.tuning["auto_cock"], rig.get_aim_override())
+func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
+	if not pressed or not alive:
+		return
+	if use_vr and (not revolver.held or hand != _holding_hand_name()):
+		return
+	revolver.try_fire(GameManager.tuning["auto_cock"], rig.get_aim_override())
 
 
-func _on_cock_pressed() -> void:
+func _on_cock_pressed(hand: StringName) -> void:
+	if use_vr and (not revolver.held or hand != _holding_hand_name()):
+		return
 	if revolver.gate_open:
 		_close_gate_from_player("closed")
 	else:
 		revolver.cock()
 
 
-func _on_gate_pressed() -> void:
-	if not alive or not use_vr or not revolver.drawn:
+func _on_gate_pressed(hand: StringName) -> void:
+	if not use_vr:
 		return
-	if revolver.gate_open:
+	if revolver.held and hand == _holding_hand_name():
+		if not alive:
+			return
+		if revolver.gate_open:
+			return
+		if revolver.open_gate():
+			_dump_armed = true
+			_close_armed = true
+			_dump_hold_accum = 0.0
+			_flash_reload_event("GATE OPEN — shake to dump, belt to load")
 		return
-	if revolver.open_gate():
-		_dump_armed = true
-		_close_armed = true
-		_dump_hold_accum = 0.0
-		_flash_reload_event("GATE OPEN — shake to dump, belt to load")
+	if hand == HAND_LEFT:
+		DebugMenu.toggle()
 
 
 func _on_reload_pressed() -> void:
 	# Flat: R opens + dumps, or chambers one while open.
-	if not alive or not revolver.drawn:
+	if not alive or not revolver.held:
 		return
 	if revolver.gate_open:
 		if revolver.try_chamber():
@@ -366,18 +482,8 @@ func _on_revolver_fired(origin: Vector3, direction: Vector3) -> void:
 
 # -- VR reload gestures -----------------------------------------------------------
 
-func _on_left_grip_changed(pressed: bool) -> void:
-	_left_grip_held = pressed
-	if not use_vr:
-		return
-	if pressed:
-		_try_grab_from_belt()
-		return
-	_release_held_cartridge()
-
-
 func _try_grab_from_belt() -> void:
-	if not revolver.drawn or not revolver.gate_open:
+	if not revolver.held or not revolver.gate_open:
 		return
 	if _holding_cartridge():
 		return
@@ -399,7 +505,7 @@ func _release_held_cartridge() -> void:
 	if not _holding_cartridge():
 		return
 	var chambered := false
-	if revolver.gate_open and revolver.drawn and _probe_overlaps(revolver.chamber_area):
+	if revolver.gate_open and revolver.held and _probe_overlaps(revolver.chamber_area):
 		chambered = revolver.try_chamber()
 	if chambered:
 		_held_cartridge.queue_free()
@@ -415,10 +521,14 @@ func _release_held_cartridge() -> void:
 func _update_vr_reload(delta: float) -> void:
 	if not use_vr or not alive:
 		return
-	if not revolver.drawn:
-		_clear_held_cartridge(true)
-		_dump_hold_accum = 0.0
-		_refresh_reload_status()
+	if not revolver.held:
+		if not revolver.drawn:
+			if _holding_cartridge():
+				_clear_held_cartridge(true)
+				_refresh_reload_status()
+			_dump_hold_accum = 0.0
+		else:
+			_dump_hold_accum = 0.0
 		return
 	if not revolver.gate_open:
 		_dump_hold_accum = 0.0
@@ -426,8 +536,8 @@ func _update_vr_reload(delta: float) -> void:
 	if not (rig is VRRig):
 		return
 	var vr := rig as VRRig
-	var gun_speed: float = vr.right_hand_speed
-	var left_speed: float = vr.left_hand_speed
+	var gun_speed: float = vr.hand_speed(_holding_hand_name())
+	var off_speed: float = vr.hand_speed(_off_hand_name())
 	# Thresholds live in GameManager.tuning (debug panel → Gunplay / AI).
 	var dump_speed: float = float(GameManager.tuning["reload_dump_speed"])
 	var dump_hold: float = float(GameManager.tuning["reload_dump_hold"])
@@ -449,14 +559,14 @@ func _update_vr_reload(delta: float) -> void:
 		_dump_armed = true
 		_dump_hold_accum = 0.0
 
-	# Close: swing gun-hand or bump left hand into the bump volume.
-	var bump := _probe_overlaps(revolver.bump_area) and left_speed >= bump_close
+	# Close: swing gun-hand or bump off-hand into the bump volume.
+	var bump := _probe_overlaps(revolver.bump_area) and off_speed >= bump_close
 	var swing := gun_speed >= swing_close
 	if (bump or swing) and _close_armed:
 		var how := "bumped shut" if bump else "swung shut"
 		_close_gate_from_player(how)
 		_close_armed = false
-	elif gun_speed < swing_close * 0.35 and left_speed < bump_close * 0.35:
+	elif gun_speed < swing_close * 0.35 and off_speed < bump_close * 0.35:
 		_close_armed = true
 
 
@@ -474,9 +584,12 @@ func _hand_in_ammo_belt() -> bool:
 
 
 func _reload_probe() -> Area3D:
-	if rig != null and rig.has_method("get_reload_probe"):
-		return rig.get_reload_probe()
-	return null
+	if not (rig is VRRig):
+		return null
+	var vr := rig as VRRig
+	if revolver.held:
+		return vr.get_reload_probe(_off_hand_name())
+	return vr.get_reload_probe(HAND_LEFT)
 
 
 func _probe_overlaps(area: Area3D) -> bool:
@@ -497,7 +610,10 @@ func _reload_volume_shapes() -> Array[CollisionShape3D]:
 	if revolver != null:
 		_collect_reload_shape(shapes, revolver.chamber_area)
 		_collect_reload_shape(shapes, revolver.bump_area)
-	_collect_reload_shape(shapes, _reload_probe())
+	if rig is VRRig:
+		var vr := rig as VRRig
+		_collect_reload_shape(shapes, vr.get_reload_probe(HAND_LEFT))
+		_collect_reload_shape(shapes, vr.get_reload_probe(HAND_RIGHT))
 	return shapes
 
 
@@ -566,8 +682,9 @@ func _reload_viz_color(shape_node: CollisionShape3D) -> Color:
 
 
 func _cartridge_attach() -> Node3D:
-	if rig.has_method("get_cartridge_attach"):
-		return rig.get_cartridge_attach()
+	if rig is VRRig:
+		var hand := _off_hand_name() if revolver.held else HAND_LEFT
+		return (rig as VRRig).get_cartridge_attach(hand)
 	if rig.has_method("get_wrist_attach"):
 		return rig.get_wrist_attach()
 	return null
@@ -579,9 +696,9 @@ func _drop_held_cartridge() -> void:
 	var pos := _held_cartridge.global_position
 	var vel := Vector3.ZERO
 	if rig is VRRig:
-		# Impart a little left-hand motion so the drop feels physical.
-		var left_basis: Basis = rig.get_left_hand_transform().basis
-		vel = -left_basis.z * (rig as VRRig).left_hand_speed * 0.25
+		var vr := rig as VRRig
+		var off := _off_hand_name() if revolver.held else HAND_LEFT
+		vel = vr.hand_velocity(off) * 0.25
 	_held_cartridge.drop_into_world(get_tree().current_scene, pos, vel)
 	_held_cartridge = null
 
@@ -628,6 +745,8 @@ func _build_reload_status_text() -> String:
 	var ready_line := "READY TO FIRE"
 	if not revolver.drawn:
 		ready_line = "HOLSTERED"
+	elif not revolver.held:
+		ready_line = "GUN IN AIR — catch to fire"
 	elif revolver.gate_open:
 		if use_vr:
 			ready_line = "RELOADING — shake dump / belt grab / bump-swing close"
@@ -685,11 +804,21 @@ func _broadcast_pose(delta: float) -> void:
 		flags |= NetworkManager.POSE_FLAG_GUN_DRAWN
 	if revolver.cocked:
 		flags |= NetworkManager.POSE_FLAG_GUN_COCKED
+	if revolver.drawn and not revolver.held:
+		flags |= NetworkManager.POSE_FLAG_GUN_FREE
+	if _holding_hand == GunHand.LEFT:
+		flags |= NetworkManager.POSE_FLAG_GUN_HELD_LEFT
+	if int(GameManager.tuning["holster_side"]) != 0:
+		flags |= NetworkManager.POSE_FLAG_HOLSTER_LEFT
+	var gun_xf := Transform3D.IDENTITY
+	if revolver.drawn and not revolver.held:
+		gun_xf = revolver.global_transform
 	NetworkManager.send_pose(
 		rig.get_head_transform(),
 		rig.get_left_hand_transform(),
 		rig.get_right_hand_transform(),
-		flags)
+		flags,
+		gun_xf)
 
 
 # -- VR UI ------------------------------------------------------------------------
