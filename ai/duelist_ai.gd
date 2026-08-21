@@ -46,6 +46,7 @@ func _ready() -> void:
 	leg_hitbox.owner_entity = self
 	revolver.fired.connect(_on_fired)
 	revolver.drawn = false
+	revolver.held = false
 	_rest_arm_basis = arm.transform.basis
 
 
@@ -107,6 +108,7 @@ func _start_drawing() -> void:
 	state = AIState.DRAWING
 	_draw_progress = 0.0
 	revolver.drawn = true
+	revolver.held = true
 	TimeManager.notify_enemy_draw()
 
 
@@ -179,6 +181,7 @@ func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 
 func _disarm() -> void:
 	revolver.drawn = false
+	revolver.held = false
 	_draw_progress = 0.0
 	arm.transform.basis = _rest_arm_basis
 	state = AIState.DISARMED
@@ -206,6 +209,7 @@ func _tick_wounds(delta: float) -> void:
 func _die(trail_points: PackedVector3Array) -> void:
 	state = AIState.DEAD
 	revolver.drawn = false
+	revolver.held = false
 	head_hitbox.set_deferred("monitorable", false)
 	torso_hitbox.set_deferred("monitorable", false)
 	arm_hitbox.set_deferred("monitorable", false)

@@ -38,7 +38,7 @@ Briefing for business / pricing / go-to-market refinement.
 ### Differentiators (marketing hooks)
 
 - Visible bullet trajectories + tunable bullet-time (SUPERHOT-adjacent fantasy in a western).  
-- Physical VR gunplay: hip draw/holster, interactive reload (B open, belt feed, bump/swing close; dump/close thresholds tunable).  
+- Physical VR gunplay: hip draw/holster, toss/catch with either hand, interactive reload (gun-hand B open, off-hand belt feed, bump/swing close; dump/close and holster side tunable).  
 - Kill cam: cinematic trail fly-along (flat `Camera3D` / VR spectator origin); SP and 1v1 MP.  
 - Data-driven AI archetypes and arenas (easy to expand content without rewrites).  
 - Dual ship: Quest standalone volume + Steam PCVR / lobby culture.
@@ -61,7 +61,7 @@ Status vocabulary: `done` | `partial` | `planned`. Full detail: [`FEATURES.md`](
 ### Done (playable today)
 
 - Core duel state machine (standoff → bell → draw → resolve, early-draw foul).  
-- Holster / draw / fire / cock; projectile bullets + trails; head/torso/arm/leg hitboxes with regional rules (head instakill, arm disarm, leg slow).  
+- Holster / draw / fire / cock; VR toss/catch (either hand, chosen hip); projectile bullets + trails; head/torso/arm/leg hitboxes with regional rules (head instakill, arm disarm, leg slow).  
 - Free duel (arena + AI pick); gauntlet (6 rungs, 3 lives, session score).  
 - AI archetypes: Drunk / Sheriff / Ghost.  
 - 1v1 LAN multiplayer + UDP discovery.  
@@ -73,7 +73,7 @@ Status vocabulary: `done` | `partial` | `planned`. Full detail: [`FEATURES.md`](
 
 ### Partial (needs polish before “premium” price)
 
-- Interactive reload (B open / sustained shake dump / torso belt physical rounds / bump-swing close; HUD status; dump/close live-tunable; flip polish TBD).  
+- Interactive reload (gun-hand B open / sustained shake dump / torso belt physical rounds / off-hand bump-swing close; HUD status; dump/close live-tunable; flip polish TBD).  
 - Arenas: Main Street, Saloon, Train Rooftop, Canyon — **greybox CSG**; real art TBD.  
 - Steam lobbies transport (addon optional / may be absent; app ID 480 until owned).  
 - Audio/VFX catalogs are stub-swap paths (placeholders → final assets).
@@ -82,7 +82,7 @@ Status vocabulary: `done` | `partial` | `planned`. Full detail: [`FEATURES.md`](
 
 | Priority band | Items |
 |---|---|
-| Medium | Reload polish; moving train set piece; gun release / trick shots |
+| Medium | Moving train set piece; duel vs up to 3 NPCs |
 | Hard | Horde mode; Mexican standoff (3P); ranking / leaderboards |
 | Very hard | Campaign; mod support |
 

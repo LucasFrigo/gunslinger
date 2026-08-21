@@ -10,11 +10,14 @@ signal peer_left(peer_id: int)
 signal lan_hosts_updated(hosts: Array)
 signal steam_lobbies_updated(lobbies: Array)
 signal network_error(message: String)
-signal pose_received(peer_id: int, head: Transform3D, left: Transform3D, right: Transform3D, flags: int)
+signal pose_received(peer_id: int, head: Transform3D, left: Transform3D, right: Transform3D, flags: int, gun: Transform3D)
 signal shot_received(peer_id: int, origin: Vector3, direction: Vector3)
 
 const POSE_FLAG_GUN_DRAWN := 1
 const POSE_FLAG_GUN_COCKED := 2
+const POSE_FLAG_GUN_FREE := 4
+const POSE_FLAG_HOLSTER_LEFT := 8
+const POSE_FLAG_GUN_HELD_LEFT := 16
 
 var transport: NetworkTransport
 var discovery: LanDiscovery
@@ -195,14 +198,16 @@ func _on_server_disconnected() -> void:
 
 # -- Fast-path relays --------------------------------------------------------
 
-func send_pose(head: Transform3D, left: Transform3D, right: Transform3D, flags: int) -> void:
+func send_pose(head: Transform3D, left: Transform3D, right: Transform3D, flags: int,
+		gun := Transform3D.IDENTITY) -> void:
 	if session_active and peer_count() > 0:
-		_pose.rpc(head, left, right, flags)
+		_pose.rpc(head, left, right, flags, gun)
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
-func _pose(head: Transform3D, left: Transform3D, right: Transform3D, flags: int) -> void:
-	pose_received.emit(multiplayer.get_remote_sender_id(), head, left, right, flags)
+func _pose(head: Transform3D, left: Transform3D, right: Transform3D, flags: int,
+		gun: Transform3D) -> void:
+	pose_received.emit(multiplayer.get_remote_sender_id(), head, left, right, flags, gun)
 
 
 func send_shot(origin: Vector3, direction: Vector3) -> void:

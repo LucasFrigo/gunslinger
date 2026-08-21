@@ -42,8 +42,18 @@ var tuning := {
 	"reload_dump_hold": 0.25,
 	## VR reload: gun-hand flick speed (m/s) that closes the gate.
 	"reload_swing_close": 6.0,
-	## VR reload: left-hand bump speed (m/s) near chamber that closes the gate.
+	## VR reload: off-hand bump speed (m/s) near chamber that closes the gate.
 	"reload_bump_close": 2.8,
+	## 0 = right hip, 1 = left hip. Draw/holster snap use this side.
+	"holster_side": 0,
+	## VR catch: hand-to-gun distance (m) to grab a tossed or held gun.
+	"gun_catch_radius": 0.22,
+	## VR holster: gun-hand speed (m/s) below which a hip release snaps holster.
+	"gun_holster_max_speed": 1.2,
+	## Multiplier on controller linear velocity when tossing.
+	"gun_throw_scale": 1.0,
+	## Multiplier on controller angular velocity when tossing.
+	"gun_throw_spin_scale": 1.0,
 	## Starting HP so one torso/limb hit is not fatal (head is always lethal).
 	"player_health": 2.0,
 	## Seconds the gun stays holstered after an arm hit.
@@ -257,9 +267,9 @@ func _despawn_avatar() -> void:
 
 
 func _on_pose_received(_peer_id: int, head: Transform3D, left: Transform3D,
-		right: Transform3D, flags: int) -> void:
+		right: Transform3D, flags: int, gun: Transform3D) -> void:
 	if is_instance_valid(remote_avatar):
-		remote_avatar.apply_pose(head, left, right, flags)
+		remote_avatar.apply_pose(head, left, right, flags, gun)
 
 
 func _on_shot_received(_peer_id: int, origin: Vector3, direction: Vector3) -> void:
