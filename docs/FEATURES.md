@@ -17,7 +17,8 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Barrel smoke | `planned` | Roadmap (Polish / visual); stub `muzzle_smoke` already fires from `ImpactFeedback.shot_fired` — wants a lingering plume from the barrel |
 | Head / torso / arm / leg hitboxes | `done` | `player/hitbox.gd`, `combat/combat_rules.gd` |
 | Regional hit effects | `done` | Head instakill; torso/limb 1 HP (default HP 2); arm force-holsters + redraw lock; leg slows move. MP host HP + `_mp_wound` |
-| Self-damage | `planned` | Roadmap (Medium); shots exclude shooter hitboxes today |
+| Self-damage | `done` | Player/peer bullets can hit the shooter after `self_hit_grace` (~0.28m) so a normal muzzle shot does not clip the gun-hand arm. Same regional HP / arm-disarm / leg-slow; a self-kill loses the duel (`You shot yourself`). AI still excludes its own hitboxes |
+| Self-hit hitbox tweak | `planned` | Roadmap (Easy); tune shooter volumes (esp. gun-hand arm) so grace + hitboxes feel fair |
 | Early-draw foul | `done` | duel state machine. Hits only apply during DRAW; a post-foul shot cannot overwrite the DQ |
 | Near-miss slow-mo hook | `done` | `TimeManager.notify_near_miss`, `weapons/bullet.gd` |
 | Gravity-drop / interactive reload | `done` | Gun-hand B opens; sustained shake dump; torso `AmmoBelt` + **off-hand** `ReloadProbe` overlap; `ChamberArea` seats; `BumpArea` bump or swing close (Flat `R`/Space). Layer `reload`. F3 **Show reload volumes**. Dump/swing in `GameManager.tuning`. Mesh-fit / cylinder-flip are art polish, not blockers |
@@ -25,7 +26,7 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Kill-cam / replay | `done` | SP + 1v1 MP: `KillCam` + `TimeManager.notify_kill_cam`; flat `Camera3D` fly-along, VR spectator `XROrigin3D` ride; `duel_end` sting on lethal hit |
 | Impact / AV polish (SFX, haptics, VFX) | `done` | `ImpactFeedback` + `AudioCatalog` / `VfxCatalog` stubs; combat XR/flat rumble wired |
 | Gun release / trick shots | `done` | VR hold-to-hold: toss with hand velocity, catch either hand (or take from the other), holster snap on chosen hip (`holster_side`). Fire/reload only while held; airborne still counts as drawn for fouls. Frozen `RigidBody3D` copies the hand/hip pose (`follow_parent` in `weapons/weapon_base.gd`). MP pose sends free-gun transform + hand/hip flags |
-| Revolver Ocelot spin | `planned` | Roadmap (Medium); held twirl flourish |
+| Revolver Ocelot spin | `done` | VR only: gun-hand stick down hangs the revolver on a finger hinge (`SpinPivot` / `WeaponBase`); hand motion builds momentum; stick up snaps back. Fire still works (muzzle aim). Debug **VR Spin**. MP flag `GUN_SPINNING` |
 | Airborne fire / mystic trick shots | `planned` | Roadmap (Medium); fire while tossed/spinning; optional tech/mystic flag |
 
 ## Modes
@@ -50,6 +51,7 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Arenas (Main Street, Saloon, Train Rooftop, Canyon) | `partial` | Greybox CSG; real art TBD |
 | Moving train duel set piece | `planned` | Roadmap; rooftop arena exists as greybox |
 | AI archetypes (Drunk / Sheriff / Ghost) | `done` | `ai/*.tres`; Sheriff/Ghost strafe around the enemy spawn marker (not scene origin) |
+| NPC reload | `planned` | Roadmap (Medium); AI `reset()`s ammo when empty today (`ai/duelist_ai.gd`) — wants a real reload window |
 | Quest 3 / PCVR / flat harness | `done` | OpenXR + `--flat` |
 | Ranking / leaderboards | `planned` | Roadmap |
 | Mod support | `planned` | Roadmap |

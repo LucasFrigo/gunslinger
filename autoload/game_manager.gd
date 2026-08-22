@@ -74,6 +74,20 @@ var tuning := {
 	"jam_clear_hold": 1.5,
 	## Look-down pitch (radians) required to clear; Flat camera x is negative down.
 	"jam_clear_pitch": 0.55,
+	## VR Ocelot: |stick Y| to unlock (down) / relock (up) the gun-hand stick.
+	"spin_stick_threshold": 0.55,
+	## Hinge damping (1/s). Higher = spin dies faster. 0 = coasts forever.
+	"spin_damping": 0.0,
+	## Gravity torque scale on the hanging barrel (0 = inertial only).
+	"spin_gravity": 2.0,
+	## Moment of inertia for whip / gravity (kg·m²-ish). Lower = snappier.
+	"spin_inertia": 0.03,
+	## How quickly a fast wrist flick transfers into residual spin.
+	"spin_coupling": 8.0,
+	## Seconds to tween back to the locked pose after stick-up.
+	"spin_relock_time": 0.12,
+	## Metres from muzzle before a shot can hit the shooter's own hitboxes.
+	"self_hit_grace": 0.28,
 }
 
 var mode: int = GameMode.BOOT
@@ -291,7 +305,8 @@ func _on_shot_received(_peer_id: int, origin: Vector3, direction: Vector3) -> vo
 	if is_instance_valid(remote_avatar):
 		exclude = remote_avatar.hitbox_rids()
 	Bullet.spawn(main_root, origin, direction, tuning["bullet_speed"],
-			NetworkManager.is_host(), exclude, false)
+			NetworkManager.is_host(), exclude, false,
+			float(tuning.get("self_hit_grace", 0.28)))
 
 
 # -- Duel results -------------------------------------------------------------

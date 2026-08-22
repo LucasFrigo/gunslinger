@@ -48,6 +48,7 @@ var _ai_value: Label
 var _auto_cock: CheckButton
 var _reload_sliders: Dictionary = {}
 var _release_sliders: Dictionary = {}
+var _spin_sliders: Dictionary = {}
 var _holster_side_option: OptionButton
 var _combat_sliders: Dictionary = {}
 var _jam_sliders: Dictionary = {}
@@ -347,6 +348,27 @@ func _build_gunplay_section(root: Control) -> void:
 					GameManager.set_tuning(tune_release, value))
 		_release_sliders[tune_release] = release_widgets
 
+	_add_header(root, "VR Spin")
+	const SPIN_SLIDERS := {
+		"spin_stick_threshold": [0.2, 0.95, 0.05],
+		"spin_damping": [0.0, 6.0, 0.1],
+		"spin_gravity": [0.0, 8.0, 0.1],
+		"spin_inertia": [0.02, 0.4, 0.01],
+		"spin_coupling": [0.0, 12.0, 0.1],
+		"spin_relock_time": [0.04, 0.4, 0.01],
+		"self_hit_grace": [0.08, 0.8, 0.02],
+	}
+	for spin_key in SPIN_SLIDERS:
+		var spin_range: Array = SPIN_SLIDERS[spin_key]
+		var tune_spin: String = spin_key
+		var spin_widgets := _add_slider(root, spin_key, spin_range[0], spin_range[1],
+				spin_range[2], float(GameManager.tuning[tune_spin]),
+				func(value: float) -> void:
+					if _refreshing:
+						return
+					GameManager.set_tuning(tune_spin, value))
+		_spin_sliders[tune_spin] = spin_widgets
+
 
 func _build_movement_section(root: Control) -> void:
 	_add_header(root, "Movement (Flat)")
@@ -479,6 +501,11 @@ func _refresh_from_systems() -> void:
 		var rel_value: float = float(GameManager.tuning[key])
 		rel_widgets["slider"].value = rel_value
 		rel_widgets["label"].text = "%.2f" % rel_value
+	for key in _spin_sliders:
+		var swidgets: Dictionary = _spin_sliders[key]
+		var svalue: float = float(GameManager.tuning[key])
+		swidgets["slider"].value = svalue
+		swidgets["label"].text = "%.2f" % svalue
 	for key in _combat_sliders:
 		var cwidgets: Dictionary = _combat_sliders[key]
 		var cvalue: float = float(GameManager.tuning[key])

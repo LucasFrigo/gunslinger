@@ -217,7 +217,11 @@ func _on_player_died(trail_points: PackedVector3Array) -> void:
 	if not accepts_hits() or is_mp:
 		return  # host bullet code reports MP hits via mp_report_hit
 	notify_kill_shot(trail_points)
-	_finish_sp(false, "Shot down")
+	var reason := "Shot down"
+	var player := GameManager.local_player
+	if is_instance_valid(player) and player.killed_by_self:
+		reason = "You shot yourself"
+	_finish_sp(false, reason)
 
 
 func _finish_sp(local_won: bool, reason: String) -> void:

@@ -30,6 +30,7 @@ var _target_gun: Transform3D
 var _has_pose := false
 var _gun_drawn := false
 var _gun_free := false
+var _gun_spinning := false
 var _gun_held_left := false
 var _holster_left := false
 
@@ -58,6 +59,7 @@ func apply_pose(head_t: Transform3D, left_t: Transform3D, right_t: Transform3D, 
 	_target_right = right_t
 	_target_gun = gun_t
 	_gun_free = flags & NetworkManager.POSE_FLAG_GUN_FREE != 0
+	_gun_spinning = flags & NetworkManager.POSE_FLAG_GUN_SPINNING != 0
 	_gun_held_left = flags & NetworkManager.POSE_FLAG_GUN_HELD_LEFT != 0
 	_holster_left = flags & NetworkManager.POSE_FLAG_HOLSTER_LEFT != 0
 	_apply_gun_parent(flags & NetworkManager.POSE_FLAG_GUN_DRAWN != 0)
@@ -83,11 +85,18 @@ func _apply_gun_parent(drawn: bool) -> void:
 			gun.reparent(self, true)
 		_gun_drawn = true
 		return
-	if gun is WeaponBase:
-		(gun as WeaponBase).follow_parent = true
 	var attach: Node3D = holster
 	if drawn:
 		attach = left_hand if _gun_held_left else right_hand
+	if _gun_spinning:
+		if gun is WeaponBase:
+			(gun as WeaponBase).follow_parent = false
+		if gun.get_parent() != attach:
+			gun.reparent(attach, true)
+		_gun_drawn = true
+		return
+	if gun is WeaponBase:
+		(gun as WeaponBase).follow_parent = true
 	if gun.get_parent() != attach:
 		gun.reparent(attach)
 	gun.transform = Transform3D.IDENTITY
@@ -115,7 +124,7 @@ func _process(delta: float) -> void:
 			left_hand.global_position)
 	_place_limb(right_arm, torso_pos + yaw * Vector3(SHOULDER_LOCAL.x, SHOULDER_LOCAL.y, 0.0),
 			right_hand.global_position)
-	if _gun_free:
+	if _gun_free or _gun_spinning:
 		gun.global_transform = gun.global_transform.interpolate_with(_target_gun, weight)
 
 
@@ -134,7 +143,7 @@ func _place_limb(node: Node3D, from: Vector3, to: Vector3) -> void:
 
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
-		region: StringName = CombatRules.REGION_TORSO) -> void:
+		region: StringName = CombatRules.REGION_TORSO, _self_inflicted := false) -> void:
 	if NetworkManager.is_host():
 		GameManager.duel.mp_report_hit(false, trail_points, region, damage_mult)
 

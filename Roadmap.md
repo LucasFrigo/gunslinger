@@ -14,12 +14,10 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 * **Barrel smoke:** Visible smoke coming out of the barrel after a shot. A short stub already plays (`VfxCatalog` `&"muzzle_smoke"` from `ImpactFeedback.shot_fired` / `assets/vfx/muzzle_smoke.tscn`); this is a lingering plume that reads as gunsmoke, not a 0.45s puff.
 
 ## 1. Easy — polish & finish existing hooks
-
-*(none)*
+* **Self-hit hitbox tweak:** Self-damage already applies after `self_hit_grace` (`weapons/bullet.gd`, `player/hitbox.gd`). Tune the shooter's own volumes (especially gun-hand arm) so a normal muzzle shot still does not clip the arm, but a real self-hit (muzzle into body, ricochet-style close miss) reads fairly.
 
 ## 2. Medium — contained mechanics & set pieces
-* **Revolver Ocelot spin:** A held twirl flourish (wrist flick or dedicated input) in the Revolver Ocelot style. Visual / haptic first; can share spin with the airborne trick-shot idea below.
-* **Self-damage:** Player (and peer) bullets can hit the shooter. Self-wounds use the same regional HP / arm-disarm / leg-slow rules; a self-kill should lose the duel. Shots currently exclude the shooter's hitbox RIDs (`weapons/bullet.gd`).
+* **NPC reload:** AI currently `reset()`s the cylinder when empty and fires forever (`ai/duelist_ai.gd` `_fire`). Make NPCs empty out and spend time reloading (delay / simple animation) so a spent cylinder is a window, same 6-round limit as the player.
 * **Airborne fire / mystic trick shots:** Optional tech/mystic branch: allow firing while the revolver is tossed and spinning, so you can go for mid-air trick shots. Today fire/reload require `held` (`weapons/weapon_base.gd`). Gate behind a flag so the grounded western default stays.
 * **Train Map Concept:** A duel scene featuring a moving train passing between opponents. Players must either wait for the train to clear or attempt risky shots through open train cars. (Builds on the existing Train Rooftop arena idea.)
 * **Duel vs up to 3 NPCs:** Free-duel option to face 1–3 AI opponents in one standoff (local, no netcode). Needs extra spawn marks, multi-combatant targeting, and resolve when more than two duelists fire. Reuses `ai/duelist.tscn` + archetypes.
@@ -38,6 +36,8 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 
 Newest at the top. Keep a one-line note of what shipped and where; details live in [`docs/FEATURES.md`](docs/FEATURES.md).
 
+* **Revolver Ocelot spin:** VR gun-hand stick down hangs the revolver on a finger hinge; hand motion builds spin; stick up relocks. Fire still works. (`done` in FEATURES)
+* **Self-damage:** Player/peer shots can hit the shooter after a muzzle grace; self-kill loses the duel. AI still self-excludes. (`done` in FEATURES)
 * **Rapid-fire jam:** Flat-only cadence heat; jammed pull clicks with no bullet; look down + hold Space 1.5s to clear. (`done` in FEATURES)
 * **Gun release / catch:** VR hold-to-hold toss and either-hand catch; chosen hip (`holster_side`); gun-hand vs off-hand reload swap; MP free-gun pose. (`done` in FEATURES)
 * **Reload Mechanic:** VR B-open / sustained shake dump / torso `AmmoBelt` + left `ReloadProbe` / `ChamberArea` seat / bump or swing close; Flat `R` / Space. Area3D volumes on layer `reload`; dump/close knobs in debug panel. Mesh-fit / cylinder-flip polish can land later without reopening this item. (`done` in FEATURES)

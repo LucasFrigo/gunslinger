@@ -3,6 +3,7 @@ extends RigidBody3D
 ## Base for all firearms. Subclasses provide the muzzle and visuals; owners
 ## (player / AI / remote avatar) drive drawing, cocking, firing, and reload.
 ## Frozen kinematic while holstered or held; simulates as a RigidBody when tossed.
+## VR Ocelot: while held, a 1-DOF hinge at `SpinPivot` can replace identity follow.
 
 signal fired(origin: Vector3, direction: Vector3)
 signal state_changed
@@ -13,6 +14,8 @@ signal dry_fired(reason: StringName)
 
 const COLLISION_LAYER_WORLD := 1
 const COLLISION_LAYER_WEAPON := 32  # physics layer 6
+## Local COM for hang gravity (barrel/cylinder), not the trigger pivot.
+const SPIN_COM_LOCAL := Vector3(0.0, 0.02, -0.09)
 
 @export var max_rounds := 6
 ## Single-action: must cock the hammer before each shot.
@@ -35,6 +38,18 @@ var jam_enabled := false
 var jammed := false
 var _jam_heat := 0.0
 var _jam_last_shot_s := -1.0
+## VR Ocelot hinge: gun hangs from SpinPivot and rotates on parent local X.
+var spinning := false
+var relocking := false
+var spin_angle := 0.0
+var spin_omega := 0.0
+var _spin_world_omega := 0.0
+var _relock_from := 0.0
+var _relock_elapsed := 0.0
+var _spin_motion_init := false
+var _prev_parent_basis := Basis.IDENTITY
+var _prev_pivot_world := Vector3.ZERO
+var _prev_pivot_vel := Vector3.ZERO
 
 @onready var _shot_audio: AudioStreamPlayer3D = _make_audio()
 
@@ -54,6 +69,7 @@ func reset() -> void:
 	jammed = false
 	_jam_heat = 0.0
 	_jam_last_shot_s = -1.0
+	reset_spin()
 	_on_gate_changed()
 	state_changed.emit()
 
@@ -129,6 +145,7 @@ func cock() -> void:
 
 ## Snap to a hand attach. Keeps global pose only if `keep_pose` (unused; identity).
 func attach_to(hand_attach: Node3D, rumble_hand: StringName = &"right_hand") -> void:
+	reset_spin()
 	_freeze_attached()
 	follow_parent = true
 	shooting_hand = rumble_hand
@@ -141,7 +158,9 @@ func attach_to(hand_attach: Node3D, rumble_hand: StringName = &"right_hand") -> 
 
 ## Toss into the world with the given velocities. Stays `drawn` (not holstered).
 func release_into_world(parent: Node, velocity: Vector3, spin: Vector3) -> void:
+	var extra_spin := _hinge_throw_spin()
 	var xf := global_transform
+	reset_spin()
 	reparent(parent, true)
 	global_transform = xf
 	held = false
@@ -153,10 +172,11 @@ func release_into_world(parent: Node, velocity: Vector3, spin: Vector3) -> void:
 	collision_mask = COLLISION_LAYER_WORLD
 	sleeping = false
 	linear_velocity = velocity
-	angular_velocity = spin
+	angular_velocity = spin + extra_spin
 
 
 func holster_to(holster: Node3D) -> void:
+	reset_spin()
 	_freeze_attached()
 	follow_parent = true
 	reparent(holster, false)
@@ -177,21 +197,183 @@ func _freeze_attached() -> void:
 	sleeping = false
 
 
+func is_spin_active() -> bool:
+	return spinning or relocking
+
+
+func begin_spin() -> void:
+	if not held:
+		return
+	if spinning and not relocking:
+		return
+	spinning = true
+	relocking = false
+	_spin_motion_init = false
+
+
+func end_spin(snap: bool) -> void:
+	if snap:
+		reset_spin()
+		_sync_follow_parent()
+		return
+	if not spinning and not relocking:
+		return
+	if relocking:
+		return
+	spinning = false
+	relocking = true
+	_relock_from = wrapf(spin_angle, -PI, PI)
+	spin_angle = _relock_from
+	spin_omega = 0.0
+	_spin_world_omega = 0.0
+	_relock_elapsed = 0.0
+
+
+func reset_spin() -> void:
+	spinning = false
+	relocking = false
+	spin_angle = 0.0
+	spin_omega = 0.0
+	_spin_world_omega = 0.0
+	_relock_from = 0.0
+	_relock_elapsed = 0.0
+	_spin_motion_init = false
+	_prev_pivot_vel = Vector3.ZERO
+
+
 func _sync_follow_parent() -> void:
 	if not follow_parent or not freeze:
 		return
 	var p := get_parent() as Node3D
 	if p == null:
 		return
-	global_transform = p.global_transform
+	if spinning or relocking:
+		_apply_hinge_pose(p)
+	else:
+		global_transform = p.global_transform
 
 
 func _process(_delta: float) -> void:
 	_sync_follow_parent()
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
+	_integrate_spin(delta)
 	_sync_follow_parent()
+
+
+func _pivot_local() -> Vector3:
+	var marker := get_node_or_null("SpinPivot") as Marker3D
+	if marker != null:
+		return marker.position
+	return Vector3(0.0, -0.01, 0.03)
+
+
+func _apply_hinge_pose(p: Node3D) -> void:
+	var parent_xf := p.global_transform
+	var pivot_local := _pivot_local()
+	var pivot_world := parent_xf * pivot_local
+	var axis := parent_xf.basis.x
+	if axis.length_squared() < 0.0001:
+		global_transform = parent_xf
+		return
+	axis = axis.normalized()
+	var rotated := Basis(axis, spin_angle)
+	var gun_basis := rotated * parent_xf.basis
+	var gun_origin := pivot_world + rotated * (parent_xf.origin - pivot_world)
+	global_transform = Transform3D(gun_basis.orthonormalized(), gun_origin)
+
+
+func _integrate_spin(delta: float) -> void:
+	if relocking:
+		_integrate_relock(delta)
+		return
+	if not spinning:
+		return
+	var p := get_parent() as Node3D
+	if p == null:
+		return
+	var real_delta := delta / maxf(Engine.time_scale, 0.001)
+	if real_delta <= 0.0:
+		return
+	var parent_xf := p.global_transform
+	var axis := parent_xf.basis.x
+	if axis.length_squared() < 0.0001:
+		return
+	axis = axis.normalized()
+	var pivot_world := parent_xf * _pivot_local()
+	if not _spin_motion_init:
+		_prev_parent_basis = parent_xf.basis
+		_prev_pivot_world = pivot_world
+		_prev_pivot_vel = Vector3.ZERO
+		_spin_motion_init = true
+		return
+	var hand_omega := _basis_angular_velocity(_prev_parent_basis, parent_xf.basis, real_delta)
+	var hand_omega_axis := hand_omega.dot(axis)
+	var pivot_vel := (pivot_world - _prev_pivot_world) / real_delta
+	var pivot_accel := (pivot_vel - _prev_pivot_vel) / real_delta
+	var rotated := Basis(axis, spin_angle)
+	var r_whip := rotated * (parent_xf.origin - pivot_world)
+	var r_grav := rotated * (parent_xf.basis * (SPIN_COM_LOCAL - _pivot_local()))
+	var inertia := maxf(_tune("spin_inertia", 0.03), 0.01)
+	var gravity_k := _tune("spin_gravity", 2.0)
+	var damping := maxf(_tune("spin_damping", 0.0), 0.0)
+	var coupling := maxf(_tune("spin_coupling", 8.0), 0.0)
+	var tau := r_grav.cross(Vector3(0.0, -9.81 * gravity_k, 0.0)).dot(axis)
+	tau += r_whip.cross(-pivot_accel).dot(axis)
+	_spin_world_omega += tau / inertia * real_delta
+	if absf(hand_omega_axis) > absf(_spin_world_omega):
+		var blend := clampf(coupling * real_delta, 0.0, 1.0)
+		_spin_world_omega = lerpf(_spin_world_omega, hand_omega_axis, blend)
+	_spin_world_omega *= exp(-damping * real_delta)
+	_spin_world_omega = clampf(_spin_world_omega, -80.0, 80.0)
+	spin_omega = _spin_world_omega - hand_omega_axis
+	spin_angle += spin_omega * real_delta
+	_prev_parent_basis = parent_xf.basis
+	_prev_pivot_world = pivot_world
+	_prev_pivot_vel = pivot_vel
+
+
+func _integrate_relock(delta: float) -> void:
+	var duration := maxf(_tune("spin_relock_time", 0.12), 0.01)
+	_relock_elapsed += delta
+	var t := clampf(_relock_elapsed / duration, 0.0, 1.0)
+	spin_angle = lerpf(_relock_from, 0.0, t * t * (3.0 - 2.0 * t))
+	spin_omega = 0.0
+	if t >= 1.0:
+		reset_spin()
+
+
+func _hinge_throw_spin() -> Vector3:
+	if not spinning and not relocking:
+		return Vector3.ZERO
+	var p := get_parent() as Node3D
+	if p == null:
+		return Vector3.ZERO
+	var axis := p.global_transform.basis.x
+	if axis.length_squared() < 0.0001:
+		return Vector3.ZERO
+	return axis.normalized() * spin_omega
+
+
+func _basis_angular_velocity(prev: Basis, current: Basis, dt: float) -> Vector3:
+	if dt <= 0.0:
+		return Vector3.ZERO
+	var q := (current * prev.transposed()).get_rotation_quaternion()
+	if q.w < 0.0:
+		q = -q
+	var xyz := Vector3(q.x, q.y, q.z)
+	var xyz_len := xyz.length()
+	if xyz_len < 0.00001:
+		return Vector3.ZERO
+	var angle := 2.0 * atan2(xyz_len, q.w)
+	return xyz * (angle / (xyz_len * dt))
+
+
+func _tune(key: String, fallback: float) -> float:
+	if GameManager == null:
+		return fallback
+	return float(GameManager.tuning.get(key, fallback))
 
 
 ## Returns true if a shot was fired. `override_direction` lets flat mode
