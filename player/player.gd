@@ -25,6 +25,7 @@ var health := CombatRules.DEFAULT_HEALTH
 var max_health := CombatRules.DEFAULT_HEALTH
 var alive := true
 var move_speed_mult := 1.0
+var killed_by_self := false
 
 @onready var rig_holder: Node3D = $RigHolder
 @onready var holster: Node3D = $Holster
@@ -87,6 +88,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_follow_body()
 	_recover_free_gun()
+	_update_vr_spin()
 	_update_vr_reload(delta)
 	_update_wound_status(delta)
 	_update_jam_clear(delta)
@@ -138,6 +140,12 @@ func is_gun_drawn() -> bool:
 	return revolver.drawn
 
 
+func held_gun_hand() -> StringName:
+	if revolver != null and revolver.held and _holding_hand != GunHand.NONE:
+		return _holding_hand_name()
+	return &""
+
+
 func hitbox_rids() -> Array[RID]:
 	return [
 		head_hitbox.get_rid(),
@@ -155,6 +163,7 @@ func reset_for_duel(spawn: Transform3D) -> void:
 	max_health = CombatRules.player_max_health()
 	health = max_health
 	alive = true
+	killed_by_self = false
 	move_speed_mult = 1.0
 	_disarm_remaining = 0.0
 	_leg_remaining = 0.0
@@ -180,7 +189,7 @@ func reset_for_duel(spawn: Transform3D) -> void:
 
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
-		region: StringName = CombatRules.REGION_TORSO) -> void:
+		region: StringName = CombatRules.REGION_TORSO, self_inflicted := false) -> void:
 	if not alive:
 		return
 	if NetworkManager.is_active():
@@ -192,6 +201,7 @@ func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 	health = result["health"]
 	_refresh_health_hud()
 	if result["died"]:
+		killed_by_self = self_inflicted
 		play_death_feedback()
 		died.emit(trail_points)
 		return
@@ -318,6 +328,21 @@ func _gun_attach_node(hand: StringName) -> Node3D:
 
 func _holding_hand_name() -> StringName:
 	return HAND_LEFT if _holding_hand == GunHand.LEFT else HAND_RIGHT
+
+
+func _update_vr_spin() -> void:
+	if not use_vr or not (rig is VRRig):
+		return
+	if not revolver.held or _holding_hand == GunHand.NONE:
+		if revolver.is_spin_active():
+			revolver.end_spin(true)
+		return
+	var stick: Vector2 = (rig as VRRig).get_stick(_holding_hand_name())
+	var thresh := float(GameManager.tuning.get("spin_stick_threshold", 0.55))
+	if stick.y <= -thresh:
+		revolver.begin_spin()
+	elif stick.y >= thresh:
+		revolver.end_spin(false)
 
 
 func _off_hand_name() -> StringName:
@@ -503,7 +528,8 @@ func _on_revolver_state_changed() -> void:
 func _on_revolver_fired(origin: Vector3, direction: Vector3) -> void:
 	var authoritative := not NetworkManager.is_active() or NetworkManager.is_host()
 	Bullet.spawn(get_tree().current_scene, origin, direction,
-			GameManager.tuning["bullet_speed"], authoritative, hitbox_rids(), true)
+			GameManager.tuning["bullet_speed"], authoritative, hitbox_rids(), true,
+			float(GameManager.tuning.get("self_hit_grace", 0.28)))
 	NetworkManager.send_shot(origin, direction)
 	_refresh_reload_status()
 
@@ -839,12 +865,14 @@ func _broadcast_pose(delta: float) -> void:
 		flags |= NetworkManager.POSE_FLAG_GUN_COCKED
 	if revolver.drawn and not revolver.held:
 		flags |= NetworkManager.POSE_FLAG_GUN_FREE
+	if revolver.is_spin_active():
+		flags |= NetworkManager.POSE_FLAG_GUN_SPINNING
 	if _holding_hand == GunHand.LEFT:
 		flags |= NetworkManager.POSE_FLAG_GUN_HELD_LEFT
 	if int(GameManager.tuning["holster_side"]) != 0:
 		flags |= NetworkManager.POSE_FLAG_HOLSTER_LEFT
 	var gun_xf := Transform3D.IDENTITY
-	if revolver.drawn and not revolver.held:
+	if revolver.drawn and (not revolver.held or revolver.is_spin_active()):
 		gun_xf = revolver.global_transform
 	NetworkManager.send_pose(
 		rig.get_head_transform(),

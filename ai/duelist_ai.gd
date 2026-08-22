@@ -164,7 +164,7 @@ func _on_fired(origin: Vector3, direction: Vector3) -> void:
 
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
-		region: StringName = CombatRules.REGION_TORSO) -> void:
+		region: StringName = CombatRules.REGION_TORSO, _self_inflicted := false) -> void:
 	if state == AIState.DEAD:
 		return
 	var result := CombatRules.resolve(region, health, damage_mult)

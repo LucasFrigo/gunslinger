@@ -21,6 +21,7 @@ var speed := 55.0
 var authoritative := true
 var exclude: Array[RID] = []
 var from_local_player := false
+var self_hit_grace := 0.0
 
 var _travelled := 0.0
 var _trail: BulletTrail
@@ -29,13 +30,15 @@ var _spawn_origin := Vector3.ZERO
 
 
 static func spawn(parent: Node, origin: Vector3, dir: Vector3, bullet_speed: float,
-		is_authoritative: bool, exclude_rids: Array[RID], local_shooter: bool) -> Bullet:
+		is_authoritative: bool, exclude_rids: Array[RID], local_shooter: bool,
+		hit_grace := 0.0) -> Bullet:
 	var bullet := Bullet.new()
 	bullet.direction = dir.normalized()
 	bullet.speed = bullet_speed
 	bullet.authoritative = is_authoritative
 	bullet.exclude = exclude_rids
 	bullet.from_local_player = local_shooter
+	bullet.self_hit_grace = hit_grace
 	# Position must be known before `_ready`: that is when the trail records
 	# its first point. `add_child` runs `_ready` immediately.
 	bullet._spawn_origin = origin
@@ -83,10 +86,22 @@ func _physics_process(delta: float) -> void:
 	var to := from + direction * step
 
 	var space := get_world_3d().direct_space_state
-	var query := PhysicsRayQueryParameters3D.create(from, to, HIT_MASK, exclude)
-	query.collide_with_areas = true
-	query.collide_with_bodies = true
-	var hit := space.intersect_ray(query)
+	var remaining_from := from
+	var hit: Dictionary = {}
+	for _retry in 4:
+		var query_exclude: Array[RID] = []
+		if self_hit_grace <= 0.0:
+			query_exclude = exclude
+		var query := PhysicsRayQueryParameters3D.create(remaining_from, to, HIT_MASK, query_exclude)
+		query.collide_with_areas = true
+		query.collide_with_bodies = true
+		hit = space.intersect_ray(query)
+		if hit.is_empty() or not _ignore_self_hit(hit):
+			break
+		remaining_from = hit["position"] + direction * 0.008
+		if remaining_from.distance_squared_to(from) >= step * step:
+			hit = {}
+			break
 
 	if not hit.is_empty():
 		global_position = hit["position"]
@@ -111,7 +126,8 @@ func _on_impact(hit: Dictionary) -> void:
 		var hitbox := collider as Hitbox
 		ImpactFeedback.body_impact(pos, normal, hitbox.region)
 		if authoritative and is_instance_valid(_trail):
-			hitbox.receive_hit(_trail.points.duplicate())
+			var self_inflicted := from_local_player and hitbox.owner_entity == GameManager.local_player
+			hitbox.receive_hit(_trail.points.duplicate(), self_inflicted)
 	else:
 		ImpactFeedback.world_impact(pos, normal)
 	_expire()
@@ -143,3 +159,15 @@ func _check_near_miss(from: Vector3, to: Vector3) -> void:
 		_near_miss_done = true
 		TimeManager.notify_near_miss()
 		ImpactFeedback.near_miss(closest)
+
+
+func _ignore_self_hit(hit: Dictionary) -> bool:
+	if self_hit_grace <= 0.0 or exclude.is_empty():
+		return false
+	var pos: Vector3 = hit.get("position", global_position)
+	if pos.distance_to(_spawn_origin) >= self_hit_grace:
+		return false
+	var collider: Object = hit.get("collider")
+	if collider == null or not collider.has_method("get_rid"):
+		return false
+	return exclude.has(collider.get_rid())

@@ -134,10 +134,19 @@ func _process(delta: float) -> void:
 	_update_pointer()
 
 
+func get_stick(hand: StringName) -> Vector2:
+	if hand == HAND_LEFT:
+		return left_hand.get_vector2("primary")
+	return right_hand.get_vector2("primary")
+
+
 func _apply_locomotion(delta: float) -> float:
 	if KillCam.is_playing:
 		return 0.0
 	var move_input := _deadzone(left_hand.get_vector2("primary"), MovementConfig.stick_deadzone)
+	var spin_hand := _held_gun_hand()
+	if spin_hand == HAND_LEFT:
+		move_input.y = 0.0
 	var head_yaw := camera.global_transform.basis.get_euler().y
 	var basis := Basis(Vector3.UP, head_yaw)
 	# World XZ from HMD yaw, applied via global_position. Adding that vector to
@@ -334,3 +343,10 @@ func _move_speed_mult() -> float:
 	if player != null:
 		return player.move_speed_mult
 	return 1.0
+
+
+func _held_gun_hand() -> StringName:
+	var player := GameManager.local_player
+	if player == null or not player.has_method("held_gun_hand"):
+		return &""
+	return player.held_gun_hand()

@@ -19,8 +19,8 @@ func _init() -> void:
 	monitorable = true
 
 
-func receive_hit(trail_points: PackedVector3Array) -> void:
+func receive_hit(trail_points: PackedVector3Array, self_inflicted := false) -> void:
 	if GameManager == null or GameManager.duel == null or not GameManager.duel.accepts_hits():
 		return
 	if owner_entity != null and owner_entity.has_method("take_bullet_hit"):
-		owner_entity.take_bullet_hit(damage_mult, trail_points, region)
+		owner_entity.take_bullet_hit(damage_mult, trail_points, region, self_inflicted)

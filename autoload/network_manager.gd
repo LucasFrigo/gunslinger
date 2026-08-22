@@ -18,6 +18,7 @@ const POSE_FLAG_GUN_COCKED := 2
 const POSE_FLAG_GUN_FREE := 4
 const POSE_FLAG_HOLSTER_LEFT := 8
 const POSE_FLAG_GUN_HELD_LEFT := 16
+const POSE_FLAG_GUN_SPINNING := 32
 
 var transport: NetworkTransport
 var discovery: LanDiscovery
