@@ -18,10 +18,10 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Head / torso / arm / leg hitboxes | `done` | `player/hitbox.gd`, `combat/combat_rules.gd` |
 | Regional hit effects | `done` | Head instakill; torso/limb 1 HP (default HP 2); arm force-holsters + redraw lock; leg slows move. MP host HP + `_mp_wound` |
 | Self-damage | `planned` | Roadmap (Medium); shots exclude shooter hitboxes today |
-| Early-draw foul | `done` | duel state machine. Open: a post-foul hit can overwrite the loss ([BUG-007](BUGS.md)) |
+| Early-draw foul | `done` | duel state machine. Hits only apply during DRAW; a post-foul shot cannot overwrite the DQ |
 | Near-miss slow-mo hook | `done` | `TimeManager.notify_near_miss`, `weapons/bullet.gd` |
 | Gravity-drop / interactive reload | `done` | Gun-hand B opens; sustained shake dump; torso `AmmoBelt` + **off-hand** `ReloadProbe` overlap; `ChamberArea` seats; `BumpArea` bump or swing close (Flat `R`/Space). Layer `reload`. F3 **Show reload volumes**. Dump/swing in `GameManager.tuning`. Mesh-fit / cylinder-flip are art polish, not blockers |
-| Rapid-fire jam | `planned` | Roadmap (Medium); jam chance scales with shot cadence (Flat spam vs VR) |
+| Rapid-fire jam | `done` | Flat only (`revolver.jam_enabled`). Cadence heat in `weapons/weapon_base.gd`; jammed pull clicks and does not fire. Clear: look down + hold Space 1.5s. Knobs in debug **Flat Jam** (`jam_safe_interval`, `jam_heat_*`, `jam_chance_scale`, `jam_max_chance`, `jam_clear_hold`, `jam_clear_pitch`). VR / AI never jam |
 | Kill-cam / replay | `done` | SP + 1v1 MP: `KillCam` + `TimeManager.notify_kill_cam`; flat `Camera3D` fly-along, VR spectator `XROrigin3D` ride; `duel_end` sting on lethal hit |
 | Impact / AV polish (SFX, haptics, VFX) | `done` | `ImpactFeedback` + `AudioCatalog` / `VfxCatalog` stubs; combat XR/flat rumble wired |
 | Gun release / trick shots | `done` | VR hold-to-hold: toss with hand velocity, catch either hand (or take from the other), holster snap on chosen hip (`holster_side`). Fire/reload only while held; airborne still counts as drawn for fouls. Frozen `RigidBody3D` copies the hand/hip pose (`follow_parent` in `weapons/weapon_base.gd`). MP pose sends free-gun transform + hand/hip flags |

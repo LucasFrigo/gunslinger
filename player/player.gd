@@ -51,6 +51,7 @@ var _close_armed := true
 var _dump_hold_accum := 0.0
 var _disarm_remaining := 0.0
 var _leg_remaining := 0.0
+var _jam_clear_accum := 0.0
 
 
 func _ready() -> void:
@@ -76,6 +77,7 @@ func _ready() -> void:
 	revolver.dry_fired.connect(_on_revolver_dry_fired)
 	_prev_gate_open = revolver.gate_open
 	ammo_belt.visible = use_vr
+	revolver.jam_enabled = not use_vr
 	revolver.holster_to(holster)
 	_holding_hand = GunHand.NONE
 	_refresh_reload_status()
@@ -87,6 +89,7 @@ func _physics_process(delta: float) -> void:
 	_recover_free_gun()
 	_update_vr_reload(delta)
 	_update_wound_status(delta)
+	_update_jam_clear(delta)
 
 
 func _process(delta: float) -> void:
@@ -162,6 +165,7 @@ func reset_for_duel(spawn: Transform3D) -> void:
 	_dump_armed = true
 	_close_armed = true
 	_dump_hold_accum = 0.0
+	_jam_clear_accum = 0.0
 	_reload_event = ""
 	_reload_event_timer = 0.0
 	_prev_gate_open = revolver.gate_open
@@ -370,6 +374,28 @@ func _update_wound_status(delta: float) -> void:
 			move_speed_mult = 1.0
 
 
+func _update_jam_clear(delta: float) -> void:
+	if use_vr or not revolver.jammed:
+		_jam_clear_accum = 0.0
+		return
+	var real_delta := delta / maxf(Engine.time_scale, 0.001)
+	var pitch := 0.0
+	if rig is FlatRig:
+		pitch = (rig as FlatRig).get_look_pitch()
+	var looking_down := pitch <= -float(GameManager.tuning["jam_clear_pitch"])
+	var holding := alive and revolver.held and Input.is_action_pressed("cock_hammer")
+	if looking_down and holding:
+		_jam_clear_accum += real_delta
+		_refresh_reload_status()
+		if _jam_clear_accum >= float(GameManager.tuning["jam_clear_hold"]):
+			revolver.clear_jam()
+			_jam_clear_accum = 0.0
+			_flash_reload_event("CLEARED — ready")
+	elif _jam_clear_accum > 0.0:
+		_jam_clear_accum = 0.0
+		_refresh_reload_status()
+
+
 func _refresh_health_hud() -> void:
 	if GameManager.hud == null:
 		return
@@ -406,7 +432,7 @@ func _on_cock_pressed(hand: StringName) -> void:
 		return
 	if revolver.gate_open:
 		_close_gate_from_player("closed")
-	else:
+	elif not revolver.jammed:
 		revolver.cock()
 
 
@@ -457,6 +483,8 @@ func _on_revolver_dry_fired(reason: StringName) -> void:
 			_flash_reload_event("CAN'T FIRE — gate open")
 		&"uncocked":
 			_flash_reload_event("CLICK — hammer not cocked")
+		&"jammed":
+			_flash_reload_event("JAMMED — look down, hold Space")
 		_:
 			_flash_reload_event("CLICK — no shot")
 
@@ -743,7 +771,12 @@ func _build_reload_status_text() -> String:
 	var gate_line := "GATE OPEN" if revolver.gate_open else "GATE CLOSED"
 	var hand_line := "ROUND IN HAND" if _holding_cartridge() else "HAND EMPTY"
 	var ready_line := "READY TO FIRE"
-	if not revolver.drawn:
+	if revolver.jammed:
+		ready_line = "JAMMED — look down, hold Space"
+		var hold := float(GameManager.tuning["jam_clear_hold"])
+		if hold > 0.0 and _jam_clear_accum > 0.0:
+			ready_line += " (%d%%)" % int(100.0 * _jam_clear_accum / hold)
+	elif not revolver.drawn:
 		ready_line = "HOLSTERED"
 	elif not revolver.held:
 		ready_line = "GUN IN AIR — catch to fire"

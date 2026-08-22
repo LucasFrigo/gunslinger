@@ -11,13 +11,20 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
+*(none)*
+
+---
+
+## Fixed
+
 ### BUG-007 — Foul loss overwritten by a later hit
 
 | | |
 |---|---|
-| Status | `open` |
+| Status | `fixed` |
 | Severity | `major` |
 | Filed | 2026-08-21 |
+| Fixed | 2026-08-21 |
 | Platforms | SP AI duels (MP hit path already ignores `RESOLUTION`) |
 | Areas | `gauntlet/duel_manager.gd` `_on_enemy_died` / `_finish_sp`, `player/hitbox.gd`, `weapons/bullet.gd` |
 
@@ -29,11 +36,7 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 3. After the loss is declared, shoot and hit the NPC.
 4. The result flips to a win ("Clean kill").
 
-**Notes:** `_finish_sp` on a foul sets `RESOLUTION`, but `_on_enemy_died` only bails on `IDLE` (and MP), so a later AI death still calls `_finish_sp(true, "Clean kill")`. Desired lock: no damage after a duel has finished (`RESOLUTION`) or before the next one starts (`IDLE` / pre-DRAW). MP `mp_report_hit` already returns on `RESOLUTION`.
-
----
-
-## Fixed
+**Fix:** Hits only apply during DRAW (`DuelManager.accepts_hits`). `Hitbox.receive_hit` and `mp_report_hit` ignore standoff / wait-for-bell / `RESOLUTION`. `_on_enemy_died` no longer treats a post-foul AI death as a win; `_finish_sp` is a no-op once `RESOLUTION` is set.
 
 ### BUG-006 — Joiner spawn: strafe is reversed (A ↔ D)
 

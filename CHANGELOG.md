@@ -11,6 +11,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Added
 
+- Flat rapid-fire jam: successive auto-cock spam builds jam chance; the failing pull clicks and does not fire. Clear by looking down at the gun and holding Space for 1.5s (keeps remaining rounds). VR and AI never jam. Tunable in the debug panel (**Flat Jam**: `jam_safe_interval`, `jam_heat_per_shot`, `jam_heat_decay`, `jam_heat_threshold`, `jam_chance_scale`, `jam_max_chance`, `jam_clear_hold`, `jam_clear_pitch`).
 - VR gun release: hold grip to keep the revolver, release to toss with hand velocity, catch with either hand (or take it from the other). Fire and reload only while held. Chosen hip via debug **Holster side** (`holster_side`). Tunables: `gun_catch_radius`, `gun_holster_max_speed`, `gun_throw_scale`, `gun_throw_spin_scale`.
 - In-game version tag (`v` + `application/config/version`) on the main menu and as a small HUD watermark.
 - Double-click (or Enter) a LAN host or Steam lobby in the main menu list to join; the Join button still works.
@@ -22,6 +23,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Fixed
 
+- Early-draw foul stays a loss: bullets deal no damage after the duel is over or before the bell, so hitting the NPC after a DQ no longer flips the result to a win ([BUG-007](docs/BUGS.md)).
 - VR held revolver stays on the controller: a frozen `RigidBody3D` does not inherit parent motion, so attached guns copy the holster / `GunAttach` transform each frame (`follow_parent`).
 - LAN joiner strafe (A/D, left stick) matches the view after spawning on `EnemySpawn`. Stick/WASD motion is applied in world XZ from look yaw so the 180° spawn root is not applied twice ([BUG-006](docs/BUGS.md)).
 - PvP opponent now has a readable greybox body (torso, legs, arms) and a holstered revolver until they draw, instead of a floating head and hands ([BUG-005](docs/BUGS.md)).

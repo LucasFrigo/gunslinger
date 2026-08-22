@@ -62,6 +62,18 @@ var tuning := {
 	"leg_slow_duration": 2.5,
 	## Move-speed multiplier while limping (1 = no penalty).
 	"leg_speed_mult": 0.45,
+	## Flat jam: shots slower than this add no heat (seconds).
+	"jam_safe_interval": 0.35,
+	"jam_heat_per_shot": 0.45,
+	## Heat lost per second of pause beyond jam_safe_interval.
+	"jam_heat_decay": 1.2,
+	"jam_heat_threshold": 0.5,
+	"jam_chance_scale": 1.2,
+	"jam_max_chance": 0.85,
+	## Seconds looking down + holding Space to clear a jam.
+	"jam_clear_hold": 1.5,
+	## Look-down pitch (radians) required to clear; Flat camera x is negative down.
+	"jam_clear_pitch": 0.55,
 }
 
 var mode: int = GameMode.BOOT

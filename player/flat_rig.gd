@@ -51,6 +51,11 @@ func get_aim_override() -> Vector3:
 	return -camera.global_transform.basis.z
 
 
+## Look pitch in radians; negative is down (used to clear a jam).
+func get_look_pitch() -> float:
+	return _pitch
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var sens: float = MovementConfig.mouse_sensitivity

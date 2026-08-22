@@ -18,7 +18,6 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 *(none)*
 
 ## 2. Medium — contained mechanics & set pieces
-* **Rapid-fire jam:** Chance to jam on successive shots; higher rate of fire (especially Flat `auto_cock` spam) raises jam chance. Clearing a jam should cost time vs. a clean reload. Tunable fire-interval / chance knobs.
 * **Revolver Ocelot spin:** A held twirl flourish (wrist flick or dedicated input) in the Revolver Ocelot style. Visual / haptic first; can share spin with the airborne trick-shot idea below.
 * **Self-damage:** Player (and peer) bullets can hit the shooter. Self-wounds use the same regional HP / arm-disarm / leg-slow rules; a self-kill should lose the duel. Shots currently exclude the shooter's hitbox RIDs (`weapons/bullet.gd`).
 * **Airborne fire / mystic trick shots:** Optional tech/mystic branch: allow firing while the revolver is tossed and spinning, so you can go for mid-air trick shots. Today fire/reload require `held` (`weapons/weapon_base.gd`). Gate behind a flag so the grounded western default stays.
@@ -39,6 +38,7 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 
 Newest at the top. Keep a one-line note of what shipped and where; details live in [`docs/FEATURES.md`](docs/FEATURES.md).
 
+* **Rapid-fire jam:** Flat-only cadence heat; jammed pull clicks with no bullet; look down + hold Space 1.5s to clear. (`done` in FEATURES)
 * **Gun release / catch:** VR hold-to-hold toss and either-hand catch; chosen hip (`holster_side`); gun-hand vs off-hand reload swap; MP free-gun pose. (`done` in FEATURES)
 * **Reload Mechanic:** VR B-open / sustained shake dump / torso `AmmoBelt` + left `ReloadProbe` / `ChamberArea` seat / bump or swing close; Flat `R` / Space. Area3D volumes on layer `reload`; dump/close knobs in debug panel. Mesh-fit / cylinder-flip polish can land later without reopening this item. (`done` in FEATURES)
 * **Regional Hit Effects:** Head instakill; torso/limb HP; arm force-holster; leg slow. Tunables: `player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`. (`done` in FEATURES)

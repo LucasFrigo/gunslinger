@@ -62,11 +62,16 @@ func stop() -> void:
 	_peer_holstered = false
 
 
+## Hits only count during DRAW. Blocks post-foul / pre-bell damage (BUG-007).
+func accepts_hits() -> bool:
+	return state == State.DRAW
+
+
 ## Host-side bullets report authoritative hits here during MP duels.
 ## `victim_is_local` is true when the HOST player was hit.
 func mp_report_hit(victim_is_local: bool, trail_points: PackedVector3Array,
 		region: StringName = CombatRules.REGION_TORSO, damage: float = 1.0) -> void:
-	if not is_mp or state == State.RESOLUTION or not NetworkManager.is_host():
+	if not is_mp or not accepts_hits() or not NetworkManager.is_host():
 		return
 	var victim_is_host := victim_is_local
 	if victim_is_host:
@@ -202,25 +207,22 @@ func _bind_player() -> void:
 
 
 func _on_enemy_died(trail_points: PackedVector3Array) -> void:
-	if state == State.IDLE or is_mp:
+	if not accepts_hits() or is_mp:
 		return
 	notify_kill_shot(trail_points)
 	_finish_sp(true, "Clean kill")
 
 
 func _on_player_died(trail_points: PackedVector3Array) -> void:
-	if state == State.IDLE:
-		return
-	if is_mp:
+	if not accepts_hits() or is_mp:
 		return  # host bullet code reports MP hits via mp_report_hit
-	var reason := "Shot down"
-	if state == State.WAIT_SIGNAL:
-		reason = "Shot down before the bell"
 	notify_kill_shot(trail_points)
-	_finish_sp(false, reason)
+	_finish_sp(false, "Shot down")
 
 
 func _finish_sp(local_won: bool, reason: String) -> void:
+	if state == State.RESOLUTION:
+		return
 	state = State.RESOLUTION
 	if is_instance_valid(_ai):
 		_ai.on_duel_over(local_won)

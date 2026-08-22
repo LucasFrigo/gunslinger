@@ -50,6 +50,7 @@ var _reload_sliders: Dictionary = {}
 var _release_sliders: Dictionary = {}
 var _holster_side_option: OptionButton
 var _combat_sliders: Dictionary = {}
+var _jam_sliders: Dictionary = {}
 var _movement_sliders: Dictionary = {}
 var _turn_mode_option: OptionButton
 var _preset_option: OptionButton
@@ -265,6 +266,28 @@ func _build_gunplay_section(root: Control) -> void:
 					GameManager.set_tuning(tune_combat, value))
 		_combat_sliders[tune_combat] = combat_widgets
 
+	_add_header(root, "Flat Jam")
+	const JAM_SLIDERS := {
+		"jam_safe_interval": [0.1, 1.0, 0.05],
+		"jam_heat_per_shot": [0.05, 1.0, 0.05],
+		"jam_heat_decay": [0.0, 4.0, 0.1],
+		"jam_heat_threshold": [0.0, 1.5, 0.05],
+		"jam_chance_scale": [0.1, 3.0, 0.1],
+		"jam_max_chance": [0.05, 1.0, 0.05],
+		"jam_clear_hold": [0.3, 3.0, 0.1],
+		"jam_clear_pitch": [0.2, 1.2, 0.05],
+	}
+	for jam_key in JAM_SLIDERS:
+		var jam_range: Array = JAM_SLIDERS[jam_key]
+		var tune_jam: String = jam_key
+		var jam_widgets := _add_slider(root, jam_key, jam_range[0], jam_range[1],
+				jam_range[2], float(GameManager.tuning[tune_jam]),
+				func(value: float) -> void:
+					if _refreshing:
+						return
+					GameManager.set_tuning(tune_jam, value))
+		_jam_sliders[tune_jam] = jam_widgets
+
 	_add_header(root, "VR Reload (m/s)")
 	const RELOAD_SLIDERS := {
 		"reload_dump_speed": [1.0, 12.0, 0.1],
@@ -461,6 +484,11 @@ func _refresh_from_systems() -> void:
 		var cvalue: float = float(GameManager.tuning[key])
 		cwidgets["slider"].value = cvalue
 		cwidgets["label"].text = "%.2f" % cvalue
+	for key in _jam_sliders:
+		var jwidgets: Dictionary = _jam_sliders[key]
+		var jvalue: float = float(GameManager.tuning[key])
+		jwidgets["slider"].value = jvalue
+		jwidgets["label"].text = "%.2f" % jvalue
 	for key in _movement_sliders:
 		var mwidgets: Dictionary = _movement_sliders[key]
 		var mvalue: float = float(MovementConfig.get_value(key))
