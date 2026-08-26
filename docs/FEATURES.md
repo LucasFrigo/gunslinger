@@ -38,6 +38,7 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Gauntlet (6 rungs, 3 lives, session score) | `done` | `gauntlet/gauntlet_controller.gd`, ladder `.tres` |
 | Persistent gauntlet high scores | `planned` | Score is session-only today |
 | 1v1 LAN multiplayer | `done` | `netcode/enet_transport.gd` + UDP discovery; Quest APK gets `INTERNET` + Wi-Fi multicast from `addons/gunslinger_lan_permissions/` at export. Remote avatar is a full greybox (torso/legs/arms + holstered gun). Joiner on `EnemySpawn` faces the host; walk/strafe is world-XZ from look yaw so the 180° spawn root does not invert A/D. Main menu: double-click a LAN host (or Steam lobby) to join |
+| Proximity voice chat | `planned` | Roadmap (Polish / visual); spatial voice by distance; muted players show an X over the mouth |
 | 1v1 Steam lobbies | `partial` | `netcode/steam_transport.gd`; addon optional / may be absent |
 | 4-player multiplayer | `planned` | Roadmap (Hard); 2–4 humans (FFA / 2v2 / 1v3); netcode is 1v1 today |
 | Horde mode | `planned` | Roadmap |

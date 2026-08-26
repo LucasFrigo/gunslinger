@@ -12,6 +12,7 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 
 * **Shorter bullet trails:** Trails linger too long after the slug is gone. Drop `FADE_TIME` in `weapons/bullet_trail.gd` (currently 1.6s) so the ribbon disappears faster; optional debug knob.
 * **Barrel smoke:** Visible smoke coming out of the barrel after a shot. A short stub already plays (`VfxCatalog` `&"muzzle_smoke"` from `ImpactFeedback.shot_fired` / `assets/vfx/muzzle_smoke.tscn`); this is a lingering plume that reads as gunsmoke, not a 0.45s puff.
+* **Proximity voice chat:** Nearby players hear each other in world space (volume/falloff by distance). Muted players show an X over the mouth so mute state is readable at a glance.
 
 ## 1. Easy — polish & finish existing hooks
 * **Self-hit hitbox tweak:** Self-damage already applies after `self_hit_grace` (`weapons/bullet.gd`, `player/hitbox.gd`). Tune the shooter's own volumes (especially gun-hand arm) so a normal muzzle shot still does not clip the arm, but a real self-hit (muzzle into body, ricochet-style close miss) reads fairly.
