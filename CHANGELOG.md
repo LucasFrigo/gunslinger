@@ -36,6 +36,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Changed
 
+- Revolver mesh: PSX blaster with a 6-chamber cylinder (`assets/models/weapons/wpn_psx_blaster.glb`; pre-cylinder copy at `wpn_psx_blaster_alt.glb`). Gate swings the drum out; each shot indexes 60° and kicks the visible model back. Gameplay `Muzzle` is unchanged.
 - VR draw/holster is hold-to-hold on grip (release near a still hip holsters; a flick tosses). Gun-hand trigger/A/B and off-hand reload swap when the revolver is in the left hand. Left B opens the gate only while left-held; Quest menu button still opens debug.
 - 1v1 pose RPC now includes a gun transform plus `GUN_FREE` / `HOLSTER_LEFT` / `GUN_HELD_LEFT` flags so a tossed gun is visible on the remote avatar.
 - Project identity is now `0.1.0-alpha` (`VERSION` / `application/config/version`).
