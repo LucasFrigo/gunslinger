@@ -11,6 +11,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Added
 
+- NPC reload: AI duelists empty a 6-round cylinder and spend `reload_time` reloading (Drunk 3.5s, Sheriff 2.2s, Ghost 1.4s, scaled by `ai_speed_mult`) instead of instantly refilling. Gate opens and the arm dips for a readable window; arm hits cancel without restoring ammo.
 - VR Revolver Ocelot spin: while the gun is held, push the gun-hand stick down to hang it on a finger hinge; hand motion builds momentum; stick up snaps it back. Trigger still fires along the barrel. Hang gravity uses the barrel COM so the muzzle drops promptly. Tunable in the debug panel (**VR Spin**: `spin_stick_threshold`, `spin_damping`, `spin_gravity`, `spin_inertia`, `spin_coupling`, `spin_relock_time`).
 - Self-damage: your own (and a peer's own) bullets can hit the shooter after a short muzzle grace so a normal shot does not clip the gun arm. Same regional HP / disarm / limp rules; a self-kill loses the duel. Tunable `self_hit_grace`.
 - Flat rapid-fire jam: successive auto-cock spam builds jam chance; the failing pull clicks and does not fire. Clear by looking down at the gun and holding Space for 1.5s (keeps remaining rounds). VR and AI never jam. Tunable in the debug panel (**Flat Jam**: `jam_safe_interval`, `jam_heat_per_shot`, `jam_heat_decay`, `jam_heat_threshold`, `jam_chance_scale`, `jam_max_chance`, `jam_clear_hold`, `jam_clear_pitch`).

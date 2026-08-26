@@ -37,7 +37,8 @@ How major systems fit together. Keep this short; link to files. Update when owne
 
 ## AI
 
-- Data-driven `AIArchetype` resources (reaction, accuracy cone, draw speed, movement).
+- Data-driven `AIArchetype` resources (reaction, accuracy cone, draw speed, `reload_time`, movement).
+- After 6 shots the AI enters `RELOADING`: gate opens (cylinder tilt), arm dips, waits `reload_time / ai_speed_mult`, then `WeaponBase.fill_cylinder()` + `close_gate()` and resumes fire. Arm hit / death / duel-over close the gate without refilling. SP only.
 - SP spawn: `GameManager._begin_ai_duel` instantiates `ai/duelist.tscn`, assigns `ScenarioBase.get_enemy_spawn()`, then `DuelistAI.capture_spawn()` (`global_position`). Do not snapshot position in `_ready` — that runs at packed-scene origin before placement. Sheriff/Ghost strafe around that captured origin; Drunk stands.
 - Encounter ladder: `DuelEncounter` + `GauntletLadder` `.tres` files — prefer data over code for new rungs.
 

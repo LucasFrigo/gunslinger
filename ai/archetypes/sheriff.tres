@@ -10,6 +10,7 @@ reaction_variance = 0.12
 draw_time = 0.45
 accuracy_angle_deg = 4.0
 followup_interval = 1.0
+reload_time = 2.2
 bullet_speed = 55.0
 health = 3.0
 move_style = 1

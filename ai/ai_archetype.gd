@@ -15,6 +15,8 @@ enum MoveStyle { STAND, STRAFE }
 @export_range(0.0, 20.0, 0.1) var accuracy_angle_deg := 4.0
 ## Seconds between follow-up shots if the first one misses.
 @export_range(0.3, 3.0, 0.05) var followup_interval := 1.1
+## Seconds to refill a spent cylinder (gate open → fill → close). Scaled by ai_speed_mult.
+@export_range(0.5, 6.0, 0.05) var reload_time := 2.5
 @export_range(20.0, 120.0, 1.0) var bullet_speed := 50.0
 @export_range(0.5, 10.0, 0.5) var health := 1.0
 @export var move_style: MoveStyle = MoveStyle.STAND

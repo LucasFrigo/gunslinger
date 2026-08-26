@@ -17,7 +17,6 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 * **Self-hit hitbox tweak:** Self-damage already applies after `self_hit_grace` (`weapons/bullet.gd`, `player/hitbox.gd`). Tune the shooter's own volumes (especially gun-hand arm) so a normal muzzle shot still does not clip the arm, but a real self-hit (muzzle into body, ricochet-style close miss) reads fairly.
 
 ## 2. Medium — contained mechanics & set pieces
-* **NPC reload:** AI currently `reset()`s the cylinder when empty and fires forever (`ai/duelist_ai.gd` `_fire`). Make NPCs empty out and spend time reloading (delay / simple animation) so a spent cylinder is a window, same 6-round limit as the player.
 * **Airborne fire / mystic trick shots:** Optional tech/mystic branch: allow firing while the revolver is tossed and spinning, so you can go for mid-air trick shots. Today fire/reload require `held` (`weapons/weapon_base.gd`). Gate behind a flag so the grounded western default stays.
 * **Train Map Concept:** A duel scene featuring a moving train passing between opponents. Players must either wait for the train to clear or attempt risky shots through open train cars. (Builds on the existing Train Rooftop arena idea.)
 * **Duel vs up to 3 NPCs:** Free-duel option to face 1–3 AI opponents in one standoff (local, no netcode). Needs extra spawn marks, multi-combatant targeting, and resolve when more than two duelists fire. Reuses `ai/duelist.tscn` + archetypes.
@@ -36,6 +35,7 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 
 Newest at the top. Keep a one-line note of what shipped and where; details live in [`docs/FEATURES.md`](docs/FEATURES.md).
 
+* **NPC reload:** Spent 6-round cylinder is a combat window: `RELOADING` + arm dip + gate open, `reload_time` per archetype, `WeaponBase.fill_cylinder`. (`done` in FEATURES)
 * **Revolver Ocelot spin:** VR gun-hand stick down hangs the revolver on a finger hinge; hand motion builds spin; stick up relocks. Fire still works. (`done` in FEATURES)
 * **Self-damage:** Player/peer shots can hit the shooter after a muzzle grace; self-kill loses the duel. AI still self-excludes. (`done` in FEATURES)
 * **Rapid-fire jam:** Flat-only cadence heat; jammed pull clicks with no bullet; look down + hold Space 1.5s to clear. (`done` in FEATURES)

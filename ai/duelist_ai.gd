@@ -2,11 +2,14 @@ class_name DuelistAI
 extends Node3D
 ## AI opponent. Mirrors the duel FSM: waits for the bell, reacts after its
 ## archetype-defined reaction time, draws over draw_time, then fires with an
-## accuracy cone. All behavior comes from an AIArchetype .tres file.
+## accuracy cone. A spent cylinder opens a RELOADING window (reload_time).
+## All behavior comes from an AIArchetype .tres file.
 
 signal died(trail_points: PackedVector3Array)
 
-enum AIState { IDLE, REACTING, DRAWING, SHOOTING, DISARMED, DEAD }
+enum AIState { IDLE, REACTING, DRAWING, SHOOTING, RELOADING, DISARMED, DEAD }
+
+const RELOAD_ARM_BLEND := 0.3
 
 var archetype: AIArchetype
 var health := CombatRules.DEFAULT_HEALTH
@@ -69,6 +72,7 @@ func begin_draw() -> void:
 
 func on_duel_over(_player_won: bool) -> void:
 	if state != AIState.DEAD:
+		revolver.close_gate()
 		state = AIState.IDLE
 		_disarm_remaining = 0.0
 		_leg_remaining = 0.0
@@ -91,15 +95,25 @@ func _process(delta: float) -> void:
 			_draw_progress += delta * speed_mult / maxf(archetype.draw_time, 0.05)
 			_animate_arm(clampf(_draw_progress, 0.0, 1.0))
 			if _draw_progress >= 1.0:
-				state = AIState.SHOOTING
-				_fire()
-				_timer = archetype.followup_interval
+				if revolver.rounds <= 0:
+					_begin_reload()
+				else:
+					state = AIState.SHOOTING
+					_fire()
+					if state == AIState.SHOOTING:
+						_timer = archetype.followup_interval
 		AIState.SHOOTING:
 			_animate_arm(1.0)
 			_timer -= delta
 			if _timer <= 0.0:
 				_fire()
-				_timer = archetype.followup_interval
+				if state == AIState.SHOOTING:
+					_timer = archetype.followup_interval
+		AIState.RELOADING:
+			_animate_arm(RELOAD_ARM_BLEND)
+			_timer -= delta
+			if _timer <= 0.0:
+				_finish_reload()
 		AIState.DISARMED:
 			pass
 
@@ -139,12 +153,34 @@ func _animate_arm(progress: float) -> void:
 func _fire() -> void:
 	if not is_instance_valid(_target) or not _target.alive:
 		return
+	if revolver.rounds <= 0:
+		_begin_reload()
+		return
 	var muzzle := revolver.get_muzzle().global_position
 	var direction := (_target.get_head_position() + Vector3.DOWN * 0.2 - muzzle).normalized()
 	direction = _apply_accuracy_cone(direction)
-	if revolver.rounds <= 0:
-		revolver.reset()
 	revolver.try_fire(true, direction)
+	if revolver.rounds <= 0:
+		_begin_reload()
+
+
+func _begin_reload() -> void:
+	if state == AIState.RELOADING or state == AIState.DEAD or archetype == null:
+		return
+	state = AIState.RELOADING
+	revolver.open_gate()
+	var speed_mult: float = maxf(GameManager.tuning["ai_speed_mult"], 0.05)
+	_timer = maxf(archetype.reload_time / speed_mult, 0.05)
+
+
+func _finish_reload() -> void:
+	revolver.fill_cylinder()
+	revolver.close_gate()
+	state = AIState.SHOOTING
+	_animate_arm(1.0)
+	_fire()
+	if state == AIState.SHOOTING:
+		_timer = archetype.followup_interval
 
 
 func _apply_accuracy_cone(direction: Vector3) -> Vector3:
@@ -180,6 +216,7 @@ func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 
 
 func _disarm() -> void:
+	revolver.close_gate()
 	revolver.drawn = false
 	revolver.held = false
 	_draw_progress = 0.0
@@ -208,6 +245,7 @@ func _tick_wounds(delta: float) -> void:
 
 func _die(trail_points: PackedVector3Array) -> void:
 	state = AIState.DEAD
+	revolver.close_gate()
 	revolver.drawn = false
 	revolver.held = false
 	head_hitbox.set_deferred("monitorable", false)

@@ -35,7 +35,7 @@ const GAUNTLET_LADDER := "res://gauntlet/ladder_default.tres"
 var tuning := {
 	"bullet_speed": 55.0,    # m/s
 	"auto_cock": true,       # double-action revolver (no manual hammer)
-	"ai_speed_mult": 1.0,    # global multiplier on AI reaction/draw speed
+	"ai_speed_mult": 1.0,    # global multiplier on AI reaction/draw/reload speed
 	## VR reload: gun-hand speed (m/s) that must be sustained to dump shells.
 	"reload_dump_speed": 4.5,
 	## Seconds the dump speed must be held before shells eject.

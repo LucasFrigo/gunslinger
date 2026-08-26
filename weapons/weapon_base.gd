@@ -134,6 +134,16 @@ func try_chamber() -> bool:
 	return true
 
 
+## Instantly seats a full cylinder. Requires gate open. One chamber click.
+func fill_cylinder() -> bool:
+	if not gate_open:
+		return false
+	rounds = max_rounds
+	_play(AudioCatalog.get_stream(&"chamber"))
+	state_changed.emit()
+	return true
+
+
 func cock() -> void:
 	if jammed:
 		return
