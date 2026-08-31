@@ -36,8 +36,9 @@ radius = 0.14
 [sub_resource type="BoxShape3D" id="shape_torso"]
 size = Vector3(0.4, 0.6, 0.28)
 
-[sub_resource type="SphereShape3D" id="shape_arm"]
-radius = 0.11
+[sub_resource type="CapsuleShape3D" id="shape_arm"]
+radius = 0.05
+height = 1.0
 
 [sub_resource type="BoxShape3D" id="shape_leg"]
 size = Vector3(0.35, 0.7, 0.22)
@@ -73,26 +74,12 @@ top_level = true
 mesh = SubResource("mesh_hand")
 surface_material_override/0 = SubResource("mat_body")
 
-[node name="ArmHitbox" type="Area3D" parent="LeftHand"]
-script = ExtResource("2")
-region = &"arm"
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="LeftHand/ArmHitbox"]
-shape = SubResource("shape_arm")
-
 [node name="RightHand" type="Node3D" parent="."]
 top_level = true
 
 [node name="HandMesh" type="MeshInstance3D" parent="RightHand"]
 mesh = SubResource("mesh_hand")
 surface_material_override/0 = SubResource("mat_body")
-
-[node name="ArmHitbox" type="Area3D" parent="RightHand"]
-script = ExtResource("2")
-region = &"arm"
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="RightHand/ArmHitbox"]
-shape = SubResource("shape_arm")
 
 [node name="LeftArm" type="MeshInstance3D" parent="."]
 top_level = true
@@ -103,6 +90,22 @@ surface_material_override/0 = SubResource("mat_body")
 top_level = true
 mesh = SubResource("mesh_arm")
 surface_material_override/0 = SubResource("mat_body")
+
+[node name="ArmHitboxL" type="Area3D" parent="."]
+top_level = true
+script = ExtResource("2")
+region = &"arm"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ArmHitboxL"]
+shape = SubResource("shape_arm")
+
+[node name="ArmHitboxR" type="Area3D" parent="."]
+top_level = true
+script = ExtResource("2")
+region = &"arm"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ArmHitboxR"]
+shape = SubResource("shape_arm")
 
 [node name="TorsoHitbox" type="Area3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)

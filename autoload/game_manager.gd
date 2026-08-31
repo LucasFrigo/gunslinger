@@ -86,7 +86,10 @@ var tuning := {
 	"spin_coupling": 8.0,
 	## Seconds to tween back to the locked pose after stick-up.
 	"spin_relock_time": 0.12,
-	## Metres from muzzle before a shot can hit the shooter's own hitboxes.
+	## Metres from muzzle before a shot can hit the shooter's gun-hand arm.
+	## Torso / head / off-hand / legs are not covered — a muzzle into the body
+	## still counts. Arm capsules also inset from the wrist so a normal forward
+	## shot clears the forearm.
 	"self_hit_grace": 0.28,
 }
 
@@ -302,11 +305,13 @@ func _on_shot_received(_peer_id: int, origin: Vector3, direction: Vector3) -> vo
 	# Remote player fired. Everyone spawns the tracer; only the host's
 	# simulation is authoritative for damage.
 	var exclude: Array[RID] = []
+	var grace: Array[RID] = []
 	if is_instance_valid(remote_avatar):
 		exclude = remote_avatar.hitbox_rids()
+		grace = remote_avatar.gun_hand_hitbox_rids()
 	Bullet.spawn(main_root, origin, direction, tuning["bullet_speed"],
 			NetworkManager.is_host(), exclude, false,
-			float(tuning.get("self_hit_grace", 0.28)))
+			float(tuning.get("self_hit_grace", 0.28)), grace)
 
 
 # -- Duel results -------------------------------------------------------------

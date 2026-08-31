@@ -10,8 +10,9 @@ radius = 0.14
 [sub_resource type="BoxShape3D" id="shape_torso"]
 size = Vector3(0.4, 0.6, 0.28)
 
-[sub_resource type="BoxShape3D" id="shape_arm"]
-size = Vector3(0.18, 0.35, 0.22)
+[sub_resource type="CapsuleShape3D" id="shape_arm"]
+radius = 0.05
+height = 1.0
 
 [sub_resource type="BoxShape3D" id="shape_leg"]
 size = Vector3(0.35, 0.7, 0.22)

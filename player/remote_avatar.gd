@@ -19,8 +19,8 @@ const HOLSTER_LOCAL := Vector3(0.25, 0.0, 0.05)
 @onready var gun: Node3D = $Holster/Revolver
 @onready var head_hitbox: Hitbox = $Head/HeadHitbox
 @onready var torso_hitbox: Hitbox = $TorsoHitbox
-@onready var arm_hitbox_l: Hitbox = $LeftHand/ArmHitbox
-@onready var arm_hitbox_r: Hitbox = $RightHand/ArmHitbox
+@onready var arm_hitbox_l: Hitbox = $ArmHitboxL
+@onready var arm_hitbox_r: Hitbox = $ArmHitboxR
 @onready var leg_hitbox: Hitbox = $LegHitbox
 
 var _target_head: Transform3D
@@ -120,10 +120,18 @@ func _process(delta: float) -> void:
 	holster.global_transform = Transform3D(
 		yaw, Vector3(head_pos.x, global_position.y + 1.0, head_pos.z) + yaw * hip)
 	var torso_pos := torso_hitbox.global_position
-	_place_limb(left_arm, torso_pos + yaw * Vector3(-SHOULDER_LOCAL.x, SHOULDER_LOCAL.y, 0.0),
-			left_hand.global_position)
-	_place_limb(right_arm, torso_pos + yaw * Vector3(SHOULDER_LOCAL.x, SHOULDER_LOCAL.y, 0.0),
-			right_hand.global_position)
+	var left_shoulder := torso_pos + yaw * Vector3(-SHOULDER_LOCAL.x, SHOULDER_LOCAL.y, 0.0)
+	var right_shoulder := torso_pos + yaw * Vector3(SHOULDER_LOCAL.x, SHOULDER_LOCAL.y, 0.0)
+	_place_limb(left_arm, left_shoulder, left_hand.global_position)
+	_place_limb(right_arm, right_shoulder, right_hand.global_position)
+	var gun_left := _gun_drawn and not _gun_free and _gun_held_left
+	var gun_right := _gun_drawn and not _gun_free and not _gun_held_left
+	arm_hitbox_l.place_along_limb(left_shoulder, left_hand.global_position,
+			Hitbox.ARM_GUN_HAND_WRIST_INSET if gun_left else Hitbox.ARM_WRIST_INSET,
+			Hitbox.ARM_GUN_HAND_RADIUS_SCALE if gun_left else Hitbox.ARM_RADIUS_SCALE)
+	arm_hitbox_r.place_along_limb(right_shoulder, right_hand.global_position,
+			Hitbox.ARM_GUN_HAND_WRIST_INSET if gun_right else Hitbox.ARM_WRIST_INSET,
+			Hitbox.ARM_GUN_HAND_RADIUS_SCALE if gun_right else Hitbox.ARM_RADIUS_SCALE)
 	if _gun_free or _gun_spinning:
 		gun.global_transform = gun.global_transform.interpolate_with(_target_gun, weight)
 
@@ -156,3 +164,11 @@ func hitbox_rids() -> Array[RID]:
 		arm_hitbox_r.get_rid(),
 		leg_hitbox.get_rid(),
 	]
+
+
+func gun_hand_hitbox_rids() -> Array[RID]:
+	if not _gun_drawn or _gun_free:
+		return [arm_hitbox_l.get_rid(), arm_hitbox_r.get_rid()]
+	if _gun_held_left:
+		return [arm_hitbox_l.get_rid()]
+	return [arm_hitbox_r.get_rid()]

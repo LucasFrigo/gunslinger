@@ -17,8 +17,8 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Barrel smoke | `planned` | Roadmap (Polish / visual); stub `muzzle_smoke` already fires from `ImpactFeedback.shot_fired` — wants a lingering plume from the barrel |
 | Head / torso / arm / leg hitboxes | `done` | `player/hitbox.gd`, `combat/combat_rules.gd` |
 | Regional hit effects | `done` | Head instakill; torso/limb 1 HP (default HP 2); arm force-holsters + redraw lock; leg slows move. MP host HP + `_mp_wound` |
-| Self-damage | `done` | Player/peer bullets can hit the shooter after `self_hit_grace` (~0.28m) so a normal muzzle shot does not clip the gun-hand arm. Same regional HP / arm-disarm / leg-slow; a self-kill loses the duel (`You shot yourself`). AI still excludes its own hitboxes |
-| Self-hit hitbox tweak | `planned` | Roadmap (Easy); tune shooter volumes (esp. gun-hand arm) so grace + hitboxes feel fair |
+| Self-damage | `done` | Player/peer bullets can hit the shooter after `self_hit_grace` (~0.28m) on the **gun-hand arm only**, so a normal muzzle shot does not clip the forearm. Torso / head / off-hand / legs count immediately (muzzle into body, close miss). Same regional HP / arm-disarm / leg-slow; a self-kill loses the duel (`You shot yourself`). AI still excludes its own hitboxes |
+| Self-hit hitbox tweak | `done` | Gun-hand arm is a thinner wrist-inset capsule along the limb (`Hitbox.place_along_limb`); off-hand uses a milder inset. Local player + remote avatar. Grace skips only that arm RID |
 | Early-draw foul | `done` | duel state machine. Hits only apply during DRAW; a post-foul shot cannot overwrite the DQ |
 | Near-miss slow-mo hook | `done` | `TimeManager.notify_near_miss`, `weapons/bullet.gd` |
 | Gravity-drop / interactive reload | `done` | Gun-hand B opens; sustained shake dump; torso `AmmoBelt` + **off-hand** `ReloadProbe` overlap; `ChamberArea` seats; `BumpArea` bump or swing close (Flat `R` / Space). Layer `reload`. F3 **Show reload volumes**. Dump/swing in `GameManager.tuning`. Cylinder swings out on gate and indexes 60° per shot (`weapons/revolver/revolver.gd`) |

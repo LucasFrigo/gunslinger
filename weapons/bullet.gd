@@ -7,7 +7,9 @@ extends Node3D
 ##
 ## `authoritative` decides whether this instance can deal damage: true in
 ## single player, and true only on the HOST in multiplayer (remote clients
-## see visual-only tracers).
+## see visual-only tracers). Player/peer shots ignore the gun-hand arm inside
+## `self_hit_grace` of the muzzle; other self volumes (torso, head, off-hand)
+## apply immediately so a muzzle-into-body shot still counts.
 
 const GROUP := "bullets"
 const MAX_RANGE := 120.0
@@ -22,6 +24,10 @@ var authoritative := true
 var exclude: Array[RID] = []
 var from_local_player := false
 var self_hit_grace := 0.0
+## Shooter volumes skipped inside `self_hit_grace` (gun-hand arm). Empty falls
+## back to `exclude`. Torso / head / off-hand are not in this list so a muzzle
+## into the body still registers.
+var grace_rids: Array[RID] = []
 
 var _travelled := 0.0
 var _trail: BulletTrail
@@ -31,7 +37,7 @@ var _spawn_origin := Vector3.ZERO
 
 static func spawn(parent: Node, origin: Vector3, dir: Vector3, bullet_speed: float,
 		is_authoritative: bool, exclude_rids: Array[RID], local_shooter: bool,
-		hit_grace := 0.0) -> Bullet:
+		hit_grace := 0.0, self_grace_rids: Array[RID] = []) -> Bullet:
 	var bullet := Bullet.new()
 	bullet.direction = dir.normalized()
 	bullet.speed = bullet_speed
@@ -39,6 +45,8 @@ static func spawn(parent: Node, origin: Vector3, dir: Vector3, bullet_speed: flo
 	bullet.exclude = exclude_rids
 	bullet.from_local_player = local_shooter
 	bullet.self_hit_grace = hit_grace
+	bullet.grace_rids = self_grace_rids.duplicate() if not self_grace_rids.is_empty() \
+			else exclude_rids.duplicate()
 	# Position must be known before `_ready`: that is when the trail records
 	# its first point. `add_child` runs `_ready` immediately.
 	bullet._spawn_origin = origin
@@ -162,7 +170,7 @@ func _check_near_miss(from: Vector3, to: Vector3) -> void:
 
 
 func _ignore_self_hit(hit: Dictionary) -> bool:
-	if self_hit_grace <= 0.0 or exclude.is_empty():
+	if self_hit_grace <= 0.0 or grace_rids.is_empty():
 		return false
 	var pos: Vector3 = hit.get("position", global_position)
 	if pos.distance_to(_spawn_origin) >= self_hit_grace:
@@ -170,4 +178,4 @@ func _ignore_self_hit(hit: Dictionary) -> bool:
 	var collider: Object = hit.get("collider")
 	if collider == null or not collider.has_method("get_rid"):
 		return false
-	return exclude.has(collider.get_rid())
+	return grace_rids.has(collider.get_rid())

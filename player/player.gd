@@ -10,6 +10,9 @@ const VR_RIG := "res://player/vr_rig.tscn"
 const FLAT_RIG := "res://player/flat_rig.tscn"
 const HOLSTER_GRAB_RADIUS := 0.45
 const HOLSTER_HIP := Vector3(0.25, 0.0, 0.05)
+const ARM_SHOULDER_LOCAL := Vector3(0.20, 0.22, 0.0)
+## Flat rest pose: hanging hand relative to torso center (no tracked controllers).
+const ARM_FLAT_HAND_LOCAL := Vector3(0.28, -0.32, 0.04)
 const POSE_SEND_HZ := 30.0
 const RELOAD_VIZ_NAME := "_ReloadVolumeViz"
 const GUN_RECOVER_Y := -5.0
@@ -110,13 +113,21 @@ func _follow_body() -> void:
 	var torso_pos := Vector3(head.origin.x, global_position.y + 1.1, head.origin.z)
 	torso_hitbox.global_transform = Transform3D(yaw, torso_pos)
 
-	var left_arm := torso_pos + yaw * Vector3(-0.32, 0.22, 0.0)
-	var right_arm := torso_pos + yaw * Vector3(0.32, 0.22, 0.0)
+	var left_shoulder := torso_pos + yaw * Vector3(-ARM_SHOULDER_LOCAL.x, ARM_SHOULDER_LOCAL.y, 0.0)
+	var right_shoulder := torso_pos + yaw * Vector3(ARM_SHOULDER_LOCAL.x, ARM_SHOULDER_LOCAL.y, 0.0)
+	var left_hand := torso_pos + yaw * Vector3(
+		-ARM_FLAT_HAND_LOCAL.x, ARM_FLAT_HAND_LOCAL.y, ARM_FLAT_HAND_LOCAL.z)
+	var right_hand := torso_pos + yaw * ARM_FLAT_HAND_LOCAL
 	if use_vr:
-		left_arm = left_arm.lerp(rig.get_left_hand_transform().origin, 0.65)
-		right_arm = right_arm.lerp(rig.get_right_hand_transform().origin, 0.65)
-	arm_hitbox_l.global_transform = Transform3D(yaw, left_arm)
-	arm_hitbox_r.global_transform = Transform3D(yaw, right_arm)
+		left_hand = rig.get_left_hand_transform().origin
+		right_hand = rig.get_right_hand_transform().origin
+	var gun_hand := held_gun_hand()
+	arm_hitbox_l.place_along_limb(left_shoulder, left_hand,
+			Hitbox.ARM_GUN_HAND_WRIST_INSET if gun_hand == HAND_LEFT else Hitbox.ARM_WRIST_INSET,
+			Hitbox.ARM_GUN_HAND_RADIUS_SCALE if gun_hand == HAND_LEFT else Hitbox.ARM_RADIUS_SCALE)
+	arm_hitbox_r.place_along_limb(right_shoulder, right_hand,
+			Hitbox.ARM_GUN_HAND_WRIST_INSET if gun_hand == HAND_RIGHT else Hitbox.ARM_WRIST_INSET,
+			Hitbox.ARM_GUN_HAND_RADIUS_SCALE if gun_hand == HAND_RIGHT else Hitbox.ARM_RADIUS_SCALE)
 	leg_hitbox.global_transform = Transform3D(
 		yaw, Vector3(head.origin.x, global_position.y + 0.4, head.origin.z))
 
@@ -154,6 +165,16 @@ func hitbox_rids() -> Array[RID]:
 		arm_hitbox_r.get_rid(),
 		leg_hitbox.get_rid(),
 	]
+
+
+func gun_hand_hitbox_rids() -> Array[RID]:
+	match held_gun_hand():
+		HAND_LEFT:
+			return [arm_hitbox_l.get_rid()]
+		HAND_RIGHT:
+			return [arm_hitbox_r.get_rid()]
+		_:
+			return [arm_hitbox_l.get_rid(), arm_hitbox_r.get_rid()]
 
 
 # -- Duel lifecycle ---------------------------------------------------------------
@@ -529,7 +550,7 @@ func _on_revolver_fired(origin: Vector3, direction: Vector3) -> void:
 	var authoritative := not NetworkManager.is_active() or NetworkManager.is_host()
 	Bullet.spawn(get_tree().current_scene, origin, direction,
 			GameManager.tuning["bullet_speed"], authoritative, hitbox_rids(), true,
-			float(GameManager.tuning.get("self_hit_grace", 0.28)))
+			float(GameManager.tuning.get("self_hit_grace", 0.28)), gun_hand_hitbox_rids())
 	NetworkManager.send_shot(origin, direction)
 	_refresh_reload_status()
 

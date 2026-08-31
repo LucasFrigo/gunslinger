@@ -15,7 +15,8 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 * **Proximity voice chat:** Nearby players hear each other in world space (volume/falloff by distance). Muted players show an X over the mouth so mute state is readable at a glance.
 
 ## 1. Easy — polish & finish existing hooks
-* **Self-hit hitbox tweak:** Self-damage already applies after `self_hit_grace` (`weapons/bullet.gd`, `player/hitbox.gd`). Tune the shooter's own volumes (especially gun-hand arm) so a normal muzzle shot still does not clip the arm, but a real self-hit (muzzle into body, ricochet-style close miss) reads fairly.
+
+*(none)*
 
 ## 2. Medium — contained mechanics & set pieces
 * **Airborne fire / mystic trick shots:** Optional tech/mystic branch: allow firing while the revolver is tossed and spinning, so you can go for mid-air trick shots. Today fire/reload require `held` (`weapons/weapon_base.gd`). Gate behind a flag so the grounded western default stays.
@@ -36,6 +37,7 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 
 Newest at the top. Keep a one-line note of what shipped and where; details live in [`docs/FEATURES.md`](docs/FEATURES.md).
 
+* **Self-hit hitbox tweak:** Gun-hand arm is a thinner wrist-inset capsule along the limb; muzzle grace skips only that arm so a body-pointed shot still counts. (`done` in FEATURES)
 * **NPC reload:** Spent 6-round cylinder is a combat window: `RELOADING` + arm dip + gate open, `reload_time` per archetype, `WeaponBase.fill_cylinder`. (`done` in FEATURES)
 * **Revolver Ocelot spin:** VR gun-hand stick down hangs the revolver on a finger hinge; hand motion builds spin; stick up relocks. Fire still works. (`done` in FEATURES)
 * **Self-damage:** Player/peer shots can hit the shooter after a muzzle grace; self-kill loses the duel. AI still self-excludes. (`done` in FEATURES)
