@@ -38,6 +38,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Changed
 
+- Meta Store / Quest APK is LAN-only multiplayer: Steam lobby buttons are hidden on Android, and `NetworkManager.steam_available()` stays false there. Steam lobbies remain a desktop / Steam SKU path.
 - Self-hit volumes: the gun-hand arm is a thinner capsule along the limb that stops short of the wrist, and muzzle grace skips only that arm so a normal forward shot does not clip it while a muzzle into the body (or a close miss into torso/off-hand) still counts. Tunable `self_hit_grace`.
 - Revolver mesh: PSX blaster with a 6-chamber cylinder (`assets/models/weapons/wpn_psx_blaster.glb`; pre-cylinder copy at `wpn_psx_blaster_alt.glb`). Gate swings the drum out; each shot indexes 60° and kicks the visible model back. Gameplay `Muzzle` is unchanged.
 - VR draw/holster is hold-to-hold on grip (release near a still hip holsters; a flick tosses). Gun-hand trigger/A/B and off-hand reload swap when the revolver is in the left hand. Left B opens the gate only while left-held; Quest menu button still opens debug.

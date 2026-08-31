@@ -16,7 +16,8 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 
 ## 1. Easy — polish & finish existing hooks
 
-*(none)*
+* **Main-menu settings screen:** A player-facing Settings button on `ui/main_menu.tscn` (flat + VR panel). Audio, comfort/turn mode, holster side, and similar knobs — not the full F3 debug panel (`autoload/debug_menu.gd`). Persist via existing `user://` cfg (`MovementConfig`, etc.). Back returns to the mode select.
+* **Steam lobby multiplayer:** Ship 1v1 over Steam lobbies as the **Steam / PCVR** online path (today LAN is the reliable one). Transport already exists (`netcode/steam_transport.gd` + optional GodotSteam addon; Spacewar app ID 480 until a real AppID). Finish lobby create / browse / join, Steam relay/NAT, and treat Steam as the online counterpart to `enet_transport.gd`. **Meta Store (Quest APK) stays LAN-only** — no Steam, no Meta dedicated servers, no online matchmaking on that SKU. N-player still lives under 4-player MP below.
 
 ## 2. Medium — contained mechanics & set pieces
 * **Airborne fire / mystic trick shots:** Optional tech/mystic branch: allow firing while the revolver is tossed and spinning, so you can go for mid-air trick shots. Today fire/reload require `held` (`weapons/weapon_base.gd`). Gate behind a flag so the grounded western default stays.
@@ -26,8 +27,8 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 ## 3. Hard — new modes & netcode scope
 * **Horde Mode:** Add an endless survival mode featuring wave-based enemy challenges. (Reuses AI/arenas, but needs wave/spawn systems.)
 * **Mexican Standoff (3-Player Duel):** Design a dedicated dynamic mode/map featuring a three-way standoff. (Current netcode is 1v1 host-authoritative; 3P humans share the lobby work with 4-player MP below. Local 1v2 NPCs can land earlier via the item in Medium.)
-* **4-Player Multiplayer:** Expand LAN/Steam beyond 1v1 to 2–4 human players (FFA, 2v2, or 1v3). Needs lobby size, extra spawn marks, remote avatars for every peer, and host-authoritative hits/HP for N combatants.
-* **Ranking & Leaderboard System:** Implement competitive online matchmaking, player ratings, and global/regional leaderboards.
+* **4-Player Multiplayer:** Expand LAN (all SKUs) and Steam (desktop only) beyond 1v1 to 2–4 human players (FFA, 2v2, or 1v3). Needs lobby size, extra spawn marks, remote avatars for every peer, and host-authoritative hits/HP for N combatants. Meta Store does not get a non-LAN online path.
+* **Ranking & Leaderboard System:** Implement competitive online matchmaking, player ratings, and global/regional leaderboards on **Steam / desktop**. Not on the Meta Store SKU (LAN-only MP).
 
 ## 4. Very hard — content & platform systems
 * **Campaign Mode:** Develop a narrative-driven or level-based single-player story mode.

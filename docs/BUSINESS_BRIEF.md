@@ -98,8 +98,8 @@ Status vocabulary: `done` | `partial` | `planned`. Full detail: [`FEATURES.md`](
 
 | Platform | Role | Notes |
 |---|---|---|
-| **Meta Quest Store** | Primary **volume** | Quest 3 export; App Lab vs full store TBD (certification / featuring). ~30% platform fee. |
-| **Steam** | PCVR + wishlist / MP lobbies | GodotSteam for lobbies; own App ID needed. ~30% Valve cut. |
+| **Meta Quest Store** | Primary **volume** | Quest 3 export; App Lab vs full store TBD (certification / featuring). ~30% platform fee. **MP is LAN-only** on this SKU (no Steam, no Meta dedicated servers). |
+| **Steam** | PCVR + wishlist / MP lobbies | GodotSteam for lobbies; own App ID needed. ~30% Valve cut. Online lobbies live here, not on Quest Store. |
 | Flat / Link | Dev + accessibility | Flat is harness; not a primary SKU unless positioned later. |
 
 Cross-buy / Quest↔Steam entitlement: **not defined** — decide in go-to-market (separate SKUs vs key linking).

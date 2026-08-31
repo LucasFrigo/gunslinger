@@ -64,6 +64,9 @@ func transport_kind() -> String:
 
 
 func steam_available() -> bool:
+	# Meta Store / Quest APK is LAN-only; Steam lobbies stay on desktop.
+	if OS.has_feature("android"):
+		return false
 	return SteamTransport.is_available()
 
 

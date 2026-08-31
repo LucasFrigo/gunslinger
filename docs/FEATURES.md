@@ -37,10 +37,10 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Duel vs up to 3 NPCs | `planned` | Roadmap (Medium); local 1–3 AI in one standoff |
 | Gauntlet (6 rungs, 3 lives, session score) | `done` | `gauntlet/gauntlet_controller.gd`, ladder `.tres` |
 | Persistent gauntlet high scores | `planned` | Score is session-only today |
-| 1v1 LAN multiplayer | `done` | `netcode/enet_transport.gd` + UDP discovery; Quest APK gets `INTERNET` + Wi-Fi multicast from `addons/gunslinger_lan_permissions/` at export. Remote avatar is a full greybox (torso/legs/arms + holstered gun). Joiner on `EnemySpawn` faces the host; walk/strafe is world-XZ from look yaw so the 180° spawn root does not invert A/D. Main menu: double-click a LAN host (or Steam lobby) to join |
+| 1v1 LAN multiplayer | `done` | `netcode/enet_transport.gd` + UDP discovery; Quest APK gets `INTERNET` + Wi-Fi multicast from `addons/gunslinger_lan_permissions/` at export. **Meta Store SKU is LAN-only** (no Steam / Meta online). Remote avatar is a full greybox (torso/legs/arms + holstered gun). Joiner on `EnemySpawn` faces the host; walk/strafe is world-XZ from look yaw so the 180° spawn root does not invert A/D. Main menu: double-click a LAN host (or Steam lobby on desktop) to join |
 | Proximity voice chat | `planned` | Roadmap (Polish / visual); spatial voice by distance; muted players show an X over the mouth |
-| 1v1 Steam lobbies | `partial` | `netcode/steam_transport.gd`; addon optional / may be absent |
-| 4-player multiplayer | `planned` | Roadmap (Hard); 2–4 humans (FFA / 2v2 / 1v3); netcode is 1v1 today |
+| 1v1 Steam lobbies | `partial` | `netcode/steam_transport.gd`; addon optional / may be absent. **Desktop / Steam SKU only** — hidden and gated off on Android (`OS.has_feature("android")`). Roadmap (Easy): finish create / browse / join + Steam relay |
+| 4-player multiplayer | `planned` | Roadmap (Hard); 2–4 humans (FFA / 2v2 / 1v3); netcode is 1v1 today. LAN on all SKUs; Steam N-player desktop-only |
 | Horde mode | `planned` | Roadmap |
 | Mexican standoff (3P) | `planned` | Needs netcode beyond 1v1; related to 4-player MP |
 | Campaign | `planned` | Roadmap |
@@ -55,8 +55,8 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Moving train duel set piece | `planned` | Roadmap; rooftop arena exists as greybox |
 | AI archetypes (Drunk / Sheriff / Ghost) | `done` | `ai/*.tres`; Sheriff/Ghost strafe around the enemy spawn marker (not scene origin). `reload_time` per archetype |
 | NPC reload | `done` | Spent cylinder is a combat window: `AIState.RELOADING`, arm dip, `open_gate` → wait `reload_time` (Drunk 3.5 / Sheriff 2.2 / Ghost 1.4, scaled by `ai_speed_mult`) → `fill_cylinder` / `close_gate`. Same 6-round limit as the player. Arm hit / death / duel-over cancel and close the gate; ammo stays empty across disarm. `ai/duelist_ai.gd`, `WeaponBase.fill_cylinder` |
-| Quest 3 / PCVR / flat harness | `done` | OpenXR + `--flat` |
-| Ranking / leaderboards | `planned` | Roadmap |
+| Quest 3 / PCVR / flat harness | `done` | OpenXR + `--flat`. Meta Store APK: LAN MP only; Steam lobby UI is hidden |
+| Ranking / leaderboards | `planned` | Roadmap (Hard); Steam / desktop. Not on Meta Store |
 | Mod support | `planned` | Roadmap |
 
 ## Tooling
@@ -64,6 +64,7 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Feature | Status | Notes / key paths |
 |---|---|---|
 | Debug panel + presets | `done` | `autoload/debug_menu.gd`, `user://*.cfg` |
+| Settings screen (main menu) | `planned` | Roadmap (Easy); Settings on `ui/main_menu.tscn` (audio / comfort / holster). Debug panel stays F3 / Quest menu |
 | Blender MCP | `done` | Project `.cursor/mcp.json` → `uvx blender-mcp` → Blender addon on `localhost:9876`. Client helper `dev/blender_mcp.py` |
 | In-game version tag | `done` | HUD corner + main menu; `ProjectSettings` `application/config/version` (`VERSION`) |
 | Headless autotests | `done` | `dev/autotest.gd` |

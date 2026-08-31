@@ -38,7 +38,13 @@ func _ready() -> void:
 	NetworkManager.steam_lobbies_updated.connect(_on_steam_lobbies)
 	NetworkManager.network_error.connect(_set_status)
 
-	if not NetworkManager.steam_available():
+	if OS.has_feature("android"):
+		# Meta Store SKU: LAN only — no Steam lobby chrome on the headset.
+		%SteamRow.visible = false
+		steam_list.visible = false
+		%JoinSteamButton.visible = false
+		%SteamNote.visible = false
+	elif not NetworkManager.steam_available():
 		for button in [%HostSteamButton, %RefreshSteamButton, %JoinSteamButton]:
 			(button as Button).disabled = true
 		%SteamNote.text = "Steam: GodotSteam extension not installed (LAN still works)."

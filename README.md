@@ -1,7 +1,8 @@
 # Gunslinger VR — Wild West Gun Duels
 
 A Godot 4.x VR dueling game: single-player gauntlet against AI gunslingers and
-1v1 multiplayer over LAN (dev) or Steam lobbies (shipping). Bullets are real
+1v1 multiplayer over LAN (all platforms) or Steam lobbies (desktop / Steam SKU
+only — the Meta Store Quest APK is LAN-only). Bullets are real
 slow projectiles with Superhot-style visible trajectories, and slow motion is
 fully tunable at runtime so you can A/B test what feels best.
 
