@@ -50,6 +50,7 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Feature | Status | Notes / key paths |
 |---|---|---|
 | Revolver mesh | `done` | PSX blaster `assets/models/weapons/wpn_psx_blaster.glb` (cylinder + gate/index anim). Pre-cylinder mesh kept as `wpn_psx_blaster_alt.glb`. Greybox `Barrel` / `Cylinder` / `Grip` stay hidden |
+| Gunslinger character mesh | `partial` | Low-poly A-pose (empty hands) at `assets/models/characters/gunslinger.glb` + Blender source `gunslinger.blend`. Split serape/black poncho is a separate Cloth sim (baked for the GLB). Not on AI or the remote avatar yet |
 | Arenas (Main Street, Saloon, Train Rooftop, Canyon) | `partial` | Greybox CSG; real art TBD |
 | Moving train duel set piece | `planned` | Roadmap; rooftop arena exists as greybox |
 | AI archetypes (Drunk / Sheriff / Ghost) | `done` | `ai/*.tres`; Sheriff/Ghost strafe around the enemy spawn marker (not scene origin). `reload_time` per archetype |
@@ -63,6 +64,7 @@ Open bugs: [`BUGS.md`](BUGS.md)
 | Feature | Status | Notes / key paths |
 |---|---|---|
 | Debug panel + presets | `done` | `autoload/debug_menu.gd`, `user://*.cfg` |
+| Blender MCP | `done` | Project `.cursor/mcp.json` → `uvx blender-mcp` → Blender addon on `localhost:9876`. Client helper `dev/blender_mcp.py` |
 | In-game version tag | `done` | HUD corner + main menu; `ProjectSettings` `application/config/version` (`VERSION`) |
 | Headless autotests | `done` | `dev/autotest.gd` |
 | Quest APK sideload | `done` | `dev/install-quest.bat` (`adb install -r` → `builds/vr/gunslinger-quest.apk`) |
