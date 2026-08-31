@@ -4,6 +4,7 @@ extends Node
 ##   gauntlet - clears two gauntlet rungs by force-killing the AI
 ##   host     - hosts a LAN game, waits for a peer, wins the MP duel
 ##   join     - joins 127.0.0.1, expects to lose the MP duel
+##   steam    - SteamTransport parses; is_available() is false without GodotSteam
 ## Prints AUTOTEST PASS / AUTOTEST FAIL and sets the exit code.
 
 var mode := "duel"
@@ -25,6 +26,8 @@ func _ready() -> void:
 			_test_join()
 		"load":
 			_test_load_all()
+		"steam":
+			_test_steam()
 		_:
 			_fail("unknown mode %s" % mode)
 
@@ -128,7 +131,39 @@ func _test_load_all() -> void:
 	var ladder: GauntletLadder = load(GameManager.GAUNTLET_LADDER)
 	if ladder.encounters.size() != 6:
 		return _fail("ladder has %d encounters, expected 6" % ladder.encounters.size())
+	if not _steam_transport_ok():
+		return
 	_pass()
+
+
+## SteamTransport must parse without GodotSteam. CI has no addon, so
+## is_available() is false and host/join stay ERR_UNAVAILABLE.
+func _test_steam() -> void:
+	await _sleep(0.2)
+	if not _steam_transport_ok():
+		return
+	_pass()
+
+
+func _steam_transport_ok() -> bool:
+	var steam := SteamTransport.new(multiplayer)
+	if steam.kind() != "steam":
+		_fail("SteamTransport.kind() was '%s'" % steam.kind())
+		return false
+	if SteamTransport.is_available():
+		print("AUTOTEST: GodotSteam present; SteamTransport.is_available() true")
+		return true
+	print("AUTOTEST: SteamTransport loads; is_available() false (no addon)")
+	if steam.host() != ERR_UNAVAILABLE:
+		_fail("SteamTransport.host() should be ERR_UNAVAILABLE without Steam")
+		return false
+	if steam.join(0) != ERR_UNAVAILABLE:
+		_fail("SteamTransport.join() should be ERR_UNAVAILABLE without Steam")
+		return false
+	if NetworkManager.steam_available():
+		_fail("NetworkManager.steam_available() true without GodotSteam")
+		return false
+	return true
 
 
 # -- Helpers ---------------------------------------------------------------------

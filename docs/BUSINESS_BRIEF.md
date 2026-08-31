@@ -1,7 +1,7 @@
 # Gunslinger VR — Business Brief
 
 Briefing for business / pricing / go-to-market refinement.  
-**Audience:** planning agents or humans. **Source of truth for features:** [`FEATURES.md`](FEATURES.md), [`../Roadmap.md`](../Roadmap.md), [`../README.md`](../README.md).  
+**Audience:** planning agents or humans. **Source of truth for features:** [`FEATURES.md`](FEATURES.md), [`../Roadmap.md`](../Roadmap.md), [`../README.md`](../README.md). **Ship checklist:** [`RELEASE_TODOS.md`](RELEASE_TODOS.md).  
 **As of:** 2026-08-20 · **Code version:** `0.1.0-alpha` (see [`../VERSION`](../VERSION))
 
 ---
@@ -22,7 +22,7 @@ Briefing for business / pricing / go-to-market refinement.
 | Primary platforms (shipping intent) | **Meta Quest Store** (Quest 3 standalone) + **Steam** (PCVR; Steam lobbies for MP) |
 | Secondary / harness | Flat desktop test mode (`--flat`); OpenXR PCVR (SteamVR / Quest Link) |
 | Monetization (assumed) | Premium paid (no IAP planned today) |
-| Multiplayer | 1v1 LAN (done); 1v1 Steam lobbies (partial — GodotSteam optional) |
+| Multiplayer | 1v1 LAN (done); 1v1 Steam lobbies (done — GodotSteam 4.22 in-repo; App ID 480 until owned) |
 | Studio context | Solo / small indie; developer based in **Brazil** |
 | Language / storefront | Product English today; localized **prices** planned (esp. BRL) |
 
@@ -65,6 +65,7 @@ Status vocabulary: `done` | `partial` | `planned`. Full detail: [`FEATURES.md`](
 - Free duel (arena + AI pick); gauntlet (6 rungs, 3 lives, session score).  
 - AI archetypes: Drunk / Sheriff / Ghost.  
 - 1v1 LAN multiplayer + UDP discovery.  
+- 1v1 Steam lobbies (create / browse / join + Steam Datagram Relay; GodotSteam optional; app ID 480 until owned — see [`RELEASE_TODOS.md`](RELEASE_TODOS.md)).  
 - Slow-mo modes (SP); near-miss hook; kill cam (SP + 1v1 MP, VR spectator ride).  
 - Duel-end sting on lethal hit (`duel_end.wav`). 
 - Impact feedback stubs (SFX / VFX / haptics).  
@@ -75,7 +76,6 @@ Status vocabulary: `done` | `partial` | `planned`. Full detail: [`FEATURES.md`](
 
 - Interactive reload (gun-hand B open / sustained shake dump / torso belt physical rounds / off-hand bump-swing close; HUD status; dump/close live-tunable; flip polish TBD).  
 - Arenas: Main Street, Saloon, Train Rooftop, Canyon — **greybox CSG**; real art TBD.  
-- Steam lobbies transport (addon optional / may be absent; app ID 480 until owned).  
 - Audio/VFX catalogs are stub-swap paths (placeholders → final assets).
 
 ### Planned (roadmap — not required for thin v1, raise price if shipped)
@@ -182,7 +182,7 @@ PRODUCT: Gunslinger VR — Godot 4 Wild West VR duel game.
 HOOK: Standoff gunfights with real projectile bullets, visible trails, Superhot-style
       tunable slow-mo; physical revolver draw/reload; SP gauntlet + 1v1 MP.
 PLATFORMS: Meta Quest Store (Quest 3) + Steam PCVR; premium paid assumed.
-STATUS (v0.1.0): Core duel, gauntlet, LAN MP done; Steam MP partial; arenas greybox;
+STATUS (v0.1.0): Core duel, gauntlet, LAN MP + Steam 1v1 lobbies done; arenas greybox;
       reload/AV partial; campaign/horde/3P/leaderboards planned.
 PRICE REC: USD $14.99–$19.99 center ($16.99 or $19.99 if polished); avoid <$9.99
       unless EA; $24.99 only if premium depth. Same USD on both stores.
@@ -201,6 +201,7 @@ ASK: Refine GTM, exact price ladder, regional matrix, launch format, and financi
 |---|---|
 | [`FEATURES.md`](FEATURES.md) | What exists / partial / planned |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Systems ownership |
+| [`RELEASE_TODOS.md`](RELEASE_TODOS.md) | Pre-release TODOs and attention points |
 | [`../Roadmap.md`](../Roadmap.md) | Future work by difficulty |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | User-facing history |
 | [`../README.md`](../README.md) | Controls, run instructions, structure |

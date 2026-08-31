@@ -2,6 +2,8 @@
 
 How major systems fit together. Keep this short; link to files. Update when ownership or flow changes.
 
+Pre-release TODOs: [`RELEASE_TODOS.md`](RELEASE_TODOS.md).
+
 ## Runtime stack
 
 - **Engine:** Godot 4.6+/4.7, GDScript, GL Compatibility.
@@ -20,7 +22,7 @@ How major systems fit together. Keep this short; link to files. Update when owne
 | Autoload | Role |
 |---|---|
 | `TimeManager` | `Engine.time_scale` slow-mo modes (SP); kill-cam burst also in MP after RESOLUTION |
-| `NetworkManager` | Session lifecycle; picks ENet or Steam transport |
+| `NetworkManager` | Session lifecycle; picks ENet or Steam transport. Desktop: one long-lived `SteamTransport` for init, `run_callbacks`, and lobby browse; session `transport` points at it while hosting/joining Steam. |
 | `GameManager` | Mode selection, scenario list, high-level flow |
 | `MovementConfig` | Flat/VR movement knobs → `user://movement.cfg` |
 | `DebugPresets` / `DebugMenu` | Live tuning + named presets |
@@ -44,8 +46,9 @@ How major systems fit together. Keep this short; link to files. Update when owne
 
 ## Multiplayer
 
-- Interface in `netcode/`; `enet_transport.gd` (LAN + UDP discovery), `steam_transport.gd` (optional addon).
+- Interface in `netcode/`; `enet_transport.gd` (LAN + UDP discovery), `steam_transport.gd` (optional GodotSteam GDExtension).
 - **SKU split:** Meta Store / Quest APK is **LAN-only**. Steam lobbies are desktop / Steam. `NetworkManager.steam_available()` is false on Android; `ui/main_menu.gd` hides Steam host/join chrome there. No Meta dedicated-server path.
+- **Steam 1v1:** `NetworkManager` inits Steam once on desktop (`steamInitEx` app ID 480, then `initRelayNetworkAccess`). GodotSteam 4.22 lives in `addons/godotsteam/` (not enabled as an editor plugin; the GDExtension loads on its own). `steam_appid.txt` + Project Settings `steam/initialization/app_id` are 480 for editor/dev; `addons/gunslinger_steam_export/` copies that file next to Windows/Linux/macOS executables. Lobby metadata: `gunslinger=1`, display name, `gunslinger_version`. Browse uses worldwide distance + that game key. `SteamMultiplayerPeer` is created with `server_relay`. Host session starts on `lobby_ready`; joiner waits until the Godot peer is `CONNECTION_CONNECTED`. Full lobby (2/2) is set unjoinable until the peer leaves. `close()` leaves the lobby and drops the peer; it does not shut Steam down. Overlay invite on host is best-effort (`activateGameOverlayInviteDialog`).
 - LAN discovery (`lan_discovery.gd`): host beacon on UDP 9100 answers pings and announces `ip|name` on `255.255.255.255` plus subnet `.255`. Gameplay ENet is UDP 9099, bound to IPv4 `0.0.0.0`.
 - Quest Android export: `addons/gunslinger_lan_permissions/` injects `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, and `CHANGE_WIFI_MULTICAST_STATE` into the manifest at gradle export (also set on `export_presets.cfg`). Without `INTERNET`, `create_server` fails with "Can't create" on device. Steam Link + editor is Windows networking, not the APK. GodotSteam is excluded from the Android preset (`exclude_filter`).
 - Pose / shot sync; host validates hits and HP; non-fatal wounds via `_mp_wound`; auto rematch. Gameplay slow-mo off while networked; kill-cam burst still plays after `RESOLUTION` from `_mp_finish` trail points. Pose RPC is `head, left, right, flags, gun_transform`. Flags: `GUN_DRAWN`, `GUN_COCKED`, `GUN_FREE`, `HOLSTER_LEFT`, `GUN_HELD_LEFT`, `GUN_SPINNING`. Remote interpolates a free or spinning gun; does not simulate physics.
@@ -60,4 +63,4 @@ Build identity is `VERSION` (mirrored in `project.godot` → `application/config
 
 ## Tests
 
-`dev/autotest.gd` — headless `--autotest=duel|gauntlet|load|host|join`. Prefer extending these when changing duel or load paths.
+`dev/autotest.gd` — headless `--autotest=duel|gauntlet|load|host|join|steam`. Prefer extending these when changing duel or load paths. `steam` asserts `SteamTransport` parses and stays unavailable without GodotSteam (CI has no addon).

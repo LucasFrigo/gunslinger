@@ -24,11 +24,11 @@ func _ready() -> void:
 	%GauntletButton.pressed.connect(GameManager.start_gauntlet)
 	%FreeDuelButton.pressed.connect(func() -> void:
 		GameManager.start_free_duel(scenario_option.selected, enemy_option.selected))
-	%HostLanButton.pressed.connect(func() -> void: NetworkManager.host_lan())
+	%HostLanButton.pressed.connect(_host_lan)
 	%JoinIpButton.pressed.connect(func() -> void: NetworkManager.join_lan(ip_edit.text))
 	%JoinLanButton.pressed.connect(_join_selected_lan)
 	lan_list.item_activated.connect(_join_lan_at)
-	%HostSteamButton.pressed.connect(func() -> void: NetworkManager.host_steam())
+	%HostSteamButton.pressed.connect(_host_steam)
 	%RefreshSteamButton.pressed.connect(NetworkManager.refresh_steam_lobbies)
 	%JoinSteamButton.pressed.connect(_join_selected_steam)
 	steam_list.item_activated.connect(_join_steam_at)
@@ -48,15 +48,32 @@ func _ready() -> void:
 		for button in [%HostSteamButton, %RefreshSteamButton, %JoinSteamButton]:
 			(button as Button).disabled = true
 		%SteamNote.text = "Steam: GodotSteam extension not installed (LAN still works)."
+	else:
+		%SteamNote.text = "Steam lobbies refresh automatically. Hosting opens the overlay invite if Steam overlay is on."
 
 	visibility_changed.connect(_on_visibility_changed)
 	_on_lan_hosts([])
+	if not OS.has_feature("android") and NetworkManager.steam_available():
+		steam_list.clear()
+		steam_list.add_item("Searching for Steam lobbies...")
+		steam_list.set_item_disabled(0, true)
 	_on_visibility_changed()
 
 
 func _on_visibility_changed() -> void:
-	# Only scan the LAN while the menu is actually open.
-	NetworkManager.browse_lan(is_visible_in_tree())
+	var open := is_visible_in_tree()
+	NetworkManager.browse_lan(open)
+	NetworkManager.browse_steam(open and not OS.has_feature("android"))
+
+
+func _host_lan() -> void:
+	_set_status("Hosting LAN game...")
+	NetworkManager.host_lan()
+
+
+func _host_steam() -> void:
+	_set_status("Creating Steam lobby...")
+	NetworkManager.host_steam()
 
 
 func _join_selected_lan() -> void:

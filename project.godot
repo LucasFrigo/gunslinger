@@ -37,7 +37,7 @@ window/size/viewport_height=720
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot-xr-tools/plugin.cfg", "res://addons/gunslinger_lan_permissions/plugin.cfg")
+enabled=PackedStringArray("res://addons/godot-xr-tools/plugin.cfg", "res://addons/gunslinger_lan_permissions/plugin.cfg", "res://addons/gunslinger_steam_export/plugin.cfg")
 
 [input]
 
@@ -115,6 +115,10 @@ common/physics_ticks_per_second=90
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
+
+[steam]
+
+initialization/app_data/app_id=480
 
 [xr]
 

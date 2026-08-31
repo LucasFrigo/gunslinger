@@ -11,6 +11,8 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Added
 
+- 1v1 Steam lobbies (desktop / PCVR): create, browse, and join public matches over Steam Datagram Relay (`netcode/steam_transport.gd`). Lobby list auto-refreshes on the main menu; full (2/2) lobbies hide and become unjoinable. Host HUD shows a Steam wait line instead of LAN IPs. GodotSteam 4.22 is vendored in `addons/godotsteam/`; Meta Store / Quest APK remains LAN-only. App ID 480 (Spacewar) until the game has its own.
+- Pre-release checklist [`docs/RELEASE_TODOS.md`](docs/RELEASE_TODOS.md) (store / SKU / MP test gotchas). Agents update it when a shippable feature lands.
 - Low-poly A-pose gunslinger mesh (`assets/models/characters/gunslinger.glb`, Blender source `gunslinger.blend`): split serape/black cloth poncho, hat with three crown spikes. Not wired to AI or the remote avatar yet.
 - NPC reload: AI duelists empty a 6-round cylinder and spend `reload_time` reloading (Drunk 3.5s, Sheriff 2.2s, Ghost 1.4s, scaled by `ai_speed_mult`) instead of instantly refilling. Gate opens and the arm dips for a readable window; arm hits cancel without restoring ammo.
 - VR Revolver Ocelot spin: while the gun is held, push the gun-hand stick down to hang it on a finger hinge; hand motion builds momentum; stick up snaps it back. Trigger still fires along the barrel. Hang gravity uses the barrel COM so the muzzle drops promptly. Tunable in the debug panel (**VR Spin**: `spin_stick_threshold`, `spin_damping`, `spin_gravity`, `spin_inertia`, `spin_coupling`, `spin_relock_time`).

@@ -19,10 +19,15 @@ const POSE_FLAG_GUN_FREE := 4
 const POSE_FLAG_HOLSTER_LEFT := 8
 const POSE_FLAG_GUN_HELD_LEFT := 16
 const POSE_FLAG_GUN_SPINNING := 32
+const STEAM_REFRESH_SEC := 4.0
 
 var transport: NetworkTransport
 var discovery: LanDiscovery
 var session_active := false
+
+var _steam: SteamTransport
+var _steam_browse := false
+var _steam_refresh_accum := 0.0
 
 
 func _ready() -> void:
@@ -37,10 +42,24 @@ func _ready() -> void:
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 
+	if steam_available():
+		_steam = SteamTransport.new(multiplayer)
+		_steam.lobbies_updated.connect(_on_steam_lobbies)
+		_steam.transport_failed.connect(_on_steam_failed)
+		_steam.lobby_ready.connect(_on_steam_lobby_ready)
 
-func _process(_delta: float) -> void:
-	if transport != null:
+
+func _process(delta: float) -> void:
+	if _steam != null:
+		_steam.poll()
+	if transport != null and transport != _steam:
 		transport.poll()
+	_try_begin_steam_join()
+	if _steam_browse and not session_active and _steam != null:
+		_steam_refresh_accum += delta
+		if _steam_refresh_accum >= STEAM_REFRESH_SEC:
+			_steam_refresh_accum = 0.0
+			refresh_steam_lobbies()
 
 
 # -- Session queries ---------------------------------------------------------
@@ -68,6 +87,10 @@ func steam_available() -> bool:
 	if OS.has_feature("android"):
 		return false
 	return SteamTransport.is_available()
+
+
+func steam_lobby_label() -> String:
+	return _steam.lobby_label() if _steam != null else "Steam lobby"
 
 
 # -- LAN ---------------------------------------------------------------------
@@ -114,43 +137,70 @@ func lan_addresses() -> PackedStringArray:
 # -- Steam -------------------------------------------------------------------
 
 func host_steam() -> Error:
-	if not steam_available():
+	if _steam == null:
 		network_error.emit("GodotSteam extension not found. See README.")
 		return ERR_UNAVAILABLE
 	leave("switching session")
-	var steam := SteamTransport.new(multiplayer)
-	transport = steam
-	steam.transport_failed.connect(func(reason: String) -> void: network_error.emit(reason))
-	steam.lobby_ready.connect(func(_lobby: int) -> void: _begin_session(true))
-	return steam.host()
+	transport = _steam
+	var err := _steam.host()
+	if err != OK:
+		transport = null
+	return err
 
 
 func join_steam(lobby_id: int) -> Error:
-	if not steam_available():
+	if _steam == null:
 		network_error.emit("GodotSteam extension not found. See README.")
 		return ERR_UNAVAILABLE
 	leave("switching session")
-	var steam := SteamTransport.new(multiplayer)
-	transport = steam
-	steam.transport_failed.connect(func(reason: String) -> void: network_error.emit(reason))
-	return steam.join(lobby_id)
+	transport = _steam
+	var err := _steam.join(lobby_id)
+	if err != OK:
+		transport = null
+	return err
 
 
 func refresh_steam_lobbies() -> void:
-	if not steam_available():
+	if _steam == null:
 		steam_lobbies_updated.emit([])
 		return
-	var browser := transport as SteamTransport
-	if browser == null:
-		browser = SteamTransport.new(multiplayer)
-		transport = browser
-	if not browser.lobbies_updated.is_connected(_on_steam_lobbies):
-		browser.lobbies_updated.connect(_on_steam_lobbies)
-	browser.request_lobby_list()
+	_steam.request_lobby_list()
+
+
+func browse_steam(enable: bool) -> void:
+	_steam_browse = enable and _steam != null
+	_steam_refresh_accum = 0.0
+	if _steam_browse and not session_active:
+		refresh_steam_lobbies()
 
 
 func _on_steam_lobbies(lobbies: Array) -> void:
 	steam_lobbies_updated.emit(lobbies)
+
+
+func _on_steam_failed(reason: String) -> void:
+	network_error.emit(reason)
+	leave(reason)
+
+
+func _on_steam_lobby_ready(_lobby: int) -> void:
+	if _steam != null and _steam.is_lobby_host:
+		_begin_session(true)
+		_steam.open_invite_overlay()
+	else:
+		_try_begin_steam_join()
+
+
+func _try_begin_steam_join() -> void:
+	if session_active or _steam == null or transport != _steam:
+		return
+	if _steam.is_lobby_host or _steam.lobby_id == 0:
+		return
+	var peer := multiplayer.multiplayer_peer
+	if peer == null:
+		return
+	if peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+		_begin_session(false)
 
 
 # -- Common ------------------------------------------------------------------
@@ -166,6 +216,8 @@ func leave(reason := "left session") -> void:
 
 
 func _begin_session(as_host: bool) -> void:
+	if session_active:
+		return
 	session_active = true
 	session_started.emit(as_host)
 
@@ -178,10 +230,14 @@ func _local_host_name() -> String:
 
 
 func _on_peer_connected(peer_id: int) -> void:
+	if _steam != null and transport == _steam:
+		_steam.set_joinable(false)
 	peer_joined.emit(peer_id)
 
 
 func _on_peer_disconnected(peer_id: int) -> void:
+	if _steam != null and transport == _steam and session_active:
+		_steam.set_joinable(true)
 	peer_left.emit(peer_id)
 
 

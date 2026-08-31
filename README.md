@@ -8,7 +8,7 @@ fully tunable at runtime so you can A/B test what feels best.
 
 **Version:** see [`VERSION`](VERSION) · **Changelog:** [`CHANGELOG.md`](CHANGELOG.md)  
 **Feature status:** [`docs/FEATURES.md`](docs/FEATURES.md) · **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Bugs:** [`docs/BUGS.md`](docs/BUGS.md) · **Roadmap:** [`Roadmap.md`](Roadmap.md)  
-**Business / pricing brief:** [`docs/BUSINESS_BRIEF.md`](docs/BUSINESS_BRIEF.md)
+**Pre-release TODOs:** [`docs/RELEASE_TODOS.md`](docs/RELEASE_TODOS.md) · **Business / pricing brief:** [`docs/BUSINESS_BRIEF.md`](docs/BUSINESS_BRIEF.md)
 
 ## Requirements
 
@@ -16,10 +16,11 @@ fully tunable at runtime so you can A/B test what feels best.
 - For Quest 3 export: Android SDK + OpenJDK 17 configured in Godot's Editor
   Settings, developer mode enabled on the headset
   ([official guide](https://docs.godotengine.org/en/stable/tutorials/xr/deploying_to_android.html)).
-- For Steam multiplayer (optional, desktop only): the
-  [GodotSteam GDExtension](https://godotsteam.com) 4.20+, dropped into
-  `addons/godotsteam/`. The game runs fine without it (Steam UI is disabled,
-  LAN still works). Uses app ID 480 (Spacewar) until the game has its own.
+- For Steam multiplayer (desktop only): GodotSteam **4.22** GDExtension is
+  vendored in `addons/godotsteam/` (Steamworks 1.65). Restart the editor after
+  a fresh clone so the extension loads. Steam client must be running. Uses app
+  ID **480 (Spacewar)** via `steam_appid.txt` until the game has its own.
+  Quest APK still excludes this addon (`export_presets.cfg`).
 
 ## Running
 
@@ -42,9 +43,27 @@ fully tunable at runtime so you can A/B test what feels best.
    test the Quest APK.
 4. The host starts the duel automatically when the peer connects.
 
-Steam flow (two desktop machines with Steam running): **HOST (STEAM)** on one,
-**REFRESH LOBBIES** + join on the other. Same gameplay code; only the
-transport differs (`netcode/enet_transport.gd` vs `netcode/steam_transport.gd`).
+### Steam lobbies (two desktop PCs)
+
+Steam client must be running on both machines (app ID **480 / Spacewar** until
+the game has its own). GodotSteam is already in this repo.
+
+**From the editor (your PC):** restart Godot after clone, Play (flat is
+easiest), **HOST (STEAM)**. Output should show `SteamTransport: initialized as
+'...' (ok=true)`.
+
+**Bundled zip for a second PC (no Godot install):**
+
+1. Export **Windows (Flat Test)** (`build/gunslinger-flat/gunslinger-flat.exe`).
+   Godot copies `steam_api64.dll` from the GDExtension; the
+   `gunslinger_steam_export` plugin copies `steam_appid.txt` next to the exe.
+2. Zip that folder and send it. The other person: Steam logged in → run the exe
+   → join from the lobby list (auto-refresh, or **REFRESH LOBBIES**).
+3. Two Steam **accounts**. Overlay invite may open on host if overlay is on.
+
+Same gameplay as LAN; traffic uses Steam Datagram Relay. Quest / Meta Store APK
+has no Steam chrome — LAN only. Do not put `steam_appid.txt` on a real Steam
+depot later (Valve: the client already knows the App ID).
 
 ## Controls
 
@@ -118,6 +137,7 @@ addons/      godot-xr-tools (hands/pickup/teleport toolkit for expansion)
 godot --headless --path . -- --autotest=duel      # AI duel resolves via real bullets
 godot --headless --path . -- --autotest=gauntlet  # gauntlet progression
 godot --headless --path . -- --autotest=load      # every scene/resource loads
+godot --headless --path . -- --autotest=steam     # SteamTransport loads without GodotSteam
 # multiplayer: run host first, then join in a second terminal
 godot --headless --path . -- --autotest=host
 godot --headless --path . -- --autotest=join

@@ -2,7 +2,7 @@
 
 Ordered easiest → hardest to implement, given what already exists in the codebase.
 
-**Living status of what already ships:** [`docs/FEATURES.md`](docs/FEATURES.md) · **How systems work:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Bugs:** [`docs/BUGS.md`](docs/BUGS.md) · **Versions:** [`CHANGELOG.md`](CHANGELOG.md) / [`VERSION`](VERSION)
+**Living status of what already ships:** [`docs/FEATURES.md`](docs/FEATURES.md) · **How systems work:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Bugs:** [`docs/BUGS.md`](docs/BUGS.md) · **Pre-release TODOs:** [`docs/RELEASE_TODOS.md`](docs/RELEASE_TODOS.md) · **Versions:** [`CHANGELOG.md`](CHANGELOG.md) / [`VERSION`](VERSION)
 
 When an item below lands (or is clearly underway), update `docs/FEATURES.md`. When it is **done**, move the bullet to **Completed** at the bottom (do not leave strikethrough items in the active lists).
 
@@ -17,7 +17,6 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 ## 1. Easy — polish & finish existing hooks
 
 * **Main-menu settings screen:** A player-facing Settings button on `ui/main_menu.tscn` (flat + VR panel). Audio, comfort/turn mode, holster side, and similar knobs — not the full F3 debug panel (`autoload/debug_menu.gd`). Persist via existing `user://` cfg (`MovementConfig`, etc.). Back returns to the mode select.
-* **Steam lobby multiplayer:** Ship 1v1 over Steam lobbies as the **Steam / PCVR** online path (today LAN is the reliable one). Transport already exists (`netcode/steam_transport.gd` + optional GodotSteam addon; Spacewar app ID 480 until a real AppID). Finish lobby create / browse / join, Steam relay/NAT, and treat Steam as the online counterpart to `enet_transport.gd`. **Meta Store (Quest APK) stays LAN-only** — no Steam, no Meta dedicated servers, no online matchmaking on that SKU. N-player still lives under 4-player MP below.
 
 ## 2. Medium — contained mechanics & set pieces
 * **Airborne fire / mystic trick shots:** Optional tech/mystic branch: allow firing while the revolver is tossed and spinning, so you can go for mid-air trick shots. Today fire/reload require `held` (`weapons/weapon_base.gd`). Gate behind a flag so the grounded western default stays.
@@ -38,6 +37,7 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 
 Newest at the top. Keep a one-line note of what shipped and where; details live in [`docs/FEATURES.md`](docs/FEATURES.md).
 
+* **Steam lobby multiplayer:** 1v1 create / browse / join over Steam Datagram Relay (`netcode/steam_transport.gd`); desktop only; App ID 480 until owned. (`done` in FEATURES)
 * **Self-hit hitbox tweak:** Gun-hand arm is a thinner wrist-inset capsule along the limb; muzzle grace skips only that arm so a body-pointed shot still counts. (`done` in FEATURES)
 * **NPC reload:** Spent 6-round cylinder is a combat window: `RELOADING` + arm dip + gate open, `reload_time` per archetype, `WeaponBase.fill_cylinder`. (`done` in FEATURES)
 * **Revolver Ocelot spin:** VR gun-hand stick down hangs the revolver on a finger hinge; hand motion builds spin; stick up relocks. Fire still works. (`done` in FEATURES)

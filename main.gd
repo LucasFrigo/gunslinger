@@ -12,7 +12,7 @@ func _ready() -> void:
 	_maybe_start_autotest()
 
 
-## Headless CI/dev smoke tests: `godot --headless -- --autotest=duel|gauntlet|host|join`
+## Headless CI/dev smoke tests: `godot --headless -- --autotest=duel|gauntlet|load|host|join|steam`
 func _maybe_start_autotest() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--autotest"):
