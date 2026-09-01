@@ -43,6 +43,7 @@ var left_hand_angular_velocity := Vector3.ZERO
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	left_hand.button_pressed.connect(_on_left_button.bind())
 	left_hand.button_released.connect(_on_left_button_released.bind())
 	right_hand.button_pressed.connect(_on_right_button.bind())
@@ -128,6 +129,9 @@ func reset_locomotion() -> void:
 
 
 func _process(delta: float) -> void:
+	if GameManager.is_pause_open() or get_tree().paused:
+		_update_pointer()
+		return
 	var stick_speed := _apply_locomotion(delta)
 	_update_hand_speeds(delta)
 	_report_motion(delta, stick_speed)
@@ -317,6 +321,7 @@ func _on_right_button_released(button: String) -> void:
 # -- UI laser pointer -----------------------------------------------------------
 
 func _update_pointer() -> void:
+	pointer_ray.force_raycast_update()
 	var panel: UIPanel3D = null
 	var hit_point := Vector3.ZERO
 	if pointer_ray.is_colliding():

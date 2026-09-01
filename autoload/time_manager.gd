@@ -51,6 +51,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if get_tree().paused:
+		return
 	# Timers must run in real time, not scaled time.
 	var real_delta := delta / maxf(Engine.time_scale, 0.001)
 

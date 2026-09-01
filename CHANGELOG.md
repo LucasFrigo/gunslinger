@@ -11,6 +11,8 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Added
 
+- Player-facing Settings on the main menu and in-duel pause (`ui/settings_menu.tscn`): master volume, holster side, VR turn mode, mouse sensitivity, and (flat only) window mode plus resolution with **Apply Display**. Persists to `user://settings.cfg`; other knobs reuse `MovementConfig` / `holster_side`. Debug panel stays F3 (and the VR menu button on the main menu).
+- In-duel pause overlay (`ui/pause_menu.tscn`): Escape (flat) or VR menu button. Single-player pauses the game; multiplayer is overlay-only so the opponent is not frozen. Resume, Settings, Restart Duel / Restart Gauntlet (full run; host-only in MP), Quit to main menu.
 - 1v1 Steam lobbies (desktop / PCVR): create, browse, and join public matches over Steam Datagram Relay (`netcode/steam_transport.gd`). Lobby list auto-refreshes on the main menu; full (2/2) lobbies hide and become unjoinable. Host HUD shows a Steam wait line instead of LAN IPs. GodotSteam 4.22 is vendored in `addons/godotsteam/`; Meta Store / Quest APK remains LAN-only. App ID 480 (Spacewar) until the game has its own.
 - Pre-release checklist [`docs/RELEASE_TODOS.md`](docs/RELEASE_TODOS.md) (store / SKU / MP test gotchas). Agents update it when a shippable feature lands.
 - Low-poly A-pose gunslinger mesh (`assets/models/characters/gunslinger.glb`, Blender source `gunslinger.blend`): split serape/black cloth poncho, hat with three crown spikes. Not wired to AI or the remote avatar yet.

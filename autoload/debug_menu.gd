@@ -71,6 +71,13 @@ func setup(vr: bool) -> void:
 	use_vr = vr
 
 
+func close() -> void:
+	if use_vr and _open_in_vr:
+		_toggle_vr()
+	elif panel.visible:
+		panel.visible = false
+
+
 func toggle() -> void:
 	if use_vr:
 		_toggle_vr()

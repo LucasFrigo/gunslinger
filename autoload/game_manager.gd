@@ -133,6 +133,7 @@ func setup(main: Node3D, use_vr: bool) -> void:
 	main_root = main
 	world_root = main.get_node("WorldRoot")
 	is_vr = use_vr
+	PlayerSettings.apply_window()
 
 	hud = load(HUD_SCENE).instantiate()
 	main.add_child(hud)
@@ -147,7 +148,13 @@ func setup(main: Node3D, use_vr: bool) -> void:
 
 # -- Mode transitions ---------------------------------------------------------
 
+func is_pause_open() -> bool:
+	return is_instance_valid(hud) and hud.is_pause_open()
+
+
 func go_to_menu() -> void:
+	if is_instance_valid(hud):
+		hud.close_pause()
 	_bump_action_generation()
 	KillCam.cancel()
 	NetworkManager.leave()
@@ -164,6 +171,8 @@ func go_to_menu() -> void:
 
 
 func start_free_duel(scenario_index: int, archetype_index: int) -> void:
+	if is_instance_valid(hud):
+		hud.close_pause()
 	_bump_action_generation()
 	_set_mode(GameMode.FREE_DUEL)
 	hud.hide_menu()
@@ -174,6 +183,8 @@ func start_free_duel(scenario_index: int, archetype_index: int) -> void:
 
 
 func start_gauntlet() -> void:
+	if is_instance_valid(hud):
+		hud.close_pause()
 	_bump_action_generation()
 	_set_mode(GameMode.GAUNTLET)
 	hud.hide_menu()
@@ -183,6 +194,8 @@ func start_gauntlet() -> void:
 
 ## Restart the active free duel, gauntlet encounter, or (host) MP rematch.
 func reset_current_duel() -> void:
+	if is_instance_valid(hud):
+		hud.close_pause()
 	match mode:
 		GameMode.FREE_DUEL:
 			_bump_action_generation()
@@ -235,6 +248,8 @@ func _begin_ai_duel(scenario_index: int, archetype: AIArchetype, health_mult: fl
 # -- Multiplayer flow ---------------------------------------------------------
 
 func _on_session_started(as_host: bool) -> void:
+	if is_instance_valid(hud):
+		hud.close_pause()
 	_bump_action_generation()
 	_set_mode(GameMode.MULTIPLAYER)
 	hud.hide_menu()
@@ -360,7 +375,7 @@ func _mp_rematch() -> void:
 func _after_delay(seconds: float, callable: Callable) -> void:
 	var mode_at_schedule := mode
 	var generation_at_schedule := _action_generation
-	get_tree().create_timer(seconds, true, false, true).timeout.connect(func() -> void:
+	get_tree().create_timer(seconds, false, false, true).timeout.connect(func() -> void:
 		if mode == mode_at_schedule and _action_generation == generation_at_schedule:
 			callable.call())
 

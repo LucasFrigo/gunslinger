@@ -14,11 +14,8 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 * **Barrel smoke:** Visible smoke coming out of the barrel after a shot. A short stub already plays (`VfxCatalog` `&"muzzle_smoke"` from `ImpactFeedback.shot_fired` / `assets/vfx/muzzle_smoke.tscn`); this is a lingering plume that reads as gunsmoke, not a 0.45s puff.
 * **Proximity voice chat:** Nearby players hear each other in world space (volume/falloff by distance). Muted players show an X over the mouth so mute state is readable at a glance.
 
-## 1. Easy — polish & finish existing hooks
-
-* **Main-menu settings screen:** A player-facing Settings button on `ui/main_menu.tscn` (flat + VR panel). Audio, comfort/turn mode, holster side, and similar knobs — not the full F3 debug panel (`autoload/debug_menu.gd`). Persist via existing `user://` cfg (`MovementConfig`, etc.). Back returns to the mode select.
-
 ## 2. Medium — contained mechanics & set pieces
+* **More enemy NPCs:** Expand the roster beyond Drunk / Sheriff / Ghost. New opponents are new `ai/archetypes/*.tres` (`AIArchetype` — reaction, accuracy, draw, reload, move style). Wire them into the free-duel pick and gauntlet ladder rungs. Distinct silhouettes/meshes can follow once the gunslinger model is on AI.
 * **Airborne fire / mystic trick shots:** Optional tech/mystic branch: allow firing while the revolver is tossed and spinning, so you can go for mid-air trick shots. Today fire/reload require `held` (`weapons/weapon_base.gd`). Gate behind a flag so the grounded western default stays.
 * **Train Map Concept:** A duel scene featuring a moving train passing between opponents. Players must either wait for the train to clear or attempt risky shots through open train cars. (Builds on the existing Train Rooftop arena idea.)
 * **Duel vs up to 3 NPCs:** Free-duel option to face 1–3 AI opponents in one standoff (local, no netcode). Needs extra spawn marks, multi-combatant targeting, and resolve when more than two duelists fire. Reuses `ai/duelist.tscn` + archetypes.
@@ -37,6 +34,7 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 
 Newest at the top. Keep a one-line note of what shipped and where; details live in [`docs/FEATURES.md`](docs/FEATURES.md).
 
+* **Main-menu settings + in-duel pause:** Settings on `ui/main_menu.tscn` (volume, holster, VR turn, mouse sens). Pause overlay in-match: SP tree-pause, MP overlay-only; Resume / Settings / Restart / Quit. (`done` in FEATURES)
 * **Steam lobby multiplayer:** 1v1 create / browse / join over Steam Datagram Relay (`netcode/steam_transport.gd`); desktop only; App ID 480 until owned. (`done` in FEATURES)
 * **Self-hit hitbox tweak:** Gun-hand arm is a thinner wrist-inset capsule along the limb; muzzle grace skips only that arm so a body-pointed shot still counts. (`done` in FEATURES)
 * **NPC reload:** Spent 6-round cylinder is a combat window: `RELOADING` + arm dip + gate open, `reload_time` per archetype, `WeaponBase.fill_cylinder`. (`done` in FEATURES)

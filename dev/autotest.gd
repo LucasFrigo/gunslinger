@@ -105,6 +105,9 @@ func _test_join() -> void:
 func _test_load_all() -> void:
 	await _sleep(0.5)
 	var scenes := [
+		"res://ui/hud.tscn",
+		"res://ui/settings_menu.tscn",
+		"res://ui/pause_menu.tscn",
 		"res://player/vr_rig.tscn",
 		"res://player/remote_avatar.tscn",
 		"res://ai/duelist.tscn",

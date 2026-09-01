@@ -62,7 +62,7 @@ func _on_kill_cam_requested(trail_points: PackedVector3Array) -> void:
 
 
 func _process(delta: float) -> void:
-	if not is_playing:
+	if not is_playing or get_tree().paused:
 		return
 	var real_delta := delta / maxf(Engine.time_scale, 0.001)
 	_elapsed += real_delta

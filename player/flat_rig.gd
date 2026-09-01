@@ -77,8 +77,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		reload_pressed.emit()
 	elif event.is_action_pressed("toggle_debug"):
 		menu_button_pressed.emit()
-	elif event.is_action_pressed("ui_cancel"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
 func _pointer_over_ui() -> bool:

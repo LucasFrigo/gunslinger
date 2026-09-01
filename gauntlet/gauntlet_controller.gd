@@ -65,5 +65,5 @@ func _defeat() -> void:
 
 
 func _back_to_menu() -> void:
-	get_tree().create_timer(5.0, true, false, true).timeout.connect(
+	get_tree().create_timer(5.0, false, false, true).timeout.connect(
 		GameManager.go_to_menu)

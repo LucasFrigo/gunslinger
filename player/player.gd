@@ -64,7 +64,7 @@ func _ready() -> void:
 	rig.trigger_changed.connect(_on_trigger_changed)
 	rig.grip_changed.connect(_on_grip_changed)
 	rig.cock_pressed.connect(_on_cock_pressed)
-	rig.menu_button_pressed.connect(DebugMenu.toggle)
+	rig.menu_button_pressed.connect(_on_menu_button)
 	if rig.has_signal("reload_pressed"):
 		rig.reload_pressed.connect(_on_reload_pressed)
 	if rig.has_signal("gate_pressed"):
@@ -259,6 +259,8 @@ func play_death_feedback() -> void:
 # -- Gun handling -----------------------------------------------------------------
 
 func _on_grip_changed(hand: StringName, pressed: bool) -> void:
+	if _combat_blocked():
+		return
 	if not use_vr:
 		if pressed:
 			_toggle_gun()
@@ -465,8 +467,28 @@ func _holster_gun() -> void:
 	_refresh_reload_status()
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	if use_vr and event.is_action_pressed("toggle_debug"):
+		DebugMenu.toggle()
+		get_viewport().set_input_as_handled()
+
+
+func _on_menu_button() -> void:
+	if use_vr:
+		if GameManager.mode == GameManager.GameMode.MENU:
+			DebugMenu.toggle()
+		elif is_instance_valid(GameManager.hud) and GameManager.hud.pause_menu != null:
+			GameManager.hud.pause_menu.toggle()
+	else:
+		DebugMenu.toggle()
+
+
+func _combat_blocked() -> bool:
+	return GameManager.is_pause_open()
+
+
 func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
-	if not pressed or not alive:
+	if not pressed or not alive or _combat_blocked():
 		return
 	if use_vr and (not revolver.held or hand != _holding_hand_name()):
 		return
@@ -474,6 +496,8 @@ func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
 
 
 func _on_cock_pressed(hand: StringName) -> void:
+	if _combat_blocked():
+		return
 	if use_vr and (not revolver.held or hand != _holding_hand_name()):
 		return
 	if revolver.gate_open:
@@ -483,6 +507,8 @@ func _on_cock_pressed(hand: StringName) -> void:
 
 
 func _on_gate_pressed(hand: StringName) -> void:
+	if _combat_blocked():
+		return
 	if not use_vr:
 		return
 	if revolver.held and hand == _holding_hand_name():
@@ -502,7 +528,7 @@ func _on_gate_pressed(hand: StringName) -> void:
 
 func _on_reload_pressed() -> void:
 	# Flat: R opens + dumps, or chambers one while open.
-	if not alive or not revolver.held:
+	if not alive or not revolver.held or _combat_blocked():
 		return
 	if revolver.gate_open:
 		if revolver.try_chamber():
@@ -908,7 +934,7 @@ func _broadcast_pose(delta: float) -> void:
 func show_menu_panel(menu_control: Control) -> void:
 	hide_menu_panel()
 	_menu_panel = UIPanel3D.new()
-	_menu_panel.panel_size = Vector2(1.0, 0.7)
+	_menu_panel.panel_size = Vector2(1.0, 0.8)
 	add_child(_menu_panel)
 	var head := get_head_position()
 	var forward := -Basis(Vector3.UP, rig.get_head_transform().basis.get_euler().y).z

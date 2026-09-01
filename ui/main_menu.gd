@@ -9,6 +9,7 @@ extends Control
 @onready var lan_list: ItemList = %LanList
 @onready var steam_list: ItemList = %SteamList
 @onready var status_label: Label = %StatusLabel
+@onready var settings_menu: SettingsMenu = $Center/Panel/Margin/SettingsMenu
 
 var _lan_hosts: Array = []
 var _steam_lobbies: Array = []
@@ -32,6 +33,8 @@ func _ready() -> void:
 	%RefreshSteamButton.pressed.connect(NetworkManager.refresh_steam_lobbies)
 	%JoinSteamButton.pressed.connect(_join_selected_steam)
 	steam_list.item_activated.connect(_join_steam_at)
+	%SettingsButton.pressed.connect(_show_settings)
+	settings_menu.back_pressed.connect(show_mode_select)
 	%QuitButton.pressed.connect(func() -> void: get_tree().quit())
 
 	NetworkManager.lan_hosts_updated.connect(_on_lan_hosts)
@@ -60,10 +63,27 @@ func _ready() -> void:
 	_on_visibility_changed()
 
 
+func show_mode_select() -> void:
+	%Root.visible = true
+	settings_menu.visible = false
+
+
+func is_settings_open() -> bool:
+	return settings_menu.visible
+
+
+func _show_settings() -> void:
+	%Root.visible = false
+	settings_menu.visible = true
+	settings_menu.refresh()
+
+
 func _on_visibility_changed() -> void:
 	var open := is_visible_in_tree()
 	NetworkManager.browse_lan(open)
 	NetworkManager.browse_steam(open and not OS.has_feature("android"))
+	if open:
+		show_mode_select()
 
 
 func _host_lan() -> void:

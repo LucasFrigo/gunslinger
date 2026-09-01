@@ -1,7 +1,8 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://ui/hud.gd" id="1"]
 [ext_resource type="PackedScene" path="res://ui/main_menu.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://ui/pause_menu.tscn" id="3"]
 
 [sub_resource type="LabelSettings" id="msg_settings"]
 font_size = 42
@@ -20,6 +21,7 @@ outline_size = 4
 outline_color = Color(0, 0, 0, 0.7)
 
 [node name="Hud" type="CanvasLayer"]
+process_mode = 3
 layer = 5
 script = ExtResource("1")
 
@@ -83,3 +85,13 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 
 [node name="MainMenu" parent="MenuHolder" instance=ExtResource("2")]
+
+[node name="PauseHolder" type="Control" parent="."]
+process_mode = 3
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="PauseMenu" parent="PauseHolder" instance=ExtResource("3")]
