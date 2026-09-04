@@ -56,7 +56,7 @@ Design / lore: [`design/README.md`](design/README.md)
 | Gunslinger character mesh | `partial` | Low-poly A-pose (empty hands) at `assets/models/characters/gunslinger.glb` + Blender source `gunslinger.blend`. Split serape/black poncho is a separate Cloth sim (baked for the GLB). Not on AI or the remote avatar yet |
 | Arenas (Main Street, Saloon, Train Rooftop, Canyon) | `partial` | Greybox CSG; real art TBD |
 | Moving train duel set piece | `planned` | Roadmap; rooftop arena exists as greybox |
-| AI archetypes (Drunk / Sheriff / Ghost) | `done` | `ai/archetypes/*.tres`; Sheriff/Ghost strafe around the enemy spawn marker (not scene origin). `reload_time` per archetype |
+| AI archetypes (Drunk / Sheriff / Ghost) | `done` | `ai/archetypes/*.tres`; Sheriff/Ghost strafe around the enemy spawn marker (not scene origin). `reload_time` per archetype. Design: [Drunk](design/characters/drunk.md), [Sheriff](design/characters/sheriff.md), [Ghost](design/characters/ghost.md) |
 | More enemy NPCs | `planned` | Roadmap (Medium); extra archetypes as new `ai/archetypes/*.tres`, then free-duel pick + gauntlet rungs. First design: [Half-head](design/characters/half-head.md) |
 | NPC reload | `done` | Spent cylinder is a combat window: `AIState.RELOADING`, arm dip, `open_gate` → wait `reload_time` (Drunk 3.5 / Sheriff 2.2 / Ghost 1.4, scaled by `ai_speed_mult`) → `fill_cylinder` / `close_gate`. Same 6-round limit as the player. Arm hit / death / duel-over cancel and close the gate; ammo stays empty across disarm. `ai/duelist_ai.gd`, `WeaponBase.fill_cylinder` |
 | Quest 3 / PCVR / flat harness | `done` | OpenXR + `--flat`. Meta Store APK: LAN MP only; Steam lobby UI is hidden |
