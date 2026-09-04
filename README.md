@@ -8,7 +8,8 @@ fully tunable at runtime so you can A/B test what feels best.
 
 **Version:** see [`VERSION`](VERSION) · **Changelog:** [`CHANGELOG.md`](CHANGELOG.md)  
 **Feature status:** [`docs/FEATURES.md`](docs/FEATURES.md) · **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Bugs:** [`docs/BUGS.md`](docs/BUGS.md) · **Roadmap:** [`Roadmap.md`](Roadmap.md)  
-**Pre-release TODOs:** [`docs/RELEASE_TODOS.md`](docs/RELEASE_TODOS.md) · **Business / pricing brief:** [`docs/BUSINESS_BRIEF.md`](docs/BUSINESS_BRIEF.md)
+**Pre-release TODOs:** [`docs/RELEASE_TODOS.md`](docs/RELEASE_TODOS.md) · **Business / pricing brief:** [`docs/BUSINESS_BRIEF.md`](docs/BUSINESS_BRIEF.md)  
+**Design / lore:** [`docs/design/README.md`](docs/design/README.md)
 
 ## Requirements
 
