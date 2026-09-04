@@ -11,7 +11,44 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
-*(none)*
+### BUG-008 — MP does not reject mismatched game versions
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `major` |
+| Filed | 2026-09-03 |
+| Platforms | 1v1 Steam (desktop); LAN also has no check |
+| Areas | `netcode/steam_transport.gd` `LOBBY_KEY_VERSION`, `autoload/network_manager.gd` `join_steam` / `join_lan` |
+
+**What:** Clients can join a host running a different `application/config/version`. Steam writes `gunslinger_version` on lobby create and returns it in the browse list, but neither browse nor join compares it. LAN has no version metadata at all. Mismatched builds can desync poses, shots, or duel state.
+
+**Repro:**
+1. Host Steam (or LAN) on build A.
+2. Join from build B with a different `VERSION`.
+3. Session starts; no mismatch warning.
+
+**Wanted:** Reject (or hard-warn) before the session starts; show the two version strings. Roadmap: MP version check.
+
+### BUG-009 — Steam: cannot join or create a lobby after leaving
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `major` |
+| Filed | 2026-09-03 |
+| Platforms | 1v1 Steam (desktop) |
+| Areas | `netcode/steam_transport.gd` `close` / `host` / `join`, `autoload/network_manager.gd` `leave` |
+
+**What:** After leaving a Steam lobby, join and create both fail in the same process. Reporter also guessed join might fail while a player has the gun drawn; unconfirmed — full lobbies are already `setLobbyJoinable(false)` once a peer connects, which would look the same from the list.
+
+**Repro (leave / rejoin):**
+1. HOST (STEAM), second player joins, play or quit.
+2. Leave the lobby (Quit to menu / leave session).
+3. Same process: JOIN an existing lobby, or HOST (STEAM) again.
+4. Join and create fail until the game is restarted.
+
+**Notes:** `close()` calls `leaveLobby` and swaps the Godot peer to `OfflineMultiplayerPeer`, but a later `createLobby` / `joinLobby` may still be racing Steam’s teardown or a leftover `SteamMultiplayerPeer`. Confirm whether gun-drawn during an active 2/2 match is a separate case or just the lobby already being unjoinable.
 
 ---
 

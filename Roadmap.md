@@ -15,6 +15,8 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 * **Proximity voice chat:** Nearby players hear each other in world space (volume/falloff by distance). Muted players show an X over the mouth so mute state is readable at a glance.
 
 ## 2. Medium — contained mechanics & set pieces
+* **MP version check:** Reject join when `application/config/version` differs so mismatched builds cannot start a match. Steam already stores `gunslinger_version` on the lobby but does not filter or refuse ([BUG-008](docs/BUGS.md)); LAN has no check. Show both version strings on failure.
+* **Steam leave / rejoin:** After leaving a Steam lobby, create and join can fail until the process restarts ([BUG-009](docs/BUGS.md)). Tear down `SteamMultiplayerPeer` + lobby so HOST / JOIN work again in the same session. Confirm whether “can’t join while drawn” is this teardown bug or the lobby already marked unjoinable at 2/2.
 * **More enemy NPCs:** Expand the roster beyond Drunk / Sheriff / Ghost. New opponents are new `ai/archetypes/*.tres` (`AIArchetype` — reaction, accuracy, draw, reload, move style). Wire them into the free-duel pick and gauntlet ladder rungs. Distinct silhouettes/meshes can follow once the gunslinger model is on AI.
 * **Airborne fire / mystic trick shots:** Optional tech/mystic branch: allow firing while the revolver is tossed and spinning, so you can go for mid-air trick shots. Today fire/reload require `held` (`weapons/weapon_base.gd`). Gate behind a flag so the grounded western default stays.
 * **Train Map Concept:** A duel scene featuring a moving train passing between opponents. Players must either wait for the train to clear or attempt risky shots through open train cars. (Builds on the existing Train Rooftop arena idea.)
