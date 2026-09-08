@@ -13,7 +13,9 @@ Design / lore: [`design/README.md`](design/README.md)
 | Feature | Status | Notes / key paths |
 |---|---|---|
 | Standoff → bell → draw → resolve | `done` | `gauntlet/duel_manager.gd` |
-| Holster / draw / fire / cock | `done` | `weapons/revolver/revolver.gd`, player rigs. VR grip is hold-to-hold; Flat RMB still toggles |
+| Holster / draw / fire / cock | `done` | `weapons/revolver/revolver.gd`, player rigs. VR grip is hold-to-hold; Flat RMB still toggles. VR cock is gun-hand A today; stick-down cock is planned |
+| VR cock on stick-down | `planned` | Roadmap (Medium); gun-hand analog down cocks; A becomes trick-shot / Ocelot spin (`vr_rig.gd` `ax_button`, `player.gd` `_update_vr_spin`) |
+| Button remapping | `planned` | Roadmap (Medium); Settings bind table → `PlayerSettings` / `user://settings.cfg` (VR + flat). None today |
 | Projectile bullets + trails | `done` | `weapons/bullet.gd`, `weapons/bullet_trail.gd`; ribbon uses one camera-facing side vector, first point at muzzle. Shorter linger is planned (`FADE_TIME` 1.6s) |
 | Shorter bullet-trail fade | `planned` | Roadmap (Polish / visual); `weapons/bullet_trail.gd` |
 | Barrel smoke | `planned` | Roadmap (Polish / visual); stub `muzzle_smoke` already fires from `ImpactFeedback.shot_fired` — wants a lingering plume from the barrel |
