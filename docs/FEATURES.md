@@ -31,6 +31,7 @@ Design / lore: [`design/README.md`](design/README.md)
 | Impact / AV polish (SFX, haptics, VFX) | `done` | `ImpactFeedback` + `AudioCatalog` / `VfxCatalog` stubs; combat XR/flat rumble wired |
 | Gun release / trick shots | `done` | VR hold-to-hold: toss with hand velocity, catch either hand (or take from the other), holster snap on chosen hip (`holster_side`). Fire/reload only while held; airborne still counts as drawn for fouls. Frozen `RigidBody3D` copies the hand/hip pose (`follow_parent` in `weapons/weapon_base.gd`). MP pose sends free-gun transform + hand/hip flags |
 | Revolver Ocelot spin | `done` | VR only: default hold gun-hand A / X (remappable; was stick-down) hangs the revolver on a finger hinge (`SpinPivot` / `WeaponBase`); hand motion builds momentum; release (or stick up if bound to stick) snaps back. Fire still works (muzzle aim). Debug **VR Spin**. MP flag `GUN_SPINNING` |
+| Off-hand props (cigarette first) | `planned` | Roadmap (Medium); miscellaneous off-hand hold while gun stays in gun-hand. First object: cigarette. Must not block reload |
 | Airborne fire / mystic trick shots | `planned` | Roadmap (Medium); fire while tossed/spinning; optional tech/mystic flag |
 
 ## Modes
@@ -38,6 +39,7 @@ Design / lore: [`design/README.md`](design/README.md)
 | Feature | Status | Notes / key paths |
 |---|---|---|
 | Free duel (arena + AI pick) | `done` | `GameManager`, main menu |
+| Practice hub (aim range + slots) | `planned` | Roadmap (Medium); non-duel area with regenerating bottles and a casino slot machine |
 | Duel vs up to 3 NPCs | `planned` | Roadmap (Medium); local 1–3 AI in one standoff |
 | Gauntlet (6 rungs, 3 lives, session score) | `done` | `gauntlet/gauntlet_controller.gd`, ladder `.tres` |
 | Persistent gauntlet high scores | `planned` | Score is session-only today |
