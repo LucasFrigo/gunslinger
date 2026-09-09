@@ -11,25 +11,6 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
-### BUG-008 — MP does not reject mismatched game versions
-
-| | |
-|---|---|
-| Status | `open` |
-| Severity | `major` |
-| Filed | 2026-09-03 |
-| Platforms | 1v1 Steam (desktop); LAN also has no check |
-| Areas | `netcode/steam_transport.gd` `LOBBY_KEY_VERSION`, `autoload/network_manager.gd` `join_steam` / `join_lan` |
-
-**What:** Clients can join a host running a different `application/config/version`. Steam writes `gunslinger_version` on lobby create and returns it in the browse list, but neither browse nor join compares it. LAN has no version metadata at all. Mismatched builds can desync poses, shots, or duel state.
-
-**Repro:**
-1. Host Steam (or LAN) on build A.
-2. Join from build B with a different `VERSION`.
-3. Session starts; no mismatch warning.
-
-**Wanted:** Reject (or hard-warn) before the session starts; show the two version strings. Roadmap: MP version check.
-
 ### BUG-009 — Steam: cannot join or create a lobby after leaving
 
 | | |
@@ -53,6 +34,21 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 ---
 
 ## Fixed
+
+### BUG-008 — MP does not reject mismatched game versions
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `major` |
+| Filed | 2026-09-03 |
+| Fixed | 2026-09-09 |
+| Platforms | 1v1 Steam (desktop); LAN |
+| Areas | `netcode/steam_transport.gd`, `netcode/lan_discovery.gd`, `autoload/network_manager.gd` |
+
+**What:** Clients could join a host running a different `application/config/version`. Steam wrote `gunslinger_version` on lobby create but neither browse nor join compared it. LAN had no version metadata.
+
+**Fix:** Steam and LAN browse show versions and disable incompatible rows; join refuses when the known host version differs. LAN beacon is `ip|name|version`. After connect, a `_version_hello` handshake gates `session_started` / `peer_joined`; mismatch shows both strings and disconnects the joiner (host stays up).
 
 ### BUG-007 — Foul loss overwritten by a later hit
 

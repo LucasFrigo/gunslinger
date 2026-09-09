@@ -36,6 +36,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Fixed
 
+- MP join rejects mismatched `application/config/version` (Steam lobby metadata, LAN discovery `ip|name|version`, and a post-connect version handshake). Both version strings are shown; incompatible browse rows are disabled ([BUG-008](docs/BUGS.md)).
 - Early-draw foul stays a loss: bullets deal no damage after the duel is over or before the bell, so hitting the NPC after a DQ no longer flips the result to a win ([BUG-007](docs/BUGS.md)).
 - VR held revolver stays on the controller: a frozen `RigidBody3D` does not inherit parent motion, so attached guns copy the holster / `GunAttach` transform each frame (`follow_parent`).
 - LAN joiner strafe (A/D, left stick) matches the view after spawning on `EnemySpawn`. Stick/WASD motion is applied in world XZ from look yaw so the 180° spawn root is not applied twice ([BUG-006](docs/BUGS.md)).

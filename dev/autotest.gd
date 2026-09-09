@@ -138,7 +138,57 @@ func _test_load_all() -> void:
 		return
 	if not _binds_ok():
 		return
+	if not _version_check_ok():
+		return
 	_pass()
+
+
+func _version_check_ok() -> bool:
+	var local := NetworkManager.game_version()
+	if local.is_empty():
+		_fail("game_version() empty")
+		return false
+	if not NetworkManager.versions_match(local, local):
+		_fail("versions_match should accept identical non-empty strings")
+		return false
+	if NetworkManager.versions_match("", local):
+		_fail("versions_match should reject empty host version")
+		return false
+	if NetworkManager.versions_match(local, "9.9.9-alpha"):
+		_fail("versions_match should reject different versions")
+		return false
+	var msg := NetworkManager.version_mismatch_message("0.1.0-alpha", "0.2.0-alpha")
+	if not msg.contains("0.1.0-alpha") or not msg.contains("0.2.0-alpha"):
+		_fail("mismatch message missing version strings: %s" % msg)
+		return false
+	var unknown := NetworkManager.version_mismatch_message("", local)
+	if not unknown.contains("unknown (older build)"):
+		_fail("empty host should read as older build: %s" % unknown)
+		return false
+
+	var with_ver := LanDiscovery.parse_pong_packet(
+			"GUNSLINGER_HOST:192.168.1.10|DeskPC|0.5.2-alpha", "192.168.1.99")
+	if with_ver.get("ip") != "192.168.1.10" or with_ver.get("name") != "DeskPC" \
+			or with_ver.get("version") != "0.5.2-alpha":
+		_fail("parse ip|name|version failed: %s" % with_ver)
+		return false
+	var legacy := LanDiscovery.parse_pong_packet(
+			"GUNSLINGER_HOST:192.168.1.10|DeskPC", "192.168.1.99")
+	if legacy.get("version") != "" or legacy.get("name") != "DeskPC":
+		_fail("legacy ip|name parse failed: %s" % legacy)
+		return false
+	var bare := LanDiscovery.parse_pong_packet("GUNSLINGER_HOST:DeskPC", "192.168.1.10")
+	if bare.get("ip") != "192.168.1.10" or bare.get("name") != "DeskPC" \
+			or bare.get("version") != "":
+		_fail("bare name parse failed: %s" % bare)
+		return false
+	var name_ver := LanDiscovery.parse_pong_packet(
+			"GUNSLINGER_HOST:DeskPC|0.5.2-alpha", "192.168.1.10")
+	if name_ver.get("name") != "DeskPC" or name_ver.get("version") != "0.5.2-alpha":
+		_fail("name|version parse failed: %s" % name_ver)
+		return false
+	print("AUTOTEST: MP version helpers + LAN pong parse ok")
+	return true
 
 
 func _binds_ok() -> bool:

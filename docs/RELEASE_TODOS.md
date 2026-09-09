@@ -29,8 +29,9 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 - [ ] Two-PC Steam NAT test: Steam client running on both, **HOST (STEAM)** / auto-refresh list / join, duel + rematch, leave/rejoin. Overlay invite opens on host if GodotSteam exposes `activateGameOverlayInviteDialog`. `from:` 1v1 Steam lobbies
 - [ ] Confirm Steam Datagram Relay (`initRelayNetworkAccess` + `SteamMultiplayerPeer.server_relay`) across a hard NAT; LAN ENet is a different path. `from:` 1v1 Steam lobbies
 - [ ] Do not advertise 4-player, ranked matchmaking, or proximity voice — those are still planned. `from:` 4-player MP / ranking / voice
-- [ ] Reject MP join when `application/config/version` differs (Steam `gunslinger_version` is stored but ignored; LAN has no check). Show both versions. [BUG-008](BUGS.md). `from:` MP version check
+- [x] Reject MP join when `application/config/version` differs (Steam lobby metadata + LAN beacon + handshake; both versions shown). [BUG-008](BUGS.md). `from:` MP version check
 - [ ] Steam leave then HOST / JOIN in the same process fails until restart. [BUG-009](BUGS.md). `from:` Steam leave / rejoin
+- [ ] Manual: two builds with different `VERSION` — Steam list disabled + refuse, LAN list disabled + refuse, typed IP handshake refuse; same-version still starts a duel. `from:` MP version check
 
 ## Content / polish
 

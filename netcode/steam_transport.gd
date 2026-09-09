@@ -163,10 +163,6 @@ func _make_peer() -> Object:
 	return peer
 
 
-func _game_version() -> String:
-	return str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
-
-
 func _on_lobby_created(status: int, new_lobby_id: int) -> void:
 	if status != 1:
 		transport_failed.emit("Lobby creation failed (status %d)" % status)
@@ -174,7 +170,7 @@ func _on_lobby_created(status: int, new_lobby_id: int) -> void:
 	lobby_id = new_lobby_id
 	_steam.call("setLobbyData", lobby_id, LOBBY_KEY_GAME, LOBBY_VALUE_GAME)
 	_steam.call("setLobbyData", lobby_id, LOBBY_KEY_NAME, persona_name())
-	_steam.call("setLobbyData", lobby_id, LOBBY_KEY_VERSION, _game_version())
+	_steam.call("setLobbyData", lobby_id, LOBBY_KEY_VERSION, NetworkManager.game_version())
 	_steam.call("setLobbyJoinable", lobby_id, true)
 	var peer := _make_peer()
 	if peer.call("host_with_lobby", lobby_id) != OK:
@@ -191,6 +187,13 @@ func _on_lobby_joined(joined_lobby_id: int, _perms: int, _locked: bool, response
 	if response != 1:
 		transport_failed.emit("Could not join lobby (response %d)" % response)
 		return
+	var host_version := str(_steam.call("getLobbyData", joined_lobby_id, LOBBY_KEY_VERSION))
+	if not NetworkManager.versions_match(host_version, NetworkManager.game_version()):
+		_steam.call("leaveLobby", joined_lobby_id)
+		lobby_id = 0
+		transport_failed.emit(NetworkManager.version_mismatch_message(
+				host_version, NetworkManager.game_version()))
+		return
 	lobby_id = joined_lobby_id
 	var peer := _make_peer()
 	if peer.call("connect_to_lobby", lobby_id) != OK:
@@ -202,6 +205,7 @@ func _on_lobby_joined(joined_lobby_id: int, _perms: int, _locked: bool, response
 
 func _on_lobby_match_list(lobbies: Array) -> void:
 	var result: Array = []
+	var local_version := NetworkManager.game_version()
 	for id in lobbies:
 		var game := str(_steam.call("getLobbyData", id, LOBBY_KEY_GAME))
 		if game != LOBBY_VALUE_GAME:
@@ -212,10 +216,12 @@ func _on_lobby_match_list(lobbies: Array) -> void:
 		var players := int(_steam.call("getNumLobbyMembers", id))
 		if players >= MAX_PLAYERS:
 			continue
+		var version := str(_steam.call("getLobbyData", id, LOBBY_KEY_VERSION))
 		result.append({
 			"id": id,
 			"name": lobby_name,
 			"players": players,
-			"version": str(_steam.call("getLobbyData", id, LOBBY_KEY_VERSION)),
+			"version": version,
+			"compatible": NetworkManager.versions_match(version, local_version),
 		})
 	lobbies_updated.emit(result)

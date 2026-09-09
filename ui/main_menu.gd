@@ -108,6 +108,10 @@ func _join_lan_at(index: int) -> void:
 	if index < 0 or index >= _lan_hosts.size():
 		return
 	var host: Dictionary = _lan_hosts[index]
+	var host_v := str(host.get("version", ""))
+	if not NetworkManager.versions_match(host_v, NetworkManager.game_version()):
+		_set_status(NetworkManager.version_mismatch_message(host_v, NetworkManager.game_version()))
+		return
 	_set_status("Joining %s..." % host["ip"])
 	NetworkManager.join_lan(host["ip"])
 
@@ -124,6 +128,10 @@ func _join_steam_at(index: int) -> void:
 	if index < 0 or index >= _steam_lobbies.size():
 		return
 	var lobby: Dictionary = _steam_lobbies[index]
+	var host_v := str(lobby.get("version", ""))
+	if not NetworkManager.versions_match(host_v, NetworkManager.game_version()):
+		_set_status(NetworkManager.version_mismatch_message(host_v, NetworkManager.game_version()))
+		return
 	_set_status("Joining lobby %s..." % lobby["name"])
 	NetworkManager.join_steam(lobby["id"])
 
@@ -131,8 +139,14 @@ func _join_steam_at(index: int) -> void:
 func _on_lan_hosts(hosts: Array) -> void:
 	_lan_hosts = hosts
 	lan_list.clear()
+	var local_v := NetworkManager.game_version()
 	for host in hosts:
-		lan_list.add_item("%s  (%s)" % [host["name"], host["ip"]])
+		var host_v := str(host.get("version", ""))
+		var compatible := NetworkManager.versions_match(host_v, local_v)
+		var version_label := host_v if not host_v.is_empty() else "?"
+		var idx := lan_list.add_item("%s  (%s)  v%s" % [host["name"], host["ip"], version_label])
+		if not compatible:
+			lan_list.set_item_disabled(idx, true)
 	if hosts.is_empty():
 		lan_list.add_item("Searching for LAN hosts...")
 		lan_list.set_item_disabled(0, true)
@@ -143,7 +157,14 @@ func _on_steam_lobbies(lobbies: Array) -> void:
 	_steam_lobbies = lobbies
 	steam_list.clear()
 	for lobby in lobbies:
-		steam_list.add_item("%s  (%d/2)" % [lobby["name"], lobby["players"]])
+		var host_v := str(lobby.get("version", ""))
+		var version_label := host_v if not host_v.is_empty() else "?"
+		var compatible: bool = bool(lobby.get("compatible",
+				NetworkManager.versions_match(host_v, NetworkManager.game_version())))
+		var idx := steam_list.add_item(
+				"%s  (%d/2)  v%s" % [lobby["name"], lobby["players"], version_label])
+		if not compatible:
+			steam_list.set_item_disabled(idx, true)
 	if lobbies.is_empty():
 		steam_list.add_item("No lobbies found. Refresh to retry.")
 		steam_list.set_item_disabled(0, true)
