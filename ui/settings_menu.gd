@@ -1,7 +1,8 @@
 class_name SettingsMenu
 extends VBoxContainer
-## Player-facing knobs: volume, holster, VR turn, mouse sensitivity, flat video.
-## Not the F3 debug panel. Persist immediately via PlayerSettings / MovementConfig / tuning.
+## Player-facing knobs: volume, holster, VR turn, mouse sensitivity, flat video,
+## and combat button remapping. Not the F3 debug panel.
+## Persist immediately via PlayerSettings / MovementConfig / tuning.
 
 signal back_pressed
 
@@ -9,9 +10,12 @@ const MOUSE_MIN := 0.0005
 const MOUSE_MAX := 0.01
 
 var _refreshing := false
+## action StringName → { label: Label, button: Button, is_vr: bool }
+var _bind_rows: Dictionary = {}
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	if %HolsterOption.item_count == 0:
 		%HolsterOption.add_item("Right")
 		%HolsterOption.add_item("Left")
@@ -23,7 +27,7 @@ func _ready() -> void:
 		%WindowModeOption.add_item("Windowed")
 		%WindowModeOption.add_item("Borderless Fullscreen")
 		%WindowModeOption.add_item("Exclusive Fullscreen")
-	%BackButton.pressed.connect(func() -> void: back_pressed.emit())
+	%BackButton.pressed.connect(_on_back)
 	%VolumeSlider.value_changed.connect(_on_volume_changed)
 	%HolsterOption.item_selected.connect(_on_holster_selected)
 	%TurnModeOption.item_selected.connect(_on_turn_mode_selected)
@@ -33,7 +37,33 @@ func _ready() -> void:
 	%WindowModeOption.item_selected.connect(_on_video_choice_changed)
 	%ResolutionOption.item_selected.connect(_on_video_choice_changed)
 	%ApplyVideoButton.pressed.connect(_on_apply_video)
+	%ResetBindsButton.pressed.connect(_on_reset_binds)
+	PlayerSettings.binds_changed.connect(_refresh_bind_labels)
+	PlayerSettings.listen_cancelled.connect(_refresh_bind_labels)
+	_build_bind_rows()
 	refresh()
+
+
+func _exit_tree() -> void:
+	PlayerSettings.cancel_listen()
+
+
+func _input(event: InputEvent) -> void:
+	if not PlayerSettings.is_listening():
+		return
+	if event.is_action_pressed("ui_cancel"):
+		PlayerSettings.cancel_listen()
+		_refresh_bind_labels()
+		get_viewport().set_input_as_handled()
+		return
+	if PlayerSettings.listen_is_vr:
+		return
+	if event is InputEventMouseMotion:
+		return
+	if event.is_pressed() and not event.is_echo():
+		if PlayerSettings.try_capture_flat_event(event):
+			_refresh_bind_labels()
+			get_viewport().set_input_as_handled()
 
 
 func refresh() -> void:
@@ -52,7 +82,93 @@ func refresh() -> void:
 	%WindowModeOption.selected = PlayerSettings.window_mode
 	_fill_resolution_options()
 	_apply_platform_rows()
+	_refresh_bind_labels()
 	_refreshing = false
+
+
+func _build_bind_rows() -> void:
+	for child in %BindRows.get_children():
+		child.queue_free()
+	_bind_rows.clear()
+	for action in PlayerSettings.VR_ACTIONS:
+		_add_bind_row(action, true)
+	for action in PlayerSettings.FLAT_ACTIONS:
+		_add_bind_row(action, false)
+
+
+func _add_bind_row(action: StringName, is_vr: bool) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var name_label := Label.new()
+	name_label.custom_minimum_size = Vector2(160, 0)
+	name_label.text = PlayerSettings.vr_action_label(action) if is_vr \
+			else PlayerSettings.flat_action_label(action)
+	var value_label := Label.new()
+	value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var rebind_btn := Button.new()
+	rebind_btn.text = "Rebind"
+	rebind_btn.custom_minimum_size = Vector2(96, 0)
+	var captured_action := action
+	var captured_vr := is_vr
+	rebind_btn.pressed.connect(func() -> void:
+		_start_rebind(captured_action, captured_vr))
+	row.add_child(name_label)
+	row.add_child(value_label)
+	row.add_child(rebind_btn)
+	%BindRows.add_child(row)
+	_bind_rows[_row_key(action, is_vr)] = {
+		"row": row,
+		"label": value_label,
+		"button": rebind_btn,
+		"action": action,
+		"is_vr": is_vr,
+	}
+
+
+func _row_key(action: StringName, is_vr: bool) -> String:
+	return ("%s:%s" % ["vr" if is_vr else "flat", String(action)])
+
+
+func _refresh_bind_labels() -> void:
+	var listening := PlayerSettings.is_listening()
+	for key in _bind_rows:
+		var info: Dictionary = _bind_rows[key]
+		var action: StringName = info["action"]
+		var is_vr: bool = info["is_vr"]
+		var label: Label = info["label"]
+		var button: Button = info["button"]
+		if listening and PlayerSettings.listen_action == action \
+				and PlayerSettings.listen_is_vr == is_vr:
+			label.text = "Press a button…"
+			button.text = "…"
+		elif is_vr:
+			label.text = PlayerSettings.vr_source_label(PlayerSettings.get_vr_bind(action))
+			button.text = "Rebind"
+		else:
+			label.text = PlayerSettings.flat_event_label(
+					PlayerSettings.get_flat_bind_event(action))
+			button.text = "Rebind"
+
+
+func _start_rebind(action: StringName, is_vr: bool) -> void:
+	if PlayerSettings.is_listening() and PlayerSettings.listen_action == action \
+			and PlayerSettings.listen_is_vr == is_vr:
+		PlayerSettings.cancel_listen()
+		_refresh_bind_labels()
+		return
+	PlayerSettings.begin_listen(action, is_vr)
+	_refresh_bind_labels()
+
+
+func _on_reset_binds() -> void:
+	PlayerSettings.reset_binds()
+	_refresh_bind_labels()
+
+
+func _on_back() -> void:
+	PlayerSettings.cancel_listen()
+	back_pressed.emit()
 
 
 func _fill_resolution_options() -> void:
@@ -82,6 +198,9 @@ func _apply_platform_rows() -> void:
 	%ResolutionRow.visible = not vr
 	%ApplyVideoButton.visible = not vr
 	%ResolutionOption.disabled = %WindowModeOption.selected == PlayerSettings.WindowModeSetting.BORDERLESS
+	for key in _bind_rows:
+		var info: Dictionary = _bind_rows[key]
+		(info["row"] as Control).visible = info["is_vr"] == vr
 
 
 func _on_volume_changed(value: float) -> void:

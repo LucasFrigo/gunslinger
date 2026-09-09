@@ -69,6 +69,8 @@ func _ready() -> void:
 		rig.reload_pressed.connect(_on_reload_pressed)
 	if rig.has_signal("gate_pressed"):
 		rig.gate_pressed.connect(_on_gate_pressed)
+	if rig.has_signal("trick_shot_changed"):
+		rig.trick_shot_changed.connect(_on_trick_shot_changed)
 
 	head_hitbox.owner_entity = self
 	torso_hitbox.owner_entity = self
@@ -91,7 +93,6 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_follow_body()
 	_recover_free_gun()
-	_update_vr_spin()
 	_update_vr_reload(delta)
 	_update_wound_status(delta)
 	_update_jam_clear(delta)
@@ -353,18 +354,18 @@ func _holding_hand_name() -> StringName:
 	return HAND_LEFT if _holding_hand == GunHand.LEFT else HAND_RIGHT
 
 
-func _update_vr_spin() -> void:
-	if not use_vr or not (rig is VRRig):
+func _on_trick_shot_changed(hand: StringName, pressed: bool) -> void:
+	if not use_vr:
 		return
 	if not revolver.held or _holding_hand == GunHand.NONE:
 		if revolver.is_spin_active():
 			revolver.end_spin(true)
 		return
-	var stick: Vector2 = (rig as VRRig).get_stick(_holding_hand_name())
-	var thresh := float(GameManager.tuning.get("spin_stick_threshold", 0.55))
-	if stick.y <= -thresh:
+	if hand != _holding_hand_name():
+		return
+	if pressed:
 		revolver.begin_spin()
-	elif stick.y >= thresh:
+	else:
 		revolver.end_spin(false)
 
 

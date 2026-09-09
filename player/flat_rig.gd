@@ -57,6 +57,9 @@ func get_look_pitch() -> float:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if PlayerSettings.is_listening() and not PlayerSettings.listen_is_vr:
+		# SettingsMenu._input owns flat rebind capture while listening.
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var sens: float = MovementConfig.mouse_sensitivity
 		_yaw -= event.relative.x * sens

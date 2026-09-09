@@ -38,8 +38,8 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 - [ ] Lingering barrel smoke (stub `muzzle_smoke` is a short puff). `from:` barrel smoke (planned)
 - [ ] Persistent gauntlet high scores (session-only today). `from:` gauntlet scores (planned)
 - [ ] Reload mesh-fit / cylinder-flip polish can land later; volumes exist on layer `reload`. `from:` interactive reload
-- [ ] VR default: gun-hand stick down cocks; A is trick-shot / spin (A cocks and stick-down spins today). `from:` VR cock on stick-down (planned)
-- [ ] Button remapping in Settings (`user://settings.cfg`). `from:` button remapping (planned)
+- [x] VR default: gun-hand stick down cocks; A is trick-shot / spin. `from:` VR cock on stick-down
+- [x] Button remapping in Settings (`user://settings.cfg`). `from:` button remapping
 
 ## Attention
 

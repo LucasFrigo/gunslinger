@@ -136,7 +136,47 @@ func _test_load_all() -> void:
 		return _fail("ladder has %d encounters, expected 6" % ladder.encounters.size())
 	if not _steam_transport_ok():
 		return
+	if not _binds_ok():
+		return
 	_pass()
+
+
+func _binds_ok() -> bool:
+	PlayerSettings.reset_binds()
+	if PlayerSettings.get_vr_bind(&"cock") != "stick_down":
+		_fail("default VR cock should be stick_down")
+		return false
+	if PlayerSettings.get_vr_bind(&"trick_shot") != "ax_button":
+		_fail("default VR trick_shot should be ax_button")
+		return false
+	PlayerSettings.set_vr_bind(&"cock", "ax_button")
+	if PlayerSettings.get_vr_bind(&"cock") != "ax_button":
+		_fail("VR cock rebind failed")
+		return false
+	if PlayerSettings.get_vr_bind(&"trick_shot") != "stick_down":
+		_fail("VR bind conflict should swap")
+		return false
+	PlayerSettings.reset_binds()
+	if PlayerSettings.get_vr_bind(&"cock") != "stick_down":
+		_fail("reset_binds did not restore VR defaults")
+		return false
+	if PlayerSettings.flat_event_label(PlayerSettings.get_flat_bind_event(&"cock_hammer")) != "Space":
+		_fail("default flat cock should be Space")
+		return false
+	var key_f := InputEventKey.new()
+	key_f.physical_keycode = KEY_F
+	PlayerSettings.set_flat_bind(&"cock_hammer", key_f)
+	var found := false
+	for ev in InputMap.action_get_events("cock_hammer"):
+		if ev is InputEventKey and (ev as InputEventKey).physical_keycode == KEY_F:
+			found = true
+			break
+	if not found:
+		_fail("flat cock InputMap not updated")
+		return false
+	PlayerSettings.reset_binds()
+	print("AUTOTEST: bind table swap/reset ok")
+	return true
 
 
 ## SteamTransport must parse without GodotSteam. CI has no addon, so

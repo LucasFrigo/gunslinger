@@ -11,13 +11,14 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Added
 
+- Button remapping in Settings (**Controls**): VR fire / grip / cock / trick shot / gate and flat fire / draw / cock / reload. Persists under `[binds]` in `user://settings.cfg`; conflicts swap; **Reset Controls** restores defaults. Scrollable settings panel for VR.
 - Player-facing Settings on the main menu and in-duel pause (`ui/settings_menu.tscn`): master volume, holster side, VR turn mode, mouse sensitivity, and (flat only) window mode plus resolution with **Apply Display**. Persists to `user://settings.cfg`; other knobs reuse `MovementConfig` / `holster_side`. Debug panel stays F3 (and the VR menu button on the main menu).
 - In-duel pause overlay (`ui/pause_menu.tscn`): Escape (flat) or VR menu button. Single-player pauses the game; multiplayer is overlay-only so the opponent is not frozen. Resume, Settings, Restart Duel / Restart Gauntlet (full run; host-only in MP), Quit to main menu.
 - 1v1 Steam lobbies (desktop / PCVR): create, browse, and join public matches over Steam Datagram Relay (`netcode/steam_transport.gd`). Lobby list auto-refreshes on the main menu; full (2/2) lobbies hide and become unjoinable. Host HUD shows a Steam wait line instead of LAN IPs. GodotSteam 4.22 is vendored in `addons/godotsteam/`; Meta Store / Quest APK remains LAN-only. App ID 480 (Spacewar) until the game has its own.
 - Pre-release checklist [`docs/RELEASE_TODOS.md`](docs/RELEASE_TODOS.md) (store / SKU / MP test gotchas). Agents update it when a shippable feature lands.
 - Low-poly A-pose gunslinger mesh (`assets/models/characters/gunslinger.glb`, Blender source `gunslinger.blend`): split serape/black cloth poncho, hat with three crown spikes. Not wired to AI or the remote avatar yet.
 - NPC reload: AI duelists empty a 6-round cylinder and spend `reload_time` reloading (Drunk 3.5s, Sheriff 2.2s, Ghost 1.4s, scaled by `ai_speed_mult`) instead of instantly refilling. Gate opens and the arm dips for a readable window; arm hits cancel without restoring ammo.
-- VR Revolver Ocelot spin: while the gun is held, push the gun-hand stick down to hang it on a finger hinge; hand motion builds momentum; stick up snaps it back. Trigger still fires along the barrel. Hang gravity uses the barrel COM so the muzzle drops promptly. Tunable in the debug panel (**VR Spin**: `spin_stick_threshold`, `spin_damping`, `spin_gravity`, `spin_inertia`, `spin_coupling`, `spin_relock_time`).
+- VR Revolver Ocelot spin: hang the revolver on a finger hinge while the trick-shot bind is held (default A / X; remappable, including stick-down). Hand motion builds momentum; release (or stick up when on stick) snaps back. Tunable in the debug panel (**VR Spin**).
 - Self-damage: your own (and a peer's own) bullets can hit the shooter after a short muzzle grace so a normal shot does not clip the gun arm. Same regional HP / disarm / limp rules; a self-kill loses the duel. Tunable `self_hit_grace`.
 - Flat rapid-fire jam: successive auto-cock spam builds jam chance; the failing pull clicks and does not fire. Clear by looking down at the gun and holding Space for 1.5s (keeps remaining rounds). VR and AI never jam. Tunable in the debug panel (**Flat Jam**: `jam_safe_interval`, `jam_heat_per_shot`, `jam_heat_decay`, `jam_heat_threshold`, `jam_chance_scale`, `jam_max_chance`, `jam_clear_hold`, `jam_clear_pitch`).
 - VR gun release: hold grip to keep the revolver, release to toss with hand velocity, catch with either hand (or take it from the other). Fire and reload only while held. Chosen hip via debug **Holster side** (`holster_side`). Tunables: `gun_catch_radius`, `gun_holster_max_speed`, `gun_throw_scale`, `gun_throw_spin_scale`.
@@ -28,6 +29,10 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 - Interactive revolver reload: VR opens gate with B, sustained shake to dump, grabs physical rounds from a torso ammo belt, closes with left-hand bump or gun swing; Flat uses `R` / Space. Reload status HUD. Dump/close thresholds live-tunable (`reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close` in debug panel).
 - Reload status readout (ammo, gate open/closed, round in hand, empty/dry-fire/chambered events) on flat HUD and VR view.
 - Regional hit effects: arm/leg hitboxes on player, AI, and remote avatar. Headshots are instant death; torso and limbs deal 1 HP (default HP 2 so a single torso is not fatal). Arm hits force-holster and block redraw for a window; leg hits apply a timed move-speed penalty. 1v1 MP tracks HP on the host and syncs non-fatal wounds. Tunable in the debug panel (`player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`).
+
+### Changed
+
+- VR default layout: gun-hand stick down cocks the hammer (edge); hold A / X for Ocelot spin (was stick-down spin / A cock). Remappable in Settings.
 
 ### Fixed
 

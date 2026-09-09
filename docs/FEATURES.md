@@ -13,9 +13,9 @@ Design / lore: [`design/README.md`](design/README.md)
 | Feature | Status | Notes / key paths |
 |---|---|---|
 | Standoff → bell → draw → resolve | `done` | `gauntlet/duel_manager.gd` |
-| Holster / draw / fire / cock | `done` | `weapons/revolver/revolver.gd`, player rigs. VR grip is hold-to-hold; Flat RMB still toggles. VR cock is gun-hand A today; stick-down cock is planned |
-| VR cock on stick-down | `planned` | Roadmap (Medium); gun-hand analog down cocks; A becomes trick-shot / Ocelot spin (`vr_rig.gd` `ax_button`, `player.gd` `_update_vr_spin`) |
-| Button remapping | `planned` | Roadmap (Medium); Settings bind table → `PlayerSettings` / `user://settings.cfg` (VR + flat). None today |
+| Holster / draw / fire / cock | `done` | `weapons/revolver/revolver.gd`, player rigs. VR grip is hold-to-hold; Flat RMB still toggles. Default VR cock is gun-hand stick down; A is trick-shot / Ocelot spin (remappable) |
+| VR cock on stick-down | `done` | Default: gun-hand analog down cocks; A holds Ocelot spin (`PlayerSettings` VR binds, `vr_rig.gd` dispatch, `player.gd` `_on_trick_shot_changed`) |
+| Button remapping | `done` | Settings Controls table → `PlayerSettings` / `user://settings.cfg`. VR: fire, grip, cock, trick shot, gate. Flat: fire, draw, cock, reload. Conflict swaps; Reset Controls |
 | Projectile bullets + trails | `done` | `weapons/bullet.gd`, `weapons/bullet_trail.gd`; ribbon uses one camera-facing side vector, first point at muzzle. Shorter linger is planned (`FADE_TIME` 1.6s) |
 | Shorter bullet-trail fade | `planned` | Roadmap (Polish / visual); `weapons/bullet_trail.gd` |
 | Barrel smoke | `planned` | Roadmap (Polish / visual); stub `muzzle_smoke` already fires from `ImpactFeedback.shot_fired` — wants a lingering plume from the barrel |
@@ -30,7 +30,7 @@ Design / lore: [`design/README.md`](design/README.md)
 | Kill-cam / replay | `done` | SP + 1v1 MP: `KillCam` + `TimeManager.notify_kill_cam`; flat `Camera3D` fly-along, VR spectator `XROrigin3D` ride; `duel_end` sting on lethal hit |
 | Impact / AV polish (SFX, haptics, VFX) | `done` | `ImpactFeedback` + `AudioCatalog` / `VfxCatalog` stubs; combat XR/flat rumble wired |
 | Gun release / trick shots | `done` | VR hold-to-hold: toss with hand velocity, catch either hand (or take from the other), holster snap on chosen hip (`holster_side`). Fire/reload only while held; airborne still counts as drawn for fouls. Frozen `RigidBody3D` copies the hand/hip pose (`follow_parent` in `weapons/weapon_base.gd`). MP pose sends free-gun transform + hand/hip flags |
-| Revolver Ocelot spin | `done` | VR only: gun-hand stick down hangs the revolver on a finger hinge (`SpinPivot` / `WeaponBase`); hand motion builds momentum; stick up snaps back. Fire still works (muzzle aim). Debug **VR Spin**. MP flag `GUN_SPINNING` |
+| Revolver Ocelot spin | `done` | VR only: default hold gun-hand A / X (remappable; was stick-down) hangs the revolver on a finger hinge (`SpinPivot` / `WeaponBase`); hand motion builds momentum; release (or stick up if bound to stick) snaps back. Fire still works (muzzle aim). Debug **VR Spin**. MP flag `GUN_SPINNING` |
 | Airborne fire / mystic trick shots | `planned` | Roadmap (Medium); fire while tossed/spinning; optional tech/mystic flag |
 
 ## Modes
@@ -70,7 +70,7 @@ Design / lore: [`design/README.md`](design/README.md)
 | Feature | Status | Notes / key paths |
 |---|---|---|
 | Debug panel + presets | `done` | `autoload/debug_menu.gd`, `user://*.cfg` |
-| Settings screen (main menu) | `done` | `ui/settings_menu.tscn` on main menu and pause. Master volume, holster side, VR turn mode; flat-only mouse sensitivity, window mode, resolution (**Apply Display** applies video immediately). `PlayerSettings` → `user://settings.cfg`. Debug panel stays F3 / Quest menu on the main menu |
+| Settings screen (main menu) | `done` | `ui/settings_menu.tscn` on main menu and pause. Master volume, holster side, VR turn mode; flat-only mouse sensitivity, window mode, resolution (**Apply Display**); Controls remapping (VR + flat). Scrollable panel. `PlayerSettings` → `user://settings.cfg`. Debug panel stays F3 / Quest menu on the main menu |
 | In-duel pause / MP overlay | `done` | ESC (flat) / VR menu button. SP sets `get_tree().paused`; MP is overlay-only. Resume, Settings, Restart Duel/Gauntlet (host-only in MP), Quit to main menu. `ui/pause_menu.tscn` |
 | Blender MCP | `done` | Project `.cursor/mcp.json` → `uvx blender-mcp` → Blender addon on `localhost:9876`. Client helper `dev/blender_mcp.py` |
 | In-game version tag | `done` | HUD corner + main menu; `ProjectSettings` `application/config/version` (`VERSION`) |
