@@ -21,12 +21,12 @@ const RESOLUTION_PRESETS: Array[Vector2i] = [
 
 ## Logical VR combat actions → OpenXR / synthetic source strings.
 const VR_ACTIONS: Array[StringName] = [
-	&"fire", &"grip", &"cock", &"trick_shot", &"gate",
+	&"fire", &"grip", &"cock", &"trick_shot", &"gate", &"prop_radial",
 ]
 
 ## Flat InputMap actions that players may remap.
 const FLAT_ACTIONS: Array[StringName] = [
-	&"fire", &"draw_toggle", &"cock_hammer", &"reload",
+	&"fire", &"draw_toggle", &"cock_hammer", &"reload", &"prop_radial", &"prop_fire",
 ]
 
 const VR_SOURCES: Array[String] = [
@@ -38,7 +38,7 @@ const VR_SOURCES: Array[String] = [
 	"stick_down",
 ]
 
-const VR_HOLD_ACTIONS: Array[StringName] = [&"fire", &"grip", &"trick_shot"]
+const VR_HOLD_ACTIONS: Array[StringName] = [&"fire", &"grip", &"trick_shot", &"prop_radial"]
 const VR_EDGE_ACTIONS: Array[StringName] = [&"cock", &"gate"]
 
 const DEFAULT_VR_BINDS := {
@@ -47,6 +47,8 @@ const DEFAULT_VR_BINDS := {
 	"cock": "stick_down",
 	"trick_shot": "ax_button",
 	"gate": "by_button",
+	## Only honored on the off hand; the gun-hand stick click does nothing.
+	"prop_radial": "primary_click",
 }
 
 const VR_SOURCE_LABELS := {
@@ -63,6 +65,8 @@ const FLAT_ACTION_LABELS := {
 	"draw_toggle": "Draw / Holster",
 	"cock_hammer": "Cock",
 	"reload": "Reload",
+	"prop_radial": "Prop Radial",
+	"prop_fire": "Cigarette / Prop",
 }
 
 const VR_ACTION_LABELS := {
@@ -71,6 +75,7 @@ const VR_ACTION_LABELS := {
 	"cock": "Cock",
 	"trick_shot": "Trick Shot",
 	"gate": "Gate",
+	"prop_radial": "Prop Radial",
 }
 
 var master_volume := 1.0
@@ -372,6 +377,14 @@ func _default_flat_event(action: StringName) -> InputEvent:
 			var key2 := InputEventKey.new()
 			key2.physical_keycode = KEY_R
 			return key2
+		&"prop_radial":
+			var key3 := InputEventKey.new()
+			key3.physical_keycode = KEY_TAB
+			return key3
+		&"prop_fire":
+			var key4 := InputEventKey.new()
+			key4.physical_keycode = KEY_G
+			return key4
 	return null
 
 

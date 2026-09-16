@@ -24,6 +24,8 @@ enum GunHand { NONE, LEFT, RIGHT }
 
 var use_vr := false
 var rig: Node3D
+## Off-hand misc props: equip radial + cigarette boomerang.
+var props: PropController
 var health := CombatRules.DEFAULT_HEALTH
 var max_health := CombatRules.DEFAULT_HEALTH
 var alive := true
@@ -71,6 +73,15 @@ func _ready() -> void:
 		rig.gate_pressed.connect(_on_gate_pressed)
 	if rig.has_signal("trick_shot_changed"):
 		rig.trick_shot_changed.connect(_on_trick_shot_changed)
+
+	props = PropController.new()
+	props.name = "PropController"
+	add_child(props)
+	props.setup(self)
+	if rig.has_signal("prop_radial_changed"):
+		rig.prop_radial_changed.connect(_on_prop_radial_changed)
+	if rig.has_signal("prop_fire_changed"):
+		rig.prop_fire_changed.connect(_on_prop_fire_changed)
 
 	head_hitbox.owner_entity = self
 	torso_hitbox.owner_entity = self
@@ -190,6 +201,7 @@ func reset_for_duel(spawn: Transform3D) -> void:
 	_disarm_remaining = 0.0
 	_leg_remaining = 0.0
 	_clear_held_cartridge(true)
+	props.reset_for_duel()
 	_holster_gun()
 	revolver.reset()
 	_refresh_health_hud()
@@ -369,7 +381,8 @@ func _on_trick_shot_changed(hand: StringName, pressed: bool) -> void:
 		revolver.end_spin(false)
 
 
-func _off_hand_name() -> StringName:
+## The hand that is not on the gun. Defaults to left while holstered.
+func off_hand_name() -> StringName:
 	return HAND_RIGHT if _holding_hand == GunHand.LEFT else HAND_LEFT
 
 
@@ -489,11 +502,30 @@ func _combat_blocked() -> bool:
 
 
 func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
+	# VR: the off-hand trigger throws the equipped prop instead of firing.
+	if use_vr and hand == off_hand_name() and props.has_prop():
+		props.on_fire_changed(pressed)
+		return
 	if not pressed or not alive or _combat_blocked():
 		return
 	if use_vr and (not revolver.held or hand != _holding_hand_name()):
 		return
 	revolver.try_fire(GameManager.tuning["auto_cock"], rig.get_aim_override())
+
+
+func _on_prop_radial_changed(hand: StringName, pressed: bool) -> void:
+	# VR: only the off-hand stick click opens the wheel. Releases carry the real
+	# hand so a gun swap mid-wheel cannot strand it open.
+	if use_vr:
+		if pressed and hand != off_hand_name():
+			return
+		props.on_radial_changed(hand, pressed)
+		return
+	props.on_radial_changed(off_hand_name(), pressed)
+
+
+func _on_prop_fire_changed(_hand: StringName, pressed: bool) -> void:
+	props.on_fire_changed(pressed)
 
 
 func _on_cock_pressed(hand: StringName) -> void:
@@ -639,7 +671,7 @@ func _update_vr_reload(delta: float) -> void:
 		return
 	var vr := rig as VRRig
 	var gun_speed: float = vr.hand_speed(_holding_hand_name())
-	var off_speed: float = vr.hand_speed(_off_hand_name())
+	var off_speed: float = vr.hand_speed(off_hand_name())
 	# Thresholds live in GameManager.tuning (debug panel → Gunplay / AI).
 	var dump_speed: float = float(GameManager.tuning["reload_dump_speed"])
 	var dump_hold: float = float(GameManager.tuning["reload_dump_hold"])
@@ -690,7 +722,7 @@ func _reload_probe() -> Area3D:
 		return null
 	var vr := rig as VRRig
 	if revolver.held:
-		return vr.get_reload_probe(_off_hand_name())
+		return vr.get_reload_probe(off_hand_name())
 	return vr.get_reload_probe(HAND_LEFT)
 
 
@@ -785,7 +817,7 @@ func _reload_viz_color(shape_node: CollisionShape3D) -> Color:
 
 func _cartridge_attach() -> Node3D:
 	if rig is VRRig:
-		var hand := _off_hand_name() if revolver.held else HAND_LEFT
+		var hand := off_hand_name() if revolver.held else HAND_LEFT
 		return (rig as VRRig).get_cartridge_attach(hand)
 	if rig.has_method("get_wrist_attach"):
 		return rig.get_wrist_attach()
@@ -799,7 +831,7 @@ func _drop_held_cartridge() -> void:
 	var vel := Vector3.ZERO
 	if rig is VRRig:
 		var vr := rig as VRRig
-		var off := _off_hand_name() if revolver.held else HAND_LEFT
+		var off := off_hand_name() if revolver.held else HAND_LEFT
 		vel = vr.hand_velocity(off) * 0.25
 	_held_cartridge.drop_into_world(get_tree().current_scene, pos, vel)
 	_held_cartridge = null
@@ -836,6 +868,11 @@ func _update_reload_event(delta: float) -> void:
 
 func _holding_cartridge() -> bool:
 	return _held_cartridge != null and is_instance_valid(_held_cartridge)
+
+
+## A belt round owns the off hand, so an equipped prop parks at the mouth.
+func is_holding_cartridge() -> bool:
+	return _holding_cartridge()
 
 
 func _build_reload_status_text() -> String:

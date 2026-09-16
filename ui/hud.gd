@@ -8,6 +8,7 @@ extends CanvasLayer
 @onready var health_status: Label = $HealthStatus
 @onready var version_tag: Label = $VersionTag
 @onready var red_flash: ColorRect = $RedFlash
+@onready var prop_radial: PropRadialOverlay = $PropRadial
 @onready var menu_holder: Control = $MenuHolder
 @onready var pause_holder: Control = $PauseHolder
 
@@ -24,6 +25,7 @@ func _ready() -> void:
 	reload_status.visible = false
 	health_status.visible = false
 	red_flash.modulate.a = 0.0
+	prop_radial.visible = false
 	menu_holder.visible = false
 	pause_holder.visible = false
 	version_tag.text = "v%s" % str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
@@ -106,6 +108,20 @@ func set_health(current: float, max_hp: float) -> void:
 		return
 	health_status.text = "HP %d / %d" % [ceili(current), ceili(max_hp)]
 	health_status.visible = true
+
+
+# -- Prop radial (flat harness) ------------------------------------------------
+
+func show_prop_radial(labels: PackedStringArray) -> void:
+	prop_radial.show_wheel(labels)
+
+
+func set_prop_radial_highlight(index: int) -> void:
+	prop_radial.set_highlight(index)
+
+
+func hide_prop_radial() -> void:
+	prop_radial.hide_wheel()
 
 
 func flash_red() -> void:

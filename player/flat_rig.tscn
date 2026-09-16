@@ -13,3 +13,6 @@ current = true
 
 [node name="GunAttach" type="Node3D" parent="Pivot/Camera3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, -0.22, -0.5)
+
+[node name="PropAttach" type="Node3D" parent="Pivot/Camera3D"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -0.24, -0.2, -0.42)

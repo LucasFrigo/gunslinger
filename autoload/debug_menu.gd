@@ -49,6 +49,8 @@ var _auto_cock: CheckButton
 var _reload_sliders: Dictionary = {}
 var _release_sliders: Dictionary = {}
 var _spin_sliders: Dictionary = {}
+var _cig_sliders: Dictionary = {}
+var _cig_spin_axis_option: OptionButton
 var _holster_side_option: OptionButton
 var _combat_sliders: Dictionary = {}
 var _jam_sliders: Dictionary = {}
@@ -376,6 +378,41 @@ func _build_gunplay_section(root: Control) -> void:
 					GameManager.set_tuning(tune_spin, value))
 		_spin_sliders[tune_spin] = spin_widgets
 
+	_add_header(root, "Cigarette Boomerang")
+	const CIG_SLIDERS := {
+		"cig_speed": [2.0, 25.0, 0.5],
+		"cig_min_range": [0.3, 5.0, 0.1],
+		"cig_max_range": [1.0, 20.0, 0.5],
+		"cig_charge_time": [0.1, 3.0, 0.05],
+		"cig_flight_time": [0.3, 5.0, 0.1],
+		"cig_catch_radius": [0.08, 0.8, 0.02],
+		"cig_curve": [-4.0, 4.0, 0.1],
+		"cig_spin": [0.0, 90.0, 1.0],
+	}
+	for cig_key in CIG_SLIDERS:
+		var cig_range: Array = CIG_SLIDERS[cig_key]
+		var tune_cig: String = cig_key
+		var cig_widgets := _add_slider(root, cig_key, cig_range[0], cig_range[1],
+				cig_range[2], float(GameManager.tuning[tune_cig]),
+				func(value: float) -> void:
+					if _refreshing:
+						return
+					GameManager.set_tuning(tune_cig, value))
+		_cig_sliders[tune_cig] = cig_widgets
+
+	var spin_axis_label := Label.new()
+	spin_axis_label.text = "cig_spin_axis"
+	root.add_child(spin_axis_label)
+	_cig_spin_axis_option = OptionButton.new()
+	_cig_spin_axis_option.add_item("Roll (long axis)")
+	_cig_spin_axis_option.add_item("Baton sweep")
+	_cig_spin_axis_option.selected = int(GameManager.tuning["cig_spin_axis"])
+	_cig_spin_axis_option.item_selected.connect(func(index: int) -> void:
+		if _refreshing:
+			return
+		GameManager.set_tuning("cig_spin_axis", index))
+	root.add_child(_cig_spin_axis_option)
+
 
 func _build_movement_section(root: Control) -> void:
 	_add_header(root, "Movement (Flat)")
@@ -513,6 +550,13 @@ func _refresh_from_systems() -> void:
 		var svalue: float = float(GameManager.tuning[key])
 		swidgets["slider"].value = svalue
 		swidgets["label"].text = "%.2f" % svalue
+	for key in _cig_sliders:
+		var cig_widgets: Dictionary = _cig_sliders[key]
+		var cig_value: float = float(GameManager.tuning[key])
+		cig_widgets["slider"].value = cig_value
+		cig_widgets["label"].text = "%.2f" % cig_value
+	if _cig_spin_axis_option != null:
+		_cig_spin_axis_option.selected = int(GameManager.tuning["cig_spin_axis"])
 	for key in _combat_sliders:
 		var cwidgets: Dictionary = _combat_sliders[key]
 		var cvalue: float = float(GameManager.tuning[key])

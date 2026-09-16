@@ -12,6 +12,7 @@ signal grip_changed(hand: StringName, pressed: bool)
 signal cock_pressed(hand: StringName)
 signal gate_pressed(hand: StringName)
 signal trick_shot_changed(hand: StringName, pressed: bool)
+signal prop_radial_changed(hand: StringName, pressed: bool)
 signal menu_button_pressed
 
 const HAND_LEFT := &"left_hand"
@@ -53,6 +54,8 @@ var left_hand_angular_velocity := Vector3.ZERO
 ## Stick-down edge / hold state per hand (cock edge + trick-shot analog).
 var _stick_down_latched := {HAND_LEFT: false, HAND_RIGHT: false}
 var _stick_trick_active := {HAND_LEFT: false, HAND_RIGHT: false}
+## Hand whose stick is driving the prop radial, or empty when it is closed.
+var _prop_radial_hand: StringName = &""
 
 
 func _ready() -> void:
@@ -104,6 +107,34 @@ func get_reload_probe(hand: StringName = HAND_LEFT) -> Area3D:
 	return $LeftHand/ReloadProbe as Area3D
 
 
+## Where an equipped misc prop rides on the off hand.
+func get_prop_attach(hand: StringName = HAND_LEFT) -> Node3D:
+	if hand == HAND_RIGHT:
+		return $RightHand/PropAttach
+	return $LeftHand/PropAttach
+
+
+## Parking spot for a prop while the off hand is busy with a belt cartridge.
+func get_mouth_attach() -> Node3D:
+	return $XRCamera3D/MouthAttach
+
+
+## The controller node itself, for hanging world-space UI off a hand.
+func get_hand_node(hand: StringName) -> Node3D:
+	return left_hand if hand == HAND_LEFT else right_hand
+
+
+## While the prop radial is open, that stick is stolen from locomotion.
+func set_prop_radial_active(active: bool, hand: StringName = &"") -> void:
+	_prop_radial_hand = hand if active else &""
+
+
+func get_prop_radial_vector() -> Vector2:
+	if _prop_radial_hand == &"":
+		return Vector2.ZERO
+	return get_stick(_prop_radial_hand)
+
+
 func hand_speed(hand: StringName) -> float:
 	return left_hand_speed if hand == HAND_LEFT else right_hand_speed
 
@@ -140,6 +171,7 @@ func reset_locomotion() -> void:
 	_stick_down_latched[HAND_RIGHT] = false
 	_stick_trick_active[HAND_LEFT] = false
 	_stick_trick_active[HAND_RIGHT] = false
+	_prop_radial_hand = &""
 	var desired_yaw := global_transform.basis.get_euler().y
 	var head_yaw := camera.global_transform.basis.get_euler().y
 	_rotate_around_head(wrapf(desired_yaw - head_yaw, -PI, PI))
@@ -172,6 +204,9 @@ func _apply_locomotion(delta: float) -> float:
 	# Steal gun-hand stick Y when a combat bind uses stick_down (cock or spin).
 	if PlayerSettings.vr_uses_stick_down() and gun_hand == HAND_LEFT:
 		move_input.y = 0.0
+	# An open prop radial owns that stick outright.
+	if _prop_radial_hand == HAND_LEFT:
+		move_input = Vector2.ZERO
 	var head_yaw := camera.global_transform.basis.get_euler().y
 	var basis := Basis(Vector3.UP, head_yaw)
 	# World XZ from HMD yaw, applied via global_position. Adding that vector to
@@ -180,7 +215,10 @@ func _apply_locomotion(delta: float) -> float:
 			* MovementConfig.vr_move_speed * _move_speed_mult() * delta
 	global_position += motion
 
-	_apply_turn(delta, right_hand.get_vector2("primary"))
+	var turn_input := right_hand.get_vector2("primary")
+	if _prop_radial_hand == HAND_RIGHT:
+		turn_input = Vector2.ZERO
+	_apply_turn(delta, turn_input)
 
 	var real_delta := delta / maxf(Engine.time_scale, 0.001)
 	if real_delta <= 0.0:
@@ -359,6 +397,8 @@ func _emit_action(hand: StringName, action: StringName, pressed: bool) -> void:
 				gate_pressed.emit(hand)
 		&"trick_shot":
 			trick_shot_changed.emit(hand, pressed)
+		&"prop_radial":
+			prop_radial_changed.emit(hand, pressed)
 		_:
 			pass
 	# Left B opens debug when that press is not consumed as gun-hand gate —

@@ -1,6 +1,7 @@
 extends Node
 ## Headless smoke tests, launched via `--autotest=<mode>` after `--`:
 ##   duel     - free duel vs AI; passes when bullets actually resolve the duel
+##   props    - equips the cigarette from the radial and throws/catches it
 ##   gauntlet - clears two gauntlet rungs by force-killing the AI
 ##   host     - hosts a LAN game, waits for a peer, wins the MP duel
 ##   join     - joins 127.0.0.1, expects to lose the MP duel
@@ -26,6 +27,8 @@ func _ready() -> void:
 			_test_join()
 		"load":
 			_test_load_all()
+		"props":
+			_test_props()
 		"steam":
 			_test_steam()
 		_:
@@ -101,6 +104,59 @@ func _test_join() -> void:
 	_pass()
 
 
+## Off-hand props on a live flat player: equip through the radial, throw the
+## cigarette, and catch it back onto the hand attach.
+func _test_props() -> void:
+	await _sleep(1.0)
+	GameManager.start_free_duel(0, 0)
+	await _sleep(1.0)
+	var player := GameManager.local_player
+	var props: PropController = player.props
+	var hand := player.off_hand_name()
+	var attach: Node3D = player.rig.get_prop_attach(hand)
+	if attach == null:
+		return _fail("flat rig has no PropAttach")
+
+	# Mouse up must land on the first wedge; centred must cancel.
+	var up := FlatRig.radial_vector_from_motion(Vector2.ZERO, Vector2(0.0, -400.0))
+	if PropController.highlight_index(up, PropController.ITEMS.size()) != 0:
+		return _fail("mouse up should highlight the top wedge, got %s" % up)
+
+	props.on_radial_changed(hand, true)
+	if not props.is_radial_open():
+		return _fail("radial did not open")
+	props.on_radial_changed(hand, false)
+	if props.is_radial_open():
+		return _fail("radial did not close on release")
+	if props.has_prop():
+		return _fail("release at centre should cancel, not equip")
+
+	props.equip_item(PropController.ITEM_CIGARETTE)
+	if not props.has_prop():
+		return _fail("cigarette was not equipped")
+	print("AUTOTEST: cigarette equipped on the off hand")
+
+	# Hold to charge, release to throw.
+	props.on_fire_changed(true)
+	await _sleep(0.4)
+	if props.is_prop_flying():
+		return _fail("cigarette left the hand before the button was released")
+	var charge := props.charge_ratio()
+	if charge <= 0.0:
+		return _fail("holding the throw button did not charge")
+	props.on_fire_changed(false)
+	if not await _wait_for(func() -> bool: return props.is_prop_flying(), 3.0):
+		return _fail("cigarette never launched on release")
+	if not await _wait_for(func() -> bool: return not props.is_prop_flying(), 15.0):
+		return _fail("cigarette never returned to the hand")
+	print("AUTOTEST: charged to %.2f, thrown, and caught" % charge)
+
+	props.equip_item(PropController.ITEM_NONE)
+	if props.has_prop():
+		return _fail("empty-hand wedge did not clear the prop")
+	_pass()
+
+
 ## Instantiate every scene and load every resource the flat tests don't cover.
 func _test_load_all() -> void:
 	await _sleep(0.5)
@@ -112,6 +168,7 @@ func _test_load_all() -> void:
 		"res://player/remote_avatar.tscn",
 		"res://ai/duelist.tscn",
 		"res://weapons/revolver/revolver.tscn",
+		"res://props/cigarette.tscn",
 		"res://scenarios/main_street/main_street.tscn",
 		"res://scenarios/saloon/saloon.tscn",
 		"res://scenarios/train_rooftop/train_rooftop.tscn",
@@ -138,9 +195,83 @@ func _test_load_all() -> void:
 		return
 	if not _binds_ok():
 		return
+	if not await _props_ok():
+		return
 	if not _version_check_ok():
 		return
 	_pass()
+
+
+## Radial wedge picking plus the cigarette's hold → throw → catch cycle.
+func _props_ok() -> bool:
+	var count := PropController.ITEMS.size()
+	if PropController.highlight_index(Vector2.ZERO, count) != -1:
+		_fail("centered stick should cancel, not highlight")
+		return false
+	if PropController.highlight_index(Vector2(0.0, 1.0), count) != 0:
+		_fail("up should highlight the first wedge")
+		return false
+	if PropController.highlight_index(Vector2(0.0, -1.0), count) != count / 2:
+		_fail("down should highlight the opposite wedge")
+		return false
+
+	var attach := Node3D.new()
+	add_child(attach)
+	attach.global_position = Vector3(0.0, 1.2, 0.0)
+	var cig := Cigarette.spawn_held(attach)
+	if cig.is_flying() or cig.get_parent() != attach:
+		_fail("a fresh cigarette should be held on its attach")
+		return false
+	var aabb: AABB = (cig.get_node("Model/MSC_Cigarette") as MeshInstance3D).get_aabb()
+	if aabb.size.y < aabb.size.x * 4.0:
+		_fail("cigarette long axis should be +Y, got %s" % aabb.size)
+		return false
+
+	cig.begin_charge()
+	if cig.is_flying():
+		_fail("charging should keep the cigarette in hand")
+		return false
+	var started := Time.get_ticks_msec()
+	cig.release_charge(self, Vector3.FORWARD)
+	if not cig.is_flying():
+		_fail("cigarette did not launch on release")
+		return false
+	var caught := await _wait_for(func() -> bool: return not cig.is_flying(), 10.0)
+	if not caught:
+		_fail("cigarette never came back to the hand")
+		return false
+	if cig.get_parent() != attach:
+		_fail("caught cigarette did not re-seat on the attach")
+		return false
+	# A tap covers `cig_min_range` but must still hover out the rest of
+	# `cig_flight_time`, so every throw reads at the same pace.
+	var tap_flight := float(Time.get_ticks_msec() - started) / 1000.0
+	var want: float = float(GameManager.tuning["cig_flight_time"])
+	if absf(tap_flight - want) > 0.3:
+		_fail("tap throw took %.2fs, expected ~%.2fs" % [tap_flight, want])
+		return false
+
+	# Same again at full charge: much further, but the same time on the clock.
+	cig.begin_charge()
+	await _sleep(float(GameManager.tuning["cig_charge_time"]) + 0.2)
+	if cig.charge_ratio() < 1.0:
+		_fail("holding past cig_charge_time did not reach full charge")
+		return false
+	started = Time.get_ticks_msec()
+	cig.release_charge(self, Vector3.FORWARD)
+	if not await _wait_for(func() -> bool: return not cig.is_flying(), 10.0):
+		_fail("charged cigarette never came back to the hand")
+		return false
+	var full_flight := float(Time.get_ticks_msec() - started) / 1000.0
+	if absf(full_flight - tap_flight) > 0.25:
+		_fail("tap took %.2fs but a full throw took %.2fs" % [tap_flight, full_flight])
+		return false
+	print("AUTOTEST: throw length normalized (tap %.2fs, charged %.2fs)"
+			% [tap_flight, full_flight])
+	cig.queue_free()
+	attach.queue_free()
+	print("AUTOTEST: prop radial picking + cigarette boomerang ok")
+	return true
 
 
 func _version_check_ok() -> bool:
@@ -210,8 +341,17 @@ func _binds_ok() -> bool:
 	if PlayerSettings.get_vr_bind(&"cock") != "stick_down":
 		_fail("reset_binds did not restore VR defaults")
 		return false
+	if PlayerSettings.get_vr_bind(&"prop_radial") != "primary_click":
+		_fail("default VR prop_radial should be primary_click")
+		return false
 	if PlayerSettings.flat_event_label(PlayerSettings.get_flat_bind_event(&"cock_hammer")) != "Space":
 		_fail("default flat cock should be Space")
+		return false
+	if PlayerSettings.flat_event_label(PlayerSettings.get_flat_bind_event(&"prop_radial")) != "Tab":
+		_fail("default flat prop_radial should be Tab")
+		return false
+	if PlayerSettings.flat_event_label(PlayerSettings.get_flat_bind_event(&"prop_fire")) != "G":
+		_fail("default flat prop_fire should be G")
 		return false
 	var key_f := InputEventKey.new()
 	key_f.physical_keycode = KEY_F

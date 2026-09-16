@@ -9,9 +9,14 @@ signal trigger_changed(hand: StringName, pressed: bool)
 signal grip_changed(hand: StringName, pressed: bool)
 signal cock_pressed(hand: StringName)
 signal reload_pressed
+signal prop_radial_changed(hand: StringName, pressed: bool)
+signal prop_fire_changed(hand: StringName, pressed: bool)
 signal menu_button_pressed
 
 const EYE_HEIGHT := 1.7
+const OFF_HAND := &"left_hand"
+## Mouse pixels for a full deflection on the prop radial.
+const RADIAL_MOUSE_RANGE := 260.0
 
 @onready var camera: Camera3D = $Pivot/Camera3D
 @onready var pivot: Node3D = $Pivot
@@ -19,6 +24,8 @@ const EYE_HEIGHT := 1.7
 var _yaw := 0.0
 var _pitch := 0.0
 var _lean := 0.0
+var _prop_radial_active := false
+var _prop_radial_vector := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -46,6 +53,33 @@ func get_wrist_attach() -> Node3D:
 	return null
 
 
+## Virtual off hand: props sit left of the camera, never on `GunAttach`.
+func get_prop_attach(_hand: StringName = OFF_HAND) -> Node3D:
+	return $Pivot/Camera3D/PropAttach
+
+
+## Flat reload is R / Space, so there is nothing to stow for.
+func get_mouth_attach() -> Node3D:
+	return null
+
+
+## While the wheel is open the mouse steers it and look freezes, so the aim
+## you come back to is the one you left.
+func set_prop_radial_active(active: bool, _hand: StringName = &"") -> void:
+	_prop_radial_active = active
+	_prop_radial_vector = Vector2.ZERO
+
+
+func get_prop_radial_vector() -> Vector2:
+	return _prop_radial_vector
+
+
+## Mouse travel while the wheel is open, as a unit-clamped wheel vector
+## (screen up is wheel up).
+static func radial_vector_from_motion(current: Vector2, relative: Vector2) -> Vector2:
+	return (current + Vector2(relative.x, -relative.y) / RADIAL_MOUSE_RANGE).limit_length(1.0)
+
+
 ## Flat mode fires along the camera ray, not the viewmodel muzzle.
 func get_aim_override() -> Vector3:
 	return -camera.global_transform.basis.z
@@ -61,9 +95,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		# SettingsMenu._input owns flat rebind capture while listening.
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		if _prop_radial_active:
+			_prop_radial_vector = radial_vector_from_motion(_prop_radial_vector, event.relative)
+			return
 		var sens: float = MovementConfig.mouse_sensitivity
 		_yaw -= event.relative.x * sens
 		_pitch = clampf(_pitch - event.relative.y * sens, -1.4, 1.4)
+	elif event.is_action_pressed("prop_radial"):
+		prop_radial_changed.emit(OFF_HAND, true)
+	elif event.is_action_released("prop_radial"):
+		prop_radial_changed.emit(OFF_HAND, false)
+	elif event.is_action_pressed("prop_fire"):
+		prop_fire_changed.emit(OFF_HAND, true)
+	elif event.is_action_released("prop_fire"):
+		prop_fire_changed.emit(OFF_HAND, false)
 	elif event.is_action_pressed("fire"):
 		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			if not _pointer_over_ui():

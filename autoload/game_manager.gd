@@ -86,6 +86,29 @@ var tuning := {
 	"spin_coupling": 8.0,
 	## Seconds to tween back to the locked pose after stick-up.
 	"spin_relock_time": 0.12,
+	## Cigarette boomerang: flight speed (m/s), same outbound and homing.
+	"cig_speed": 9.0,
+	## Range of a tap (m): zero charge still throws this far.
+	"cig_min_range": 1.2,
+	## Range at full charge (m).
+	"cig_max_range": 6.0,
+	## Seconds of holding the throw button to charge from min to max range.
+	"cig_charge_time": 1.0,
+	## Total seconds out and back, so a tap and a full throw take the same time:
+	## a short throw hangs spinning at the far end to make up the difference. A
+	## throw too long to fit in this window just takes as long as it takes.
+	"cig_flight_time": 1.5,
+	## Hand-to-cig distance (m) that counts as a catch.
+	"cig_catch_radius": 0.28,
+	## Outbound bend (rad/s) around world up. 0 is a straight line; raise it for
+	## a boomerang arc, negative bends the other way.
+	"cig_curve": 0.0,
+	## Flick spin (rad/s) snapped on at launch; it never damps before the catch.
+	"cig_spin": 38.0,
+	## 1 = sweep around the middle like a thrown baton (the default: the mesh is
+	## near enough rotationally symmetric that it is the only spin that reads).
+	## 0 = roll around the paper tube.
+	"cig_spin_axis": 1,
 	## Metres from muzzle before a shot can hit the shooter's gun-hand arm.
 	## Torso / head / off-hand / legs are not covered — a muzzle into the body
 	## still counts. Arm capsules also inset from the wrist so a normal forward
