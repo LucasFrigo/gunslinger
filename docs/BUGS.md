@@ -11,7 +11,25 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
-_None._
+### BUG-010 — First shot hitch (short freeze / FPS drop)
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `minor` |
+| Filed | 2026-09-16 |
+| Platforms | SP and MP; VR and flat (desktop). First launch of a process. |
+| Areas | `weapons/bullet.gd`, `weapons/bullet_trail.gd`, `autoload/impact_feedback.gd`, `assets/vfx/` (likely first-use compile / spawn, unconfirmed) |
+
+**What:** The first shot after opening the game hitchs the frame for a moment (full freeze or a sharp FPS dip). Later shots in the same run are fine. Seen in both single-player and multiplayer, and in both VR and flat.
+
+**Repro:**
+1. Start the game (editor or exported build; a fresh process).
+2. Enter a free duel, gauntlet, or 1v1 MP.
+3. Fire the first round.
+4. The game stutters briefly. Further shots do not repeat it.
+
+**Notes:** Sounds like first-time shader / particle / trail / audio compile rather than a gameplay logic stall. Confirm whether preloading the bullet, trail, muzzle VFX, and shot SFX at boot (or a dummy fire while the menu is up) removes it.
 
 ---
 
