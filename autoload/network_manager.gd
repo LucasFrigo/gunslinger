@@ -126,6 +126,11 @@ func steam_lobby_label() -> String:
 	return _steam.lobby_label() if _steam != null else "Steam lobby"
 
 
+## Lobby we currently hold, or 0. Should always be 0 outside a session.
+func steam_lobby_id() -> int:
+	return _steam.lobby_id if _steam != null else 0
+
+
 # -- LAN ---------------------------------------------------------------------
 
 func host_lan() -> Error:
@@ -247,10 +252,7 @@ func _try_begin_steam_join() -> void:
 		return
 	if _steam.is_lobby_host or _steam.lobby_id == 0:
 		return
-	var peer := multiplayer.multiplayer_peer
-	if peer == null:
-		return
-	if peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+	if _steam.peer_connected():
 		_start_joiner_handshake()
 
 
@@ -261,10 +263,27 @@ func leave(reason := "left session") -> void:
 	if transport != null:
 		transport.close()
 		transport = null
+	if _steam != null:
+		# SteamTransport outlives `transport`, so a lobby or peer it picked up
+		# from a late Steam callback would never be released otherwise, and
+		# every later create / join failed until restart (BUG-009).
+		_steam.close()
+	_reset_multiplayer_peer()
 	discovery.stop()
 	if session_active:
 		session_active = false
 		session_ended.emit(reason)
+
+
+## Leave the MultiplayerAPI in the offline state no transport owns, so the next
+## host / join starts from a known peer instead of a half-closed one.
+func _reset_multiplayer_peer() -> void:
+	var peer := multiplayer.multiplayer_peer
+	if peer is OfflineMultiplayerPeer:
+		return
+	if peer != null:
+		peer.close()
+	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 
 
 func _begin_session(as_host: bool) -> void:

@@ -11,17 +11,24 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
+_None._
+
+---
+
+## Fixed
+
 ### BUG-009 — Steam: cannot join or create a lobby after leaving
 
 | | |
 |---|---|
-| Status | `open` |
+| Status | `fixed` |
 | Severity | `major` |
 | Filed | 2026-09-03 |
+| Fixed | 2026-09-16 |
 | Platforms | 1v1 Steam (desktop) |
-| Areas | `netcode/steam_transport.gd` `close` / `host` / `join`, `autoload/network_manager.gd` `leave` |
+| Areas | `netcode/steam_transport.gd`, `autoload/network_manager.gd` `leave` |
 
-**What:** After leaving a Steam lobby, join and create both fail in the same process. Reporter also guessed join might fail while a player has the gun drawn; unconfirmed — full lobbies are already `setLobbyJoinable(false)` once a peer connects, which would look the same from the list.
+**What:** After leaving a Steam lobby, join and create both fail in the same process.
 
 **Repro (leave / rejoin):**
 1. HOST (STEAM), second player joins, play or quit.
@@ -29,11 +36,13 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 3. Same process: JOIN an existing lobby, or HOST (STEAM) again.
 4. Join and create fail until the game is restarted.
 
-**Notes:** `close()` calls `leaveLobby` and swaps the Godot peer to `OfflineMultiplayerPeer`, but a later `createLobby` / `joinLobby` may still be racing Steam’s teardown or a leftover `SteamMultiplayerPeer`. Confirm whether gun-drawn during an active 2/2 match is a separate case or just the lobby already being unjoinable.
+**Root cause:** GodotSteam 4.22's `SteamMultiplayerPeer.close()` does not release its Steam P2P listen socket, so Steam keeps that virtual port occupied for the rest of the process. `host_with_lobby` and `connect_to_lobby` both hardcode virtual port **0**, so the second session — host or join — died in `create_host` / `create_client` with `ERR_CANT_CREATE`. Confirmed by probe: after `close()`, a raw `Steam.createListenSocketP2P` on the same port returns `LISTEN_SOCKET_INVALID`, while a fresh port succeeds every time. Steam itself reuses ports fine when the socket is genuinely closed, so the leak is in the addon.
 
----
+**Fix:** Sessions no longer use the port-0 lobby helpers. Each one takes a virtual port this process has not spent (port 0 first, then random 1–999) via `create_host` / `create_client`, and the host publishes it as lobby metadata `gunslinger_port` so joiners dial the right one. `SteamTransport.close()` drops the peer before leaving the lobby and clears any in-flight request, `NetworkManager.leave()` always tears the long-lived Steam transport down (it used to skip it once `transport` was nulled), a lobby handed to us by a late Steam callback is left again instead of adopted, and `createLobby` / `joinLobby` now time out after 10s instead of hanging the menu. Since `create_host` / `create_client` do not set the addon's `tracked_lobby`, `SteamTransport` watches `lobby_chat_update` itself to drop the peer when the other player leaves the lobby.
 
-## Fixed
+**Also confirmed:** "cannot join while drawn" was not a separate bug. A lobby in an active 2/2 duel is both `setLobbyJoinable(false)` and filtered out of the browse list, which is intended.
+
+**Regression test:** `--autotest=steamcycle` drives create → leave → create, an abandoned create, and a dead join against a live Steam client; it is a no-op when Steam is absent (CI).
 
 ### BUG-008 — MP does not reject mismatched game versions
 

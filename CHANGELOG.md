@@ -38,6 +38,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Fixed
 
+- Steam multiplayer works after leaving a lobby: **HOST (STEAM)** and **JOIN** keep working for the rest of the session instead of failing until the game is restarted ([BUG-009](docs/BUGS.md)). GodotSteam's peer never releases its Steam P2P port, so each session now takes a fresh one and the host advertises it to joiners. Leaving also drops a lobby Steam hands back late, and a create / join Steam never answers now reports an error after 10s instead of leaving the menu on "Creating Steam lobby...". Being unable to join a lobby mid-duel was not a bug: a 2/2 match is deliberately unjoinable and hidden from the list.
 - MP join rejects mismatched `application/config/version` (Steam lobby metadata, LAN discovery `ip|name|version`, and a post-connect version handshake). Both version strings are shown; incompatible browse rows are disabled ([BUG-008](docs/BUGS.md)).
 - Early-draw foul stays a loss: bullets deal no damage after the duel is over or before the bell, so hitting the NPC after a DQ no longer flips the result to a win ([BUG-007](docs/BUGS.md)).
 - VR held revolver stays on the controller: a frozen `RigidBody3D` does not inherit parent motion, so attached guns copy the holster / `GunAttach` transform each frame (`follow_parent`).

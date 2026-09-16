@@ -6,6 +6,10 @@ extends Node
 ##   host     - hosts a LAN game, waits for a peer, wins the MP duel
 ##   join     - joins 127.0.0.1, expects to lose the MP duel
 ##   steam    - SteamTransport parses; is_available() is false without GodotSteam
+##   steamcycle - create/leave/create + join recovery against a live Steam
+##              client (BUG-009); passes as a no-op when Steam is absent
+##   load     - loads every scene/resource, then bind, prop, version, and
+##              host/leave/re-host (BUG-009) checks
 ## Prints AUTOTEST PASS / AUTOTEST FAIL and sets the exit code.
 
 var mode := "duel"
@@ -31,6 +35,8 @@ func _ready() -> void:
 			_test_props()
 		"steam":
 			_test_steam()
+		"steamcycle":
+			_test_steam_cycle()
 		_:
 			_fail("unknown mode %s" % mode)
 
@@ -199,7 +205,30 @@ func _test_load_all() -> void:
 		return
 	if not _version_check_ok():
 		return
+	if not _leave_rejoin_ok():
+		return
 	_pass()
+
+
+## BUG-009: transports are reused for the whole process, so leaving a session
+## has to put NetworkManager back where host / join work again.
+func _leave_rejoin_ok() -> bool:
+	for attempt in 2:
+		if NetworkManager.host_lan() != OK:
+			_fail("host_lan() failed on attempt %d (leave did not release the transport)" % (attempt + 1))
+			return false
+		if not NetworkManager.is_active():
+			_fail("session not active after host_lan()")
+			return false
+		NetworkManager.leave("autotest")
+		if NetworkManager.is_active() or NetworkManager.transport != null:
+			_fail("leave() left the session active")
+			return false
+		if not (multiplayer.multiplayer_peer is OfflineMultiplayerPeer):
+			_fail("leave() did not reset the multiplayer peer to offline")
+			return false
+	print("AUTOTEST: host -> leave -> host again ok, peer reset to offline")
+	return true
 
 
 ## Radial wedge picking plus the cigarette's hold → throw → catch cycle.
@@ -378,10 +407,103 @@ func _test_steam() -> void:
 	_pass()
 
 
+## BUG-009: create → leave → create and join-failure recovery against a real
+## Steam client. Every step has to work in one process; before the fix the
+## second HOST silently never produced a lobby. No-op without Steam (CI).
+func _test_steam_cycle() -> void:
+	await _sleep(0.5)
+	if not NetworkManager.steam_available():
+		print("AUTOTEST: Steam unavailable, nothing to cycle")
+		return _pass()
+
+	var first := await _steam_host_lobby("first HOST")
+	if first == 0:
+		return
+	if not _steam_left_cleanly(first):
+		return
+
+	var second := await _steam_host_lobby("HOST after leave")
+	if second == 0:
+		return
+	if second == first:
+		return _fail("HOST after leave reused lobby %d" % first)
+	if not _steam_left_cleanly(second):
+		return
+
+	# Abandon a create before it is even sent, and again while Steam is still
+	# answering it. The orphan lobby has to be dropped instead of leaving the
+	# process stuck "already in a lobby".
+	for wait in [0.0, 0.25]:
+		NetworkManager.host_steam()
+		if wait > 0.0:
+			await _sleep(wait)
+		else:
+			await get_tree().process_frame
+		NetworkManager.leave("autotest")
+		var third := await _steam_host_lobby("HOST after a create abandoned at %.2fs" % wait)
+		if third == 0:
+			return
+		if not _steam_left_cleanly(third):
+			return
+
+	# A join that cannot resolve must report an error and still leave HOST usable.
+	var errors: Array = []
+	var on_error := func(message: String) -> void: errors.append(message)
+	NetworkManager.network_error.connect(on_error)
+	NetworkManager.join_steam(1)
+	await _wait_for(func() -> bool: return not errors.is_empty(), 20.0)
+	NetworkManager.network_error.disconnect(on_error)
+	if errors.is_empty():
+		return _fail("join_steam() on a dead lobby never reported an error")
+	print("AUTOTEST: dead join reported '%s'" % errors[0])
+	if NetworkManager.steam_lobby_id() != 0:
+		return _fail("failed join left lobby %d behind" % NetworkManager.steam_lobby_id())
+
+	var fourth := await _steam_host_lobby("HOST after a failed join")
+	if fourth == 0:
+		return
+	if not _steam_left_cleanly(fourth):
+		return
+	_pass()
+
+
+func _steam_host_lobby(label: String) -> int:
+	if NetworkManager.host_steam() != OK:
+		_fail("%s: host_steam() refused" % label)
+		return 0
+	if not await _wait_for(func() -> bool: return NetworkManager.steam_lobby_id() != 0, 20.0):
+		_fail("%s: Steam never produced a lobby" % label)
+		return 0
+	var id := NetworkManager.steam_lobby_id()
+	print("AUTOTEST: %s -> lobby %d" % [label, id])
+	return id
+
+
+func _steam_left_cleanly(id: int) -> bool:
+	NetworkManager.leave("autotest")
+	if NetworkManager.steam_lobby_id() != 0:
+		_fail("leave() did not release Steam lobby %d" % id)
+		return false
+	if NetworkManager.transport != null or NetworkManager.is_active():
+		_fail("leave() left the session active")
+		return false
+	if not (multiplayer.multiplayer_peer is OfflineMultiplayerPeer):
+		_fail("leave() did not reset the multiplayer peer to offline")
+		return false
+	return true
+
+
 func _steam_transport_ok() -> bool:
 	var steam := SteamTransport.new(multiplayer)
 	if steam.kind() != "steam":
 		_fail("SteamTransport.kind() was '%s'" % steam.kind())
+		return false
+	# BUG-009: close() must be idempotent and leave no lobby or peer behind, or
+	# the next create / join in the same process inherits dead Steam state.
+	steam.close()
+	steam.close()
+	if steam.lobby_id != 0 or steam.is_lobby_host or steam.peer_connected():
+		_fail("SteamTransport.close() left lobby or peer state behind")
 		return false
 	if SteamTransport.is_available():
 		print("AUTOTEST: GodotSteam present; SteamTransport.is_available() true")

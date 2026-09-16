@@ -19,7 +19,6 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 ## 2. Medium — contained mechanics & set pieces
 
 - **More off-hand props:** Extra radial wedges beyond the cigarette — bottle, badge, etc. Each needs a mesh vendored next to `assets/models/props/msc_cigarette.glb` and an entry in `PropController.ITEMS`; the wheel, attach, and stow plumbing already exist. Props are local-only today: remote avatars show nothing in the off hand, so MP pose sync (a flag plus the equipped id) is the other half. Cigarette polish that is still open: an ember emission / tiny light on the tip, and a readability pass on the thrown cig (real 8.4 cm scale is nearly invisible in flight — see `cig_spin_axis`).
-- **Steam leave / rejoin:** After leaving a Steam lobby, create and join can fail until the process restarts ([BUG-009](docs/BUGS.md)). Tear down `SteamMultiplayerPeer` + lobby so HOST / JOIN work again in the same session. Confirm whether “can’t join while drawn” is this teardown bug or the lobby already marked unjoinable at 2/2.
 - **More enemy NPCs:** Expand the roster beyond Drunk / Sheriff / Ghost. New opponents are new `ai/archetypes/*.tres` (`AIArchetype` — reaction, accuracy, draw, reload, move style). Wire them into the free-duel pick and gauntlet ladder rungs. Distinct silhouettes/meshes can follow once the gunslinger model is on AI. First design: [Half-head](docs/design/characters/half-head.md).
 - **Airborne fire / mystic trick shots:** Optional tech/mystic branch: allow firing while the revolver is tossed and spinning, so you can go for mid-air trick shots. Today fire/reload require `held` (`weapons/weapon_base.gd`). Gate behind a flag so the grounded western default stays.
 - **Train Map Concept:** A duel scene featuring a moving train passing between opponents. Players must either wait for the train to clear or attempt risky shots through open train cars. (Builds on the existing Train Rooftop arena idea.)
@@ -48,6 +47,8 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 ## Completed
 
 Newest at the top. Keep a one-line note of what shipped and where; details live in `[docs/FEATURES.md](docs/FEATURES.md)`.
+
+- **Steam leave / rejoin:** HOST / JOIN work repeatedly in one process. Each session takes an unspent Steam P2P virtual port (`create_host` / `create_client` + `gunslinger_port` lobby metadata) because GodotSteam's peer never frees port 0; teardown also drops late-callback lobbies and times out unanswered requests. Fixes [BUG-009](docs/BUGS.md); "can't join while drawn" was just the intended 2/2 unjoinable lobby.
 
 - **Off-hand props (radial + cigarette boomerang):** Hold-to-open equip wheel on both harnesses (VR off-hand stick click, flat Tab) with Empty Hand / Cigarette wedges; the cigarette throws as a hold-duration boomerang (VR off-hand trigger, flat `G`) and flicks into a spin until it is caught. (`done` in FEATURES)
 - **MP version check:** Join refuses when `application/config/version` differs (Steam lobby metadata + LAN beacon `ip|name|version` + post-connect hello RPC). Both version strings shown; mismatched list rows disabled. Fixes [BUG-008](docs/BUGS.md).

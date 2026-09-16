@@ -30,7 +30,9 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 - [ ] Confirm Steam Datagram Relay (`initRelayNetworkAccess` + `SteamMultiplayerPeer.server_relay`) across a hard NAT; LAN ENet is a different path. `from:` 1v1 Steam lobbies
 - [ ] Do not advertise 4-player, ranked matchmaking, or proximity voice — those are still planned. `from:` 4-player MP / ranking / voice
 - [x] Reject MP join when `application/config/version` differs (Steam lobby metadata + LAN beacon + handshake; both versions shown). [BUG-008](BUGS.md). `from:` MP version check
-- [ ] Steam leave then HOST / JOIN in the same process fails until restart. [BUG-009](BUGS.md). `from:` Steam leave / rejoin
+- [x] Steam leave then HOST / JOIN in the same process. [BUG-009](BUGS.md). `from:` Steam leave / rejoin
+- [ ] **Re-run the two-PC Steam test after the BUG-009 fix.** Host and joiner now connect through `create_host` / `create_client` on an advertised virtual port instead of `host_with_lobby` / `connect_to_lobby`; only the single-process create/leave/create cycle could be verified locally. `from:` Steam leave / rejoin
+- [ ] Known edge: a client that already spent a host's virtual port in this session cannot rejoin that same lobby until the host re-hosts (it refuses with a message instead of failing silently). `from:` Steam leave / rejoin
 - [ ] Manual: two builds with different `VERSION` — Steam list disabled + refuse, LAN list disabled + refuse, typed IP handshake refuse; same-version still starts a duel. `from:` MP version check
 
 ## Content / polish
