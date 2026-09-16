@@ -62,6 +62,12 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "SETTINGS"
 
+[node name="InviteButton" type="Button" parent="Center/Panel/Margin/PauseRoot"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "INVITE FRIENDS"
+
 [node name="RestartButton" type="Button" parent="Center/Panel/Margin/PauseRoot"]
 unique_name_in_owner = true
 layout_mode = 2

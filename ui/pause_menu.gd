@@ -18,6 +18,7 @@ func _ready() -> void:
 	settings_menu.visible = false
 	%ResumeButton.pressed.connect(close)
 	%SettingsButton.pressed.connect(_show_settings)
+	%InviteButton.pressed.connect(_on_invite)
 	settings_menu.back_pressed.connect(show_pause_root)
 	restart_button.pressed.connect(_on_restart)
 	%QuitButton.pressed.connect(_on_quit)
@@ -82,6 +83,12 @@ func toggle() -> void:
 func _refresh_buttons() -> void:
 	var networked := NetworkManager.is_active()
 	title_label.text = "MENU" if networked else "PAUSED"
+	var steam_host := (
+			networked
+			and NetworkManager.is_host()
+			and NetworkManager.transport_kind() == "steam"
+	)
+	%InviteButton.visible = steam_host
 	match GameManager.mode:
 		GameManager.GameMode.GAUNTLET:
 			restart_button.text = "RESTART GAUNTLET"
@@ -95,6 +102,10 @@ func _refresh_buttons() -> void:
 			restart_button.text = "RESTART DUEL"
 			restart_button.disabled = false
 			host_note.visible = false
+
+
+func _on_invite() -> void:
+	NetworkManager.invite_steam_friends()
 
 
 func _on_restart() -> void:

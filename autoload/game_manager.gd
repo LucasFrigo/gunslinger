@@ -281,7 +281,9 @@ func _on_session_started(as_host: bool) -> void:
 	_clear_combatants()
 	if as_host:
 		if NetworkManager.transport_kind() == "steam":
-			show_message("Waiting for a challenger… Steam lobby (%s)" % NetworkManager.steam_lobby_label(), 12.0)
+			show_message(
+					"Waiting for a challenger… Steam lobby (%s). Esc → Invite friends, or Shift+Tab."
+					% NetworkManager.steam_lobby_label(), 12.0)
 		else:
 			var ips := NetworkManager.lan_addresses()
 			var ip_hint := ", ".join(ips) if not ips.is_empty() else "(no LAN IPv4)"

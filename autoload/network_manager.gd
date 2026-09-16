@@ -239,10 +239,19 @@ func _on_steam_failed(reason: String) -> void:
 	leave(reason)
 
 
+func invite_steam_friends() -> void:
+	if _steam == null or not session_active or transport != _steam or not _steam.is_lobby_host:
+		network_error.emit("Host a Steam lobby first, then invite.")
+		return
+	_steam.open_invite_overlay()
+
+
 func _on_steam_lobby_ready(_lobby: int) -> void:
 	if _steam != null and _steam.is_lobby_host:
 		_begin_session(true)
-		_steam.open_invite_overlay()
+		# Do not auto-open the Steam invite overlay. Creating the lobby used to
+		# call it on the same click as HOST (STEAM), which opened the dialog
+		# under the cursor and made it unclosable in the Godot window.
 	else:
 		_try_begin_steam_join()
 

@@ -212,6 +212,8 @@ func lobby_label() -> String:
 func open_invite_overlay() -> void:
 	if _steam == null or lobby_id == 0:
 		return
+	# Call from a user click (pause Invite), never from lobby-created: opening
+	# the overlay on the same mouse-down as HOST (STEAM) leaves it stuck.
 	if _steam.has_method("activateGameOverlayInviteDialog"):
 		_steam.call("activateGameOverlayInviteDialog", lobby_id)
 	elif _steam.has_method("activateGameOverlay"):

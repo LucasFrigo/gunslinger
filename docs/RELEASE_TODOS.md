@@ -26,7 +26,7 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 
 ## Multiplayer
 
-- [ ] Two-PC Steam NAT test: Steam client running on both, **HOST (STEAM)** / auto-refresh list / join, duel + rematch, leave/rejoin. Overlay invite opens on host if GodotSteam exposes `activateGameOverlayInviteDialog`. `from:` 1v1 Steam lobbies
+- [ ] Two-PC Steam NAT test: Steam client running on both, **HOST (STEAM)** / auto-refresh list / join, duel + rematch, leave/rejoin. Invite is Esc → **Invite friends** (or Shift+Tab), not auto-opened on host. `from:` 1v1 Steam lobbies
 - [ ] Confirm Steam Datagram Relay (`initRelayNetworkAccess` + `SteamMultiplayerPeer.server_relay`) across a hard NAT; LAN ENet is a different path. `from:` 1v1 Steam lobbies
 - [ ] Do not advertise 4-player, ranked matchmaking, or proximity voice — those are still planned. `from:` 4-player MP / ranking / voice
 - [x] Reject MP join when `application/config/version` differs (Steam lobby metadata + LAN beacon + handshake; both versions shown). [BUG-008](BUGS.md). `from:` MP version check
@@ -51,6 +51,6 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 - After cloning, **restart the Godot editor** so `addons/godotsteam/` loads. If you use the Steam-store Godot editor on Windows, its bundled `steam_api64.dll` can be older than GodotSteam 4.22 — replace it with `addons/godotsteam/win64/steam_api64.dll` if the extension fails to load.
 - Two editors on one Steam account will not look like two players; use two accounts (Spacewar 480 is fine for that).
 - Steam Link + Godot editor is **Windows PCVR**, not the Quest APK. Quest LAN must be tested with a sideloaded export (`addons/gunslinger_lan_permissions/`).
-- Host Steam overlay invite is best-effort; it no-ops if overlay is disabled or the GodotSteam method is missing. Do not treat a missing overlay as a transport failure.
+- Host Steam overlay invite is opt-in (pause **Invite friends** or Shift+Tab); it no-ops if overlay is disabled or the GodotSteam method is missing. Do not auto-open it on HOST — that steals the click and can stick the overlay.
 - Flat `--flat` harness is not a store SKU unless positioned later.
 - Drop `-alpha` from `VERSION` only when cutting a named release (see `.cursor/rules/version-bump.mdc`).

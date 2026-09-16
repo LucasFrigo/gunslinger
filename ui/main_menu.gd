@@ -52,7 +52,7 @@ func _ready() -> void:
 			(button as Button).disabled = true
 		%SteamNote.text = "Steam: GodotSteam extension not installed (LAN still works)."
 	else:
-		%SteamNote.text = "Steam lobbies refresh automatically. Hosting opens the overlay invite if Steam overlay is on."
+		%SteamNote.text = "Steam lobbies refresh automatically. After hosting, Esc → Invite friends (or Shift+Tab) if you want the Steam overlay."
 
 	visibility_changed.connect(_on_visibility_changed)
 	_on_lan_hosts([])
