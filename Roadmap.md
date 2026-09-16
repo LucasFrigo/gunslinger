@@ -13,10 +13,10 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 - **Shorter bullet trails:** Trails linger too long after the slug is gone. Drop `FADE_TIME` in `weapons/bullet_trail.gd` (currently 1.6s) so the ribbon disappears faster; optional debug knob.
 - **Barrel smoke:** Visible smoke coming out of the barrel after a shot. A short stub already plays (`VfxCatalog` `&"muzzle_smoke"` from `ImpactFeedback.shot_fired` / `assets/vfx/muzzle_smoke.tscn`); this is a lingering plume that reads as gunsmoke, not a 0.45s puff.
 - **Proximity voice chat:** Nearby players hear each other in world space (volume/falloff by distance). Muted players show an X over the mouth so mute state is readable at a glance.
-- **Main Street art:** Replace CSG in `scenarios/main_street/` with Blender meshes named after the greybox (`GND_Street`, `BLD_Saloon`, `BLD_GeneralStore`, `BLD_Bank`, `BLD_Sheriff`, `PRP_TroughLeft`, `PRP_BarrelsRight`). Headless vend like the cigarette (`blender -b --python`, GLB next to the `.blend`). Do not move `PlayerSpawn` / `EnemySpawn`.
-- **Saloon art:** Same swap for `scenarios/saloon/` (`GND_Floor`, `ARC_Ceiling`, `ARC_WallWest` / `East` / `North` / `South`, `PRP_BarCounter`, `PRP_TableA`, `PRP_TableB`).
-- **Train Rooftop art:** Same swap for `scenarios/train_rooftop/` (`GND_Desert`, `TRN_CarA`, `TRN_CarARoof`, `TRN_CarB`, `TRN_CarBRoof`, `TRN_Coupling`). Static cars only; moving-train gameplay stays the Train Map Concept item.
-- **Canyon art:** Same swap for `scenarios/canyon/` (`GND_CanyonFloor`, `RCK_WallWest`, `RCK_WallEast`, `RCK_BoulderA`, `RCK_BoulderB`).
+- **Main Street art:** Scratch the current CSG in `scenarios/main_street/` (do not mesh-swap the existing boxes). Rebuild from a new, more detailed greybox (street width, building massing, cover, sightlines), then author Blender meshes from that. Keep `PlayerSpawn` / `EnemySpawn` and the `scenario_base.gd` contract. Headless vend like the cigarette (`blender -b --python`, GLB next to the `.blend`).
+- **Saloon art:** Same ground-up pass for `scenarios/saloon/`. Throw out the current box interior; new detailed greybox (bar, walls, tables, ceiling height for VR) then meshes.
+- **Train Rooftop art:** Same ground-up pass for `scenarios/train_rooftop/`. Throw out the current two-car CSG; new detailed greybox (cars, roofs, desert) then meshes. Static cars only; moving-train gameplay stays the Train Map Concept item.
+- **Canyon art:** Same ground-up pass for `scenarios/canyon/`. Throw out the current floor/walls/boulders CSG; new detailed greybox (cliffs, cover, dusk sightlines) then meshes.
 
 
 
