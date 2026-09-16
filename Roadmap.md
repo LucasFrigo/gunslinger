@@ -25,6 +25,7 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 - **Horseback duel stage:** Both duelists fight mounted. Each horse’s speed varies randomly, so relative motion (and the shot window) changes from duel to duel. New arena/scenario; riding locomotion + aim-on-the-move on top of the existing standoff.
 - **Practice hub:** A non-duel lobby/practice area (new scenario or main-menu destination) for warming up aim. Regenerating breakable bottles (or similar range targets) that respawn after a short delay; a casino slot machine as a interactable set piece (spin / payout flavor, no real-money). Local/SP first; optional later MP hangout. Reuses bullet/hit feedback; no `DuelManager` standoff required.
 - **Duel vs up to 3 NPCs:** Free-duel option to face 1–3 AI opponents in one standoff (local, no netcode). Needs extra spawn marks, multi-combatant targeting, and resolve when more than two duelists fire. Reuses `ai/duelist.tscn` + archetypes.
+- **Death cam (3rd-person corpse):** On a lethal hit, freeze the dead player (no move / fire / draw). Camera becomes a third-person orbit around their body; look/stick only orbits until the next duel starts. After `death_cam_hold` (~2s, tweakable) play the duel-replay item, then return to this orbit until rematch. SP + 1v1 MP. Replaces or sequences after the current trail fly-along KillCam (`autoload/kill_cam.gd`).
 
 
 
@@ -34,6 +35,7 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 - **Mexican Standoff (3-Player Duel):** Design a dedicated dynamic mode/map featuring a three-way standoff. (Current netcode is 1v1 host-authoritative; 3P humans share the lobby work with 4-player MP below. Local 1v2 NPCs can land earlier via the item in Medium.)
 - **4-Player Multiplayer:** Expand LAN (all SKUs) and Steam (desktop only) beyond 1v1 to 2–4 human players (FFA, 2v2, or 1v3). Needs lobby size, extra spawn marks, remote avatars for every peer, and host-authoritative hits/HP for N combatants. Meta Store does not get a non-LAN online path.
 - **Ranking & Leaderboard System:** Implement competitive online matchmaking, player ratings, and global/regional leaderboards on **Steam / desktop**. Not on the Meta Store SKU (LAN-only MP).
+- **Duel replay:** After the death-cam hold (~2s), play back the last `replay_pre_death` (~5s) of the live duel through the moment the loser is considered dead, plus `replay_post_death` (~2s). All three durations tweakable (debug panel). Same feature in single-player and 1v1 MP (LAN + Steam). Needs a rolling buffer of poses / shots / AI so both peers watch the same clip. Depends on the Medium death-cam item for the 2s corpse-orbit lead-in.
 
 
 
