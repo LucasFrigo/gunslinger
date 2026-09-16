@@ -62,7 +62,7 @@ Design / lore: [`design/README.md`](design/README.md)
 |---|---|---|
 | Revolver mesh | `done` | PSX blaster `assets/models/weapons/wpn_psx_blaster.glb` (cylinder + gate/index anim). Pre-cylinder mesh kept as `wpn_psx_blaster_alt.glb`. Greybox `Barrel` / `Cylinder` / `Grip` stay hidden |
 | Gunslinger character mesh | `partial` | Low-poly A-pose (empty hands) at `assets/models/characters/gunslinger.glb` + Blender source `gunslinger.blend`. Split serape/black poncho is a separate Cloth sim (baked for the GLB). Not on AI or the remote avatar yet |
-| Arenas (Main Street, Saloon, Train Rooftop, Canyon) | `partial` | Greybox CSG; real art TBD |
+| Arenas (Main Street, Saloon, Train Rooftop, Canyon) | `partial` | Greybox CSG today (`scenarios/*/`). Roadmap (one item each): Main Street art, Saloon art, Train Rooftop art, Canyon art |
 | Moving train duel set piece | `planned` | Roadmap; rooftop arena exists as greybox |
 | Horseback duel stage | `planned` | Roadmap (Medium); both duelists mounted; horse speeds vary randomly |
 | AI archetypes (Drunk / Sheriff / Ghost) | `done` | `ai/archetypes/*.tres`; Sheriff/Ghost strafe around the enemy spawn marker (not scene origin). `reload_time` per archetype. Design: [Drunk](design/characters/drunk.md), [Sheriff](design/characters/sheriff.md), [Ghost](design/characters/ghost.md) |
