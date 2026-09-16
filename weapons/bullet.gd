@@ -62,10 +62,8 @@ static func clear_all() -> void:
 			(node as Bullet)._clear_for_reset()
 
 
-func _ready() -> void:
-	add_to_group(GROUP)
-	global_position = _spawn_origin
-	# Visible slug.
+## Shared slug mesh. Built on first shot (or boot warmup) so later bullets skip it.
+static func ensure_mesh() -> SphereMesh:
 	if _bullet_mesh == null:
 		_bullet_mesh = SphereMesh.new()
 		_bullet_mesh.radius = 0.015
@@ -74,8 +72,14 @@ func _ready() -> void:
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mat.albedo_color = Color(1.0, 0.9, 0.5)
 		_bullet_mesh.material = mat
+	return _bullet_mesh
+
+
+func _ready() -> void:
+	add_to_group(GROUP)
+	global_position = _spawn_origin
 	var mesh_instance := MeshInstance3D.new()
-	mesh_instance.mesh = _bullet_mesh
+	mesh_instance.mesh = ensure_mesh()
 	add_child(mesh_instance)
 
 	_trail = BulletTrail.new()

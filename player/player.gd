@@ -46,6 +46,8 @@ var _pose_accum := 0.0
 var _menu_panel: UIPanel3D
 var _vr_message: Label3D
 var _vr_message_timer := 0.0
+var _boot_cover: MeshInstance3D
+var _boot_label: Label3D
 var _holding_hand: int = GunHand.NONE
 var _held_cartridge: CartridgePhysical = null
 var _reload_event := ""
@@ -482,12 +484,16 @@ func _holster_gun() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if GameManager.mode == GameManager.GameMode.BOOT:
+		return
 	if use_vr and event.is_action_pressed("toggle_debug"):
 		DebugMenu.toggle()
 		get_viewport().set_input_as_handled()
 
 
 func _on_menu_button() -> void:
+	if GameManager.mode == GameManager.GameMode.BOOT:
+		return
 	if use_vr:
 		if GameManager.mode == GameManager.GameMode.MENU:
 			DebugMenu.toggle()
@@ -498,7 +504,7 @@ func _on_menu_button() -> void:
 
 
 func _combat_blocked() -> bool:
-	return GameManager.is_pause_open()
+	return GameManager.is_pause_open() or GameManager.mode == GameManager.GameMode.BOOT
 
 
 func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
@@ -988,6 +994,52 @@ func hide_menu_panel() -> void:
 			GameManager.hud.reclaim_menu(control)
 		_menu_panel.queue_free()
 	_menu_panel = null
+
+
+## Dark FOV cover + status text on the HMD while boot shaders compile.
+func show_boot_loading(status := "Loading...") -> void:
+	hide_boot_loading()
+	if not use_vr or not is_instance_valid(rig):
+		return
+	var camera: Node3D = rig.get("camera") as Node3D
+	if camera == null:
+		return
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(4.0, 3.0)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(0.09, 0.06, 0.04, 1.0)
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.material = mat
+	_boot_cover = MeshInstance3D.new()
+	_boot_cover.name = "BootLoadingCover"
+	_boot_cover.mesh = mesh
+	_boot_cover.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_boot_cover.position = Vector3(0.0, 0.0, -0.95)
+	camera.add_child(_boot_cover)
+	_boot_label = Label3D.new()
+	_boot_label.name = "BootLoadingLabel"
+	_boot_label.font_size = 64
+	_boot_label.pixel_size = 0.002
+	_boot_label.outline_size = 12
+	_boot_label.modulate = Color(0.92, 0.86, 0.74, 1.0)
+	_boot_label.position = Vector3(0.0, 0.04, -0.9)
+	_boot_label.text = status
+	camera.add_child(_boot_label)
+
+
+func set_boot_loading_text(status: String) -> void:
+	if is_instance_valid(_boot_label) and not status.is_empty():
+		_boot_label.text = status
+
+
+func hide_boot_loading() -> void:
+	if is_instance_valid(_boot_cover):
+		_boot_cover.queue_free()
+	_boot_cover = null
+	if is_instance_valid(_boot_label):
+		_boot_label.queue_free()
+	_boot_label = null
 
 
 func show_vr_message(text: String, duration: float) -> void:

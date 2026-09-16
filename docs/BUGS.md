@@ -11,15 +11,22 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
+_(none)_
+
+---
+
+## Fixed
+
 ### BUG-010 — First shot hitch (short freeze / FPS drop)
 
 | | |
 |---|---|
-| Status | `open` |
+| Status | `fixed` |
 | Severity | `minor` |
 | Filed | 2026-09-16 |
+| Fixed | 2026-09-16 |
 | Platforms | SP and MP; VR and flat (desktop). First launch of a process. |
-| Areas | `weapons/bullet.gd`, `weapons/bullet_trail.gd`, `autoload/impact_feedback.gd`, `assets/vfx/` (likely first-use compile / spawn, unconfirmed) |
+| Areas | `autoload/impact_feedback.gd`, `weapons/bullet.gd`, `weapons/bullet_trail.gd`, `assets/vfx/vfx_catalog.gd`, `assets/audio/audio_catalog.gd` |
 
 **What:** The first shot after opening the game hitchs the frame for a moment (full freeze or a sharp FPS dip). Later shots in the same run are fine. Seen in both single-player and multiplayer, and in both VR and flat.
 
@@ -29,11 +36,11 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 3. Fire the first round.
 4. The game stutters briefly. Further shots do not repeat it.
 
-**Notes:** Sounds like first-time shader / particle / trail / audio compile rather than a gameplay logic stall. Confirm whether preloading the bullet, trail, muzzle VFX, and shot SFX at boot (or a dummy fire while the menu is up) removes it.
+**Root cause:** First trigger pull compiled combat AV that had never been drawn or mixed: `GPUParticles3D` muzzle smoke, the unshaded alpha trail ribbon, the slug mesh, muzzle OmniLight, and procedural gunshot PCM. Later shots reused those pipelines.
+
+**Fix:** `ImpactFeedback.warmup()` runs from `GameManager.setup` on a boot loading screen (`ui/loading_screen.tscn`) before the menu opens. It precaches every `AudioCatalog` cue, builds the shared slug mesh, then parents a tiny compile draw to the live camera (XR swapchain / flat viewport) for a few frames so particle, trail, light, and gunshot shaders/mixers hitch behind "Loading..." instead of the first round. VR covers the HMD with a dark quad. Headless autotest skips the GPU draw.
 
 ---
-
-## Fixed
 
 ### BUG-009 — Steam: cannot join or create a lobby after leaving
 

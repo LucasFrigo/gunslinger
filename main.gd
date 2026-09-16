@@ -8,7 +8,7 @@ extends Node3D
 func _ready() -> void:
 	var use_vr := _try_init_xr()
 	print("Gunslinger: starting in %s mode" % ("VR" if use_vr else "FLAT"))
-	GameManager.setup(self, use_vr)
+	await GameManager.setup(self, use_vr)
 	_maybe_start_autotest()
 
 

@@ -11,6 +11,7 @@ extends CanvasLayer
 @onready var prop_radial: PropRadialOverlay = $PropRadial
 @onready var menu_holder: Control = $MenuHolder
 @onready var pause_holder: Control = $PauseHolder
+@onready var loading_screen: LoadingScreen = $LoadingScreen
 
 var _menu: MainMenu
 var pause_menu: PauseMenu
@@ -28,6 +29,8 @@ func _ready() -> void:
 	prop_radial.visible = false
 	menu_holder.visible = false
 	pause_holder.visible = false
+	if loading_screen != null:
+		loading_screen.hide_screen()
 	version_tag.text = "v%s" % str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
 
 
@@ -64,6 +67,21 @@ func show_menu(is_vr: bool) -> void:
 
 func hide_menu() -> void:
 	menu_holder.visible = false
+
+
+func show_loading() -> void:
+	if loading_screen != null:
+		loading_screen.show_screen()
+
+
+func hide_loading() -> void:
+	if loading_screen != null:
+		loading_screen.hide_screen()
+
+
+func set_loading_progress(amount: float, status: String) -> void:
+	if loading_screen != null:
+		loading_screen.set_progress(amount, status)
 
 
 ## Called when a VR menu panel is torn down and gives the Control back.
@@ -132,6 +150,9 @@ func flash_red() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
+		return
+	if GameManager.mode == GameManager.GameMode.BOOT:
+		get_viewport().set_input_as_handled()
 		return
 	if pause_menu != null and pause_menu.is_open:
 		if pause_menu.is_settings_open():

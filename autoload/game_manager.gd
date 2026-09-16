@@ -151,7 +151,8 @@ func _ready() -> void:
 	duel.duel_finished.connect(_on_duel_finished)
 
 
-## Called once by main.tscn after XR init.
+## Called once by main.tscn after XR init. Await: the loading screen compiles
+## combat AV, then the main menu opens.
 func setup(main: Node3D, use_vr: bool) -> void:
 	main_root = main
 	world_root = main.get_node("WorldRoot")
@@ -166,7 +167,32 @@ func setup(main: Node3D, use_vr: bool) -> void:
 	main.add_child(local_player)
 
 	DebugMenu.setup(use_vr)
+	await _run_boot_loading()
 	go_to_menu()
+
+
+func _run_boot_loading() -> void:
+	var headless := OS.has_feature("headless")
+	if not headless and is_instance_valid(hud):
+		hud.show_loading()
+	if not headless and is_vr and is_instance_valid(local_player):
+		local_player.show_boot_loading()
+	if not ImpactFeedback.warmup_progress.is_connected(_on_warmup_progress):
+		ImpactFeedback.warmup_progress.connect(_on_warmup_progress)
+	await ImpactFeedback.warmup()
+	if ImpactFeedback.warmup_progress.is_connected(_on_warmup_progress):
+		ImpactFeedback.warmup_progress.disconnect(_on_warmup_progress)
+	if is_vr and is_instance_valid(local_player):
+		local_player.hide_boot_loading()
+	if is_instance_valid(hud):
+		hud.hide_loading()
+
+
+func _on_warmup_progress(amount: float, status: String) -> void:
+	if is_instance_valid(hud):
+		hud.set_loading_progress(amount, status)
+	if is_vr and is_instance_valid(local_player):
+		local_player.set_boot_loading_text(status)
 
 
 # -- Mode transitions ---------------------------------------------------------

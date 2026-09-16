@@ -53,4 +53,5 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 - Steam Link + Godot editor is **Windows PCVR**, not the Quest APK. Quest LAN must be tested with a sideloaded export (`addons/gunslinger_lan_permissions/`).
 - Host Steam overlay invite is opt-in (pause **Invite friends** or Shift+Tab); it no-ops if overlay is disabled or the GodotSteam method is missing. Do not auto-open it on HOST — that steals the click and can stick the overlay.
 - Flat `--flat` harness is not a store SKU unless positioned later.
+- Confirm the first shot after a fresh launch no longer hitchs (boot loading screen in `ImpactFeedback`; [BUG-010](BUGS.md)). VR and flat; editor and export. The hitch should land on Loading, not the first round.
 - Drop `-alpha` from `VERSION` only when cutting a named release (see `.cursor/rules/version-bump.mdc`).

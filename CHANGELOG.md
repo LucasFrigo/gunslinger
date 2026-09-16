@@ -34,11 +34,13 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Changed
 
+- Boot shows a **Loading** screen (title + progress) while combat shaders and shot audio compile, then opens the main menu. The hitch from [BUG-010](docs/BUGS.md) stays off the first trigger pull and off the menu.
 - Steam **HOST** no longer pops the invite overlay by itself (that dialog opened on the same click as the button and could not be closed). Invite is now Esc → **Invite friends**, or Shift+Tab. Lobby create is unchanged; friends can still join from the public list.
 - VR default layout: gun-hand stick down cocks the hammer (edge); hold A / X for Ocelot spin (was stick-down spin / A cock). Remappable in Settings.
 
 ### Fixed
 
+- First shot after launching no longer freezes a frame: combat particles, the bullet trail, the slug mesh, and gunshot audio compile on a boot **Loading** screen before the menu, not on the first trigger pull ([BUG-010](docs/BUGS.md)).
 - Steam multiplayer works after leaving a lobby: **HOST (STEAM)** and **JOIN** keep working for the rest of the session instead of failing until the game is restarted ([BUG-009](docs/BUGS.md)). GodotSteam's peer never releases its Steam P2P port, so each session now takes a fresh one and the host advertises it to joiners. Leaving also drops a lobby Steam hands back late, and a create / join Steam never answers now reports an error after 10s instead of leaving the menu on "Creating Steam lobby...". Being unable to join a lobby mid-duel was not a bug: a 2/2 match is deliberately unjoinable and hidden from the list.
 - MP join rejects mismatched `application/config/version` (Steam lobby metadata, LAN discovery `ip|name|version`, and a post-connect version handshake). Both version strings are shown; incompatible browse rows are disabled ([BUG-008](docs/BUGS.md)).
 - Early-draw foul stays a loss: bullets deal no damage after the duel is over or before the bell, so hitting the NPC after a DQ no longer flips the result to a win ([BUG-007](docs/BUGS.md)).

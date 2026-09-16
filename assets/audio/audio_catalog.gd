@@ -11,8 +11,20 @@ extends RefCounted
 
 const DUEL_END := preload("res://assets/audio/duel_end.wav")
 
+const WARMUP_CUES: Array[StringName] = [
+	&"gunshot", &"click", &"dry_fire", &"bell", &"whizz",
+	&"impact_flesh", &"impact_world", &"ricochet", &"hurt",
+	&"near_miss_whoosh", &"shell_eject", &"chamber", &"duel_end",
+]
+
 ## Optional: StringName cue → AudioStream. Checked before placeholders.
 static var OVERRIDES: Dictionary = {}
+
+
+## Generate / load every combat cue so the first shot does not compile PCM.
+static func warmup() -> void:
+	for cue in WARMUP_CUES:
+		get_stream(cue)
 
 
 static func get_stream(cue: StringName) -> AudioStream:
