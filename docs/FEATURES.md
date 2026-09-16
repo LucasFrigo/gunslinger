@@ -78,6 +78,7 @@ Design / lore: [`design/README.md`](design/README.md)
 |---|---|---|
 | Debug panel + presets | `done` | `autoload/debug_menu.gd`, `user://*.cfg` |
 | Settings screen (main menu) | `done` | `ui/settings_menu.tscn` on main menu and pause. Master volume, holster side, VR turn mode; flat-only mouse sensitivity, window mode, resolution (**Apply Display**); Controls remapping (VR + flat). Scrollable panel. `PlayerSettings` → `user://settings.cfg`. Debug panel stays F3 / Quest menu on the main menu |
+| Main menu SP / MP split | `planned` | Roadmap (Polish / visual); landing Singleplayer / Multiplayer buttons that open the current SP and MP UIs in `ui/main_menu.tscn` |
 | In-duel pause / MP overlay | `done` | ESC (flat) / VR menu button. SP sets `get_tree().paused`; MP is overlay-only. Resume, Settings, Restart Duel/Gauntlet (host-only in MP), Quit to main menu. `ui/pause_menu.tscn` |
 | Blender MCP | `done` | Project `.cursor/mcp.json` → `uvx blender-mcp` → Blender addon on `localhost:9876`. Client helper `dev/blender_mcp.py` |
 | In-game version tag | `done` | HUD corner + main menu; `ProjectSettings` `application/config/version` (`VERSION`) |
