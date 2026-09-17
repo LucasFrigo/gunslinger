@@ -83,11 +83,39 @@ Do not produce files until the feature exists. Tracked in [`FEATURES.md`](FEATUR
 
 | Cue | Depends on |
 |---|---|
-| Scenario ambience loops | Slot is `ScenarioResource.ambience` (`scenario_base.gd`); no `.tres` assigns a stream. One loop per arena: Main Street, Saloon, Train Rooftop, Canyon |
+| Scenario wind bed (loop) | Roadmap **Wind bed + gusts**. Slot is `ScenarioResource.ambience` (`scenario_base.gd`); no `.tres` assigns a stream. Mix per outdoor arena: still Main Street, drier Canyon, more air on Train Rooftop. Saloon is interior — do not use the outdoor bed |
+| `wind_gust` | Same item. One-shot that plays **only** when a visual gust spawns (`VfxCatalog`). Not a second loop |
 | Menu / standoff music | No music player |
 | Proximity voice | Planned MP feature |
 | Practice-hub bottles / slots | Planned mode |
 | Extra props | Radial is cigarette-only |
+
+## Household Foley
+
+Low-budget reference. A phone in a quiet closet, 5–20 cm from the object, is enough for mechanical cues. Airplane mode; 48 kHz WAV if the app allows. Clothes/duvet around the phone, fridge and AC off. Do ~20 takes; keep 2. Layer in the DAW, export dry mono — do not bake reverb into clicks.
+
+Do **not** record live gunfire for `gunshot`. Build it from a licensed crack (library / GDC pack / Freesound CC0 or CC-BY) plus your mechanical click, a low thump (door slam or bounced ball, pitched down), and a short quiet tail.
+
+| Cue | Household stand-in |
+|---|---|
+| `click` / `dry_fire` / `chamber` | Bike lock, stapler, metal lighter, old scissors, padlock, wrench on a bolt |
+| `shell_eject` | Coins, screws, or spent brass dropped on wood, then on a plate |
+| `gate_close` / cylinder index / spin | Small tin, Altoids box, folding knife, toy revolver |
+| `holster` | Belt, jacket, leather bag, wallet against jeans |
+| `gun_catch` / `gun_drop` | Tool clack on a table (sharp take + a duller take) |
+| `impact_world` | Fist or hammer into dirt, sandbag, dry wood, brick — the hit, not the room |
+| `impact_flesh` / `hurt` | Wet towel slap, cabbage/melon, leather jacket punch. Keep it short |
+| `ricochet` | Spoon on a steel bowl, then pitch up |
+| `whizz` / `near_miss_whoosh` | Stick or jacket swung past the phone, then pitch/stretch. Ableton noise is also fine |
+| `bell` | Small bell, glass + spoon, bicycle bell. One clean note, long tail |
+| `ui_click` | Same metal-click pile as `click`, quieter / shorter |
+| `cig_throw` / `cig_catch` | Light whoosh + a small object landing in the palm |
+| `footstep_dirt` | Shoes in dirt, sandbox, or a tray of cat litter / dry rice on a towel |
+| Outdoor air / gusts | Night rooftop or open window; sock or foam on the capsule; sheltered take for the bed, exposed take for gusts. City noise will be edited out |
+
+Outdoor wind is source material, not a finished desert loop. Same gust library, different mix per arena: still/quiet for Main Street, drier for Canyon, more height/air for Train Rooftop. Do not use it in the Saloon.
+
+Legal libraries for holes you cannot Foley: Sonniss GDC packs (read the license), Freesound CC0 or CC-BY with a credits file, BBC Sound Effects if the license allows a paid ship. No YouTube rips.
 
 ## Priority
 
@@ -100,7 +128,7 @@ Replace in this order so the duel reads as a gunfight, not a synth demo:
 5. `shell_eject` / `chamber`
 6. `whizz` + `near_miss_whoosh` + `ricochet`
 7. Silent weapon/prop cues (holster, catch, gate close)
-8. Ambience and UI
+8. Wind bed + gusts, then other ambience and UI
 
 ## Notes for a mix pass
 

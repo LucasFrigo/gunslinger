@@ -20,6 +20,7 @@ Design / lore: [`design/README.md`](design/README.md)
 | Projectile bullets + trails | `done` | `weapons/bullet.gd`, `weapons/bullet_trail.gd`; ribbon uses one camera-facing side vector, first point at muzzle. Shorter linger is planned (`FADE_TIME` 1.6s) |
 | Shorter bullet-trail fade | `planned` | Roadmap (Polish / visual); `weapons/bullet_trail.gd` |
 | Barrel smoke | `planned` | Roadmap (Polish / visual); stub `muzzle_smoke` already fires from `ImpactFeedback.shot_fired` — wants a lingering plume from the barrel |
+| Wind bed + gusts | `planned` | Roadmap (Polish / visual); looping per-arena wind plus visual gusts that trigger `wind_gust` SFX. `ScenarioResource.ambience` slot exists but is empty. Saloon excluded. Checklist: [`SOUND.md`](SOUND.md) |
 | Head / torso / arm / leg hitboxes | `done` | `player/hitbox.gd`, `combat/combat_rules.gd` |
 | Regional hit effects | `done` | Head instakill; torso/limb 1 HP (default HP 2); arm force-holsters + redraw lock; leg slows move. MP host HP + `_mp_wound` |
 | Self-damage | `done` | Player/peer bullets can hit the shooter after `self_hit_grace` (~0.28m) on the **gun-hand arm only**, so a normal muzzle shot does not clip the forearm. Torso / head / off-hand / legs count immediately (muzzle into body, close miss). Same regional HP / arm-disarm / leg-slow; a self-kill loses the duel (`You shot yourself`). AI still excludes its own hitboxes |

@@ -40,6 +40,7 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 - [ ] Shorter bullet-trail fade (`weapons/bullet_trail.gd` `FADE_TIME` 1.6s). `from:` shorter bullet trails (planned)
 - [ ] Main menu: Singleplayer / Multiplayer buttons that open the current SP and MP UIs. `from:` main menu SP / MP split (planned)
 - [ ] Lingering barrel smoke (stub `muzzle_smoke` is a short puff). `from:` barrel smoke (planned)
+- [ ] Outdoor wind bed per arena + visual gusts that play a gust SFX. Saloon is interior (no outdoor bed). `from:` wind bed + gusts (planned)
 - [ ] Persistent gauntlet high scores (session-only today). `from:` gauntlet scores (planned)
 - [ ] Reload mesh-fit / cylinder-flip polish can land later; volumes exist on layer `reload`. `from:` interactive reload
 - [x] VR default: gun-hand stick down cocks; A is trick-shot / spin. `from:` VR cock on stick-down
