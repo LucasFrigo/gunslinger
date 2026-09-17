@@ -6,6 +6,8 @@ Feature wiring: [`FEATURES.md`](FEATURES.md) · Playback: [`ARCHITECTURE.md`](AR
 
 Status: **real** (checked) · **placeholder** (unchecked catalog row) · **silent** (gameplay exists, no cue yet) · **planned** (feature not in code)
 
+Authoring DAW: **Ableton Live 12**. Layer, edit, and bounce cues there, then drop the files into `assets/audio/` (see [Swap](#swap)).
+
 ## Swap
 
 1. Drop `cue.ogg` (or `.wav`) into `assets/audio/` using the filename in the table.
@@ -92,7 +94,7 @@ Do not produce files until the feature exists. Tracked in [`FEATURES.md`](FEATUR
 
 ## Household Foley
 
-Low-budget reference. A phone in a quiet closet, 5–20 cm from the object, is enough for mechanical cues. Airplane mode; 48 kHz WAV if the app allows. Clothes/duvet around the phone, fridge and AC off. Do ~20 takes; keep 2. Layer in the DAW, export dry mono — do not bake reverb into clicks.
+Low-budget reference. A phone in a quiet closet, 5–20 cm from the object, is enough for mechanical cues. Airplane mode; 48 kHz WAV if the app allows. Clothes/duvet around the phone, fridge and AC off. Do ~20 takes; keep 2. Layer in Ableton 12, export dry mono — do not bake reverb into clicks.
 
 Do **not** record live gunfire for `gunshot`. Build it from a licensed crack (library / GDC pack / Freesound CC0 or CC-BY) plus your mechanical click, a low thump (door slam or bounced ball, pitched down), and a short quiet tail.
 
