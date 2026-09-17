@@ -13,7 +13,7 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 - [ ] Own Steam App ID — code still uses Spacewar **480** (`netcode/steam_transport.gd`, `steam_appid.txt`). Do not ship the Steam SKU on 480. Drop `steam_appid.txt` from store depots (Steam already knows the App ID). `from:` 1v1 Steam lobbies
 - [x] GodotSteam 4.22 GDExtension + Steamworks redistributables in `addons/godotsteam/` for desktop editor and Windows/Linux/macOS export. Quest APK still excludes the addon. `from:` 1v1 Steam lobbies
 - [x] Player-facing Settings on `ui/main_menu.tscn` (audio, comfort/turn, holster). Debug F3 is not a settings screen. `from:` main-menu settings
-- [ ] Arenas are placeholder CSG — current layouts will be scratched. Rebuild from detailed greyboxes then Blender meshes (Roadmap: Main Street / Saloon / Train Rooftop / Canyon art) before a paid listing. `from:` arenas (partial)
+- [ ] Arenas: Main Street greybox kit is in (`assets/models/scenarios/main_street/`); Saloon / Train Rooftop / Canyon are still placeholder CSG. Detail meshes for all four before a paid listing (Roadmap art items). Manual: walk Main Street boardwalks via the invisible street-side slope colliders, take cover behind awning posts, confirm the 16 m duel lane is clear and bullets hit world collision. `from:` arenas (partial)
 - [ ] Gunslinger mesh is A-pose only and not on AI or the remote avatar. `from:` character mesh (partial)
 - [ ] Audio / VFX catalogs are stub-swap paths; replace placeholders before a paid listing. `from:` impact / AV polish
 

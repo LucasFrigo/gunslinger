@@ -74,6 +74,13 @@ Build identity is `VERSION` (mirrored in `project.godot` → `application/config
 - MP overlay: title **Menu**, tree not paused, restart disabled for clients. Quit calls `GameManager.go_to_menu()` (`NetworkManager.leave()`).
 - Flat ESC toggles pause in-match; on Settings it goes Back first. VR left menu/Y opens pause in-match and still opens debug on the main menu. F3 stays debug.
 
+## Scenario art
+
+- Placeholder arenas start as CSG under `scenarios/*/`. Art passes scratch that CSG and rebuild from a Blender greybox kit, then detailed meshes in the same slots.
+- Shared primitives live in `dev/blender_kit.py` (box / cyl / disc / cone / mat / `-convcolonly` proxies / `convcol_ramp` wedges). Headless builds: `blender -b --python dev/build_*.py` (Blender 5.1 path on this machine is not on `PATH`).
+- Main Street kit: `dev/build_main_street_blender.py` → `assets/models/scenarios/main_street/*.glb` (+ `main_street.blend` with `importer="keep"`). Godot assembles instances in `scenarios/main_street/main_street.tscn`. Collision proxies use the `-convcolonly` name suffix so the scene importer emits `StaticBody3D` on layer 1 (bullets already raycast that layer). Raised steps (boardwalk, depot platform, store loading dock) keep stepped meshes but add invisible street-side slope colliders under default `floor_max_angle`. Flat mode walks with `CharacterBody3D` in `player/flat_rig.gd` (`collision_mask = 1`).
+- Keep `PlayerSpawn` / `EnemySpawn` and `scenarios/scenario_base.gd`; do not change `duel_distance` unless the layout intentionally rescales the standoff.
+
 ## Tests
 
 `dev/autotest.gd` — headless `--autotest=duel|gauntlet|load|host|join|steam|steamcycle`. Prefer extending these when changing duel or load paths. `steam` asserts `SteamTransport` parses and stays unavailable without GodotSteam (CI has no addon). `steamcycle` needs a running Steam client and drives create → leave → create, an abandoned create, and a dead join ([BUG-009](BUGS.md)); it passes as a no-op when Steam is absent. `load` also covers host → leave → host again.

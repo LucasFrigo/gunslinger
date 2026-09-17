@@ -1,9 +1,10 @@
 class_name FlatRig
-extends Node3D
+extends CharacterBody3D
 ## Non-VR test harness for the notebook: mouse-look, WASD walk, Q/E lean,
 ## RMB draw/holster, LMB fire, Space cock (or close gate), R reload. Deliberately
 ## minimal -- it exists so multiplayer can be tested against the Quest without a
 ## second headset. Walk / look / lean speeds come from MovementConfig (debug panel).
+## Collides with static world (layer 1) so greybox buildings / ground / step ramps matter.
 
 signal trigger_changed(hand: StringName, pressed: bool)
 signal grip_changed(hand: StringName, pressed: bool)
@@ -14,6 +15,7 @@ signal prop_fire_changed(hand: StringName, pressed: bool)
 signal menu_button_pressed
 
 const EYE_HEIGHT := 1.7
+const GRAVITY := 24.0
 const OFF_HAND := &"left_hand"
 ## Mouse pixels for a full deflection on the prop radial.
 const RADIAL_MOUSE_RANGE := 260.0
@@ -96,7 +98,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		if _prop_radial_active:
-			_prop_radial_vector = radial_vector_from_motion(_prop_radial_vector, event.relative)
+			_prop_radial_vector = radial_vector_from_motion(
+					_prop_radial_vector, (event as InputEventMouseMotion).relative)
 			return
 		var sens: float = MovementConfig.mouse_sensitivity
 		_yaw -= event.relative.x * sens
@@ -132,30 +135,38 @@ func _pointer_over_ui() -> bool:
 	return hovered != null and hovered.mouse_filter != Control.MOUSE_FILTER_IGNORE
 
 
-func _process(delta: float) -> void:
-	# Look.
+func _process(_delta: float) -> void:
+	# Look + lean only — walk lives in _physics_process so move_and_slide sees world.
 	rotation.y = _yaw
 	camera.rotation.x = _pitch
+	var lean_target := Input.get_action_strength("lean_right") - Input.get_action_strength("lean_left")
+	_lean = lerpf(_lean, lean_target, clampf(10.0 * _delta, 0.0, 1.0))
+	pivot.position.x = _lean * MovementConfig.lean_offset
+	pivot.rotation.z = -_lean * deg_to_rad(MovementConfig.lean_angle)
 
+
+func _physics_process(delta: float) -> void:
 	# Walk in world XZ from look yaw (not local basis + local position). The
 	# joiner's Player root is yawed 180° with EnemySpawn; mixing a world-facing
 	# camera with parent-local motion inverted A/D (BUG-006).
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var look_yaw := atan2(global_transform.basis.z.x, global_transform.basis.z.z)
-	var motion := (Basis(Vector3.UP, look_yaw) * Vector3(input_dir.x, 0, input_dir.y)) \
-			* MovementConfig.walk_speed * _move_speed_mult() * delta
-	global_position += motion
-
-	# Lean.
-	var lean_target := Input.get_action_strength("lean_right") - Input.get_action_strength("lean_left")
-	_lean = lerpf(_lean, lean_target, clampf(10.0 * delta, 0.0, 1.0))
-	pivot.position.x = _lean * MovementConfig.lean_offset
-	pivot.rotation.z = -_lean * deg_to_rad(MovementConfig.lean_angle)
+	var wish := (Basis(Vector3.UP, look_yaw) * Vector3(input_dir.x, 0, input_dir.y)) \
+			* MovementConfig.walk_speed * _move_speed_mult()
+	velocity.x = wish.x
+	velocity.z = wish.z
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+	else:
+		# Stick to ramps / boardwalks instead of launching off lips.
+		velocity.y = minf(velocity.y, 0.0)
+	move_and_slide()
 
 	# Drive MOVEMENT slow-mo mode from walk + lean speed.
 	var real_delta := delta / maxf(Engine.time_scale, 0.001)
 	if real_delta > 0.0:
-		TimeManager.report_player_motion(motion.length() / real_delta)
+		var horizontal := Vector3(velocity.x, 0.0, velocity.z).length()
+		TimeManager.report_player_motion(horizontal)
 
 
 ## Face a world-space yaw (radians). The Player root already carries the spawn
