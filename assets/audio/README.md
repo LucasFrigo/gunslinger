@@ -3,6 +3,8 @@
 Real sounds go here. Until then, `placeholder_audio.gd` generates procedural
 stand-ins and `audio_catalog.gd` is the only call-site API.
 
+Done / still-needed checklist: [`docs/SOUND.md`](../../docs/SOUND.md).
+
 ## Swap path
 
 1. Drop files into this folder using the expected names below.

@@ -2,7 +2,7 @@
 
 Living ship checklist. Not a changelog and not the business brief.
 
-**What already ships:** [`FEATURES.md`](FEATURES.md) · **How it works:** [`ARCHITECTURE.md`](ARCHITECTURE.md) · **GTM / pricing:** [`BUSINESS_BRIEF.md`](BUSINESS_BRIEF.md) · **Roadmap:** [`../Roadmap.md`](../Roadmap.md)
+**What already ships:** [`FEATURES.md`](FEATURES.md) · **How it works:** [`ARCHITECTURE.md`](ARCHITECTURE.md) · **SFX checklist:** [`SOUND.md`](SOUND.md) · **GTM / pricing:** [`BUSINESS_BRIEF.md`](BUSINESS_BRIEF.md) · **Roadmap:** [`../Roadmap.md`](../Roadmap.md)
 
 Agents **must add or revise items here in the same session** as a new player-facing / shippable feature (store cert, SKU split, test matrix, known polish, “do not ship until…”). Check off or remove a line only when it is actually done in code. Do not invent work that is not in the change.
 
@@ -15,7 +15,7 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 - [x] Player-facing Settings on `ui/main_menu.tscn` (audio, comfort/turn, holster). Debug F3 is not a settings screen. `from:` main-menu settings
 - [ ] Arenas: Main Street greybox kit is in (`assets/models/scenarios/main_street/`); Saloon / Train Rooftop / Canyon are still placeholder CSG. Detail meshes for all four before a paid listing (Roadmap art items). Manual: walk Main Street boardwalks via the invisible street-side slope colliders, take cover behind awning posts, confirm the 16 m duel lane is clear and bullets hit world collision. `from:` arenas (partial)
 - [ ] Gunslinger mesh is A-pose only and not on AI or the remote avatar. `from:` character mesh (partial)
-- [ ] Audio / VFX catalogs are stub-swap paths; replace placeholders before a paid listing. `from:` impact / AV polish
+- [ ] Audio / VFX catalogs are stub-swap paths; replace placeholders before a paid listing. SFX boxes: [`SOUND.md`](SOUND.md). `from:` impact / AV polish
 
 ## Platform / store
 

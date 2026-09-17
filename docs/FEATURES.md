@@ -6,6 +6,7 @@ Status: `done` | `partial` | `planned` | `blocked`
 Roadmap (future, by difficulty): [`../Roadmap.md`](../Roadmap.md)  
 Open bugs: [`BUGS.md`](BUGS.md)  
 Pre-release TODOs: [`RELEASE_TODOS.md`](RELEASE_TODOS.md)  
+Sound design (SFX checklist): [`SOUND.md`](SOUND.md)  
 Design / lore: [`design/README.md`](design/README.md)
 
 ## Core duel
@@ -30,7 +31,7 @@ Design / lore: [`design/README.md`](design/README.md)
 | Kill-cam (trail fly-along) | `done` | SP + 1v1 MP: `KillCam` + `TimeManager.notify_kill_cam`; flat `Camera3D` fly-along, VR spectator `XROrigin3D` ride; `duel_end` sting on lethal hit. Roadmap death cam + duel replay would replace or sequence after this |
 | Death cam (3rd-person corpse) | `planned` | Roadmap (Medium); orbit the dead body, freeze move/fire until rematch; after ~2s (`death_cam_hold`) insert duel replay |
 | Duel replay | `planned` | Roadmap (Hard); last ~5s through death + ~2s after (all tweakable); plays after death-cam hold; SP + 1v1 MP |
-| Impact / AV polish (SFX, haptics, VFX) | `done` | `ImpactFeedback` + `AudioCatalog` / `VfxCatalog` stubs; combat XR/flat rumble wired. Boot loading screen (`ui/loading_screen.tscn`) runs `ImpactFeedback.warmup()` before the menu ([BUG-010](BUGS.md)) |
+| Impact / AV polish (SFX, haptics, VFX) | `partial` | Wiring `done` (`ImpactFeedback` + catalogs + XR/flat rumble + boot warmup, [BUG-010](BUGS.md)). Real assets: only `duel_end.wav`. Every other catalog cue is still `PlaceholderAudio`. Checklist: [`SOUND.md`](SOUND.md) |
 | Gun release / trick shots | `done` | VR hold-to-hold: toss with hand velocity, catch either hand (or take from the other), holster snap on chosen hip (`holster_side`). Fire/reload only while held; airborne still counts as drawn for fouls. Frozen `RigidBody3D` copies the hand/hip pose (`follow_parent` in `weapons/weapon_base.gd`). MP pose sends free-gun transform + hand/hip flags |
 | Revolver Ocelot spin | `done` | VR only: default hold gun-hand A / X (remappable; was stick-down) hangs the revolver on a finger hinge (`SpinPivot` / `WeaponBase`); hand motion builds momentum; release (or stick up if bound to stick) snaps back. Fire still works (muzzle aim). Debug **VR Spin**. MP flag `GUN_SPINNING` |
 | Cigarette prop mesh | `done` | `assets/models/props/msc_cigarette.glb` (single node `MSC_Cigarette`, ~8.4 cm × 8 mm, long axis **+Y**, `filter` / `paper` vertex-colored materials, no atlas), wrapped by `props/cigarette.tscn`. Authoring source `msc_cigarette.blend` is `importer="keep"` — rebuild the GLB with `dev/vend_cigarette_blender.py`. No collision shape, so it can never block `ReloadProbe` / belt overlaps. No ember yet |
