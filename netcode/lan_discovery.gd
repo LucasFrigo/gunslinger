@@ -18,14 +18,16 @@ enum Role { IDLE, BEACON, BROWSE }
 var _role: int = Role.IDLE
 var _socket: PacketPeerUDP
 var _host_name := ""
+var _host_version := ""
 var _browse_timer := 0.0
-## ip -> { "ip": String, "name": String, "seen": float }
+## ip -> { "ip": String, "name": String, "version": String, "seen": float }
 var _found := {}
 
 
-func start_beacon(host_name: String) -> void:
+func start_beacon(host_name: String, host_version := "") -> void:
 	stop()
 	_host_name = host_name
+	_host_version = host_version
 	_socket = PacketPeerUDP.new()
 	# Android drops inbound broadcasts unless the socket has this on
 	# (Godot then takes a Wi-Fi multicast lock).
@@ -63,6 +65,7 @@ func stop() -> void:
 	_socket = null
 	_role = Role.IDLE
 	_found.clear()
+	_host_version = ""
 
 
 func _process(delta: float) -> void:
@@ -100,7 +103,7 @@ func _process_browse(delta: float) -> void:
 		var packet := _socket.get_packet().get_string_from_utf8()
 		if not packet.begins_with(PONG):
 			continue
-		var parsed := _parse_pong(packet, _socket.get_packet_ip())
+		var parsed := parse_pong_packet(packet, _socket.get_packet_ip())
 		if parsed.is_empty():
 			continue
 		_found[parsed["ip"]] = parsed
@@ -113,33 +116,49 @@ func _send_to_broadcasts(payload: PackedByteArray) -> void:
 		_socket.put_packet(payload)
 
 
-## PONG rest is `ip|name` (preferred) or a bare display name.
+## PONG rest is `ip|name|version` (preferred), legacy `ip|name`, or a bare display name.
 func _pong_payloads() -> Array[PackedByteArray]:
 	var payloads: Array[PackedByteArray] = []
 	var ips := lan_ipv4_addresses()
 	if ips.is_empty():
-		payloads.append((PONG + _host_name).to_utf8_buffer())
+		# No usable NIC IP: name|version so parsers still pick up the build string.
+		payloads.append((PONG + "%s|%s" % [_host_name, _host_version]).to_utf8_buffer())
 		return payloads
 	for ip in ips:
-		payloads.append((PONG + "%s|%s" % [ip, _host_name]).to_utf8_buffer())
+		payloads.append((PONG + "%s|%s|%s" % [ip, _host_name, _host_version]).to_utf8_buffer())
 	return payloads
 
 
-func _parse_pong(packet: String, packet_ip: String) -> Dictionary:
+## Public for autotests. Returns {} when the packet has no usable LAN IPv4.
+static func parse_pong_packet(packet: String, packet_ip: String) -> Dictionary:
+	if not packet.begins_with(PONG):
+		return {}
 	var rest := packet.trim_prefix(PONG)
 	var ip := packet_ip
 	var host_name := rest
-	var sep := rest.find("|")
-	if sep >= 0:
-		var claimed := rest.substr(0, sep)
-		host_name = rest.substr(sep + 1)
+	var version := ""
+	var parts := rest.split("|")
+	if parts.size() >= 3:
+		var claimed := parts[0]
+		version = parts[parts.size() - 1]
+		host_name = "|".join(parts.slice(1, parts.size() - 1))
 		if is_usable_lan_ipv4(claimed):
 			ip = claimed
+	elif parts.size() == 2:
+		var claimed2 := parts[0]
+		host_name = parts[1]
+		if is_usable_lan_ipv4(claimed2):
+			ip = claimed2
+		else:
+			# Bare `name|version` (no NIC IP in the beacon).
+			host_name = parts[0]
+			version = parts[1]
 	if not is_usable_lan_ipv4(ip):
 		return {}
 	return {
 		"ip": ip,
 		"name": host_name if not host_name.is_empty() else ip,
+		"version": version,
 		"seen": Time.get_ticks_msec() / 1000.0,
 	}
 

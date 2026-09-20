@@ -8,11 +8,11 @@ extends Node3D
 func _ready() -> void:
 	var use_vr := _try_init_xr()
 	print("Gunslinger: starting in %s mode" % ("VR" if use_vr else "FLAT"))
-	GameManager.setup(self, use_vr)
+	await GameManager.setup(self, use_vr)
 	_maybe_start_autotest()
 
 
-## Headless CI/dev smoke tests: `godot --headless -- --autotest=duel|gauntlet|host|join`
+## Headless CI/dev smoke tests: `godot --headless -- --autotest=duel|gauntlet|load|host|join|steam`
 func _maybe_start_autotest() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--autotest"):

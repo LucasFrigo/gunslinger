@@ -1,5 +1,5 @@
 ---
-description: Keep FEATURES, ARCHITECTURE, BUGS, Roadmap, and CHANGELOG in sync when code changes
+description: Keep FEATURES, ARCHITECTURE, BUGS, Roadmap, CHANGELOG, and RELEASE_TODOS in sync when code changes
 alwaysApply: true
 ---
 
@@ -14,6 +14,7 @@ Agents must keep these files accurate when shipping meaningful work. Do not inve
 | `docs/FEATURES.md` | What exists / in progress / planned; status + key paths |
 | `docs/ARCHITECTURE.md` | How major systems work and where they live |
 | `docs/BUGS.md` | Open / fixed defect tracker (`BUG-NNN`); screenshots in `docs/bugs/` |
+| `docs/RELEASE_TODOS.md` | Pre-release TODOs and attention points (store cert, SKU split, test matrix, “do not ship until…”) |
 | `Roadmap.md` | Future work, ordered easiest → hardest |
 | `CHANGELOG.md` | User-facing history ([Keep a Changelog](https://keepachangelog.com)) |
 | `VERSION` | Current SemVer string (single line, e.g. `0.1.0-alpha`) |
@@ -23,6 +24,7 @@ Also sync `project.godot` → `application/config/version` with `VERSION`.
 ## When to update (same PR / session as the code)
 
 - **New or changed behavior** → `docs/FEATURES.md` status + one-line note; touch `docs/ARCHITECTURE.md` if control flow, ownership, or key files moved.
+- **New or changed player-facing / shippable feature** → add or revise items in `docs/RELEASE_TODOS.md` (store cert, SKU split, test matrix, known polish, “do not ship until…”). Check off or remove a line only when it is actually done in code.
 - **Finished a Roadmap item** → move the bullet to **Completed** at the bottom of `Roadmap.md` (do not leave strikethrough in the active lists) and set `FEATURES.md` to `done`. **Started but not done** → annotate in place and set `FEATURES.md` to `partial`.
 - **Player-visible or shippable change** → add a `CHANGELOG.md` entry under `[Unreleased]`.
 - **New confirmed bug** → add `BUG-NNN` under Open in `docs/BUGS.md`. **Fixing a tracked bug** → move it to Fixed in the same session; changelog `Fixed` if player-visible.

@@ -86,6 +86,29 @@ var tuning := {
 	"spin_coupling": 8.0,
 	## Seconds to tween back to the locked pose after stick-up.
 	"spin_relock_time": 0.12,
+	## Cigarette boomerang: flight speed (m/s), same outbound and homing.
+	"cig_speed": 9.0,
+	## Range of a tap (m): zero charge still throws this far.
+	"cig_min_range": 1.2,
+	## Range at full charge (m).
+	"cig_max_range": 6.0,
+	## Seconds of holding the throw button to charge from min to max range.
+	"cig_charge_time": 1.0,
+	## Total seconds out and back, so a tap and a full throw take the same time:
+	## a short throw hangs spinning at the far end to make up the difference. A
+	## throw too long to fit in this window just takes as long as it takes.
+	"cig_flight_time": 1.5,
+	## Hand-to-cig distance (m) that counts as a catch.
+	"cig_catch_radius": 0.28,
+	## Outbound bend (rad/s) around world up. 0 is a straight line; raise it for
+	## a boomerang arc, negative bends the other way.
+	"cig_curve": 0.0,
+	## Flick spin (rad/s) snapped on at launch; it never damps before the catch.
+	"cig_spin": 38.0,
+	## 1 = sweep around the middle like a thrown baton (the default: the mesh is
+	## near enough rotationally symmetric that it is the only spin that reads).
+	## 0 = roll around the paper tube.
+	"cig_spin_axis": 1,
 	## Metres from muzzle before a shot can hit the shooter's gun-hand arm.
 	## Torso / head / off-hand / legs are not covered — a muzzle into the body
 	## still counts. Arm capsules also inset from the wrist so a normal forward
@@ -128,11 +151,13 @@ func _ready() -> void:
 	duel.duel_finished.connect(_on_duel_finished)
 
 
-## Called once by main.tscn after XR init.
+## Called once by main.tscn after XR init. Await: the loading screen compiles
+## combat AV, then the main menu opens.
 func setup(main: Node3D, use_vr: bool) -> void:
 	main_root = main
 	world_root = main.get_node("WorldRoot")
 	is_vr = use_vr
+	PlayerSettings.apply_window()
 
 	hud = load(HUD_SCENE).instantiate()
 	main.add_child(hud)
@@ -142,12 +167,43 @@ func setup(main: Node3D, use_vr: bool) -> void:
 	main.add_child(local_player)
 
 	DebugMenu.setup(use_vr)
+	await _run_boot_loading()
 	go_to_menu()
+
+
+func _run_boot_loading() -> void:
+	var headless := OS.has_feature("headless")
+	if not headless and is_instance_valid(hud):
+		hud.show_loading()
+	if not headless and is_vr and is_instance_valid(local_player):
+		local_player.show_boot_loading()
+	if not ImpactFeedback.warmup_progress.is_connected(_on_warmup_progress):
+		ImpactFeedback.warmup_progress.connect(_on_warmup_progress)
+	await ImpactFeedback.warmup()
+	if ImpactFeedback.warmup_progress.is_connected(_on_warmup_progress):
+		ImpactFeedback.warmup_progress.disconnect(_on_warmup_progress)
+	if is_vr and is_instance_valid(local_player):
+		local_player.hide_boot_loading()
+	if is_instance_valid(hud):
+		hud.hide_loading()
+
+
+func _on_warmup_progress(amount: float, status: String) -> void:
+	if is_instance_valid(hud):
+		hud.set_loading_progress(amount, status)
+	if is_vr and is_instance_valid(local_player):
+		local_player.set_boot_loading_text(status)
 
 
 # -- Mode transitions ---------------------------------------------------------
 
+func is_pause_open() -> bool:
+	return is_instance_valid(hud) and hud.is_pause_open()
+
+
 func go_to_menu() -> void:
+	if is_instance_valid(hud):
+		hud.close_pause()
 	_bump_action_generation()
 	KillCam.cancel()
 	NetworkManager.leave()
@@ -164,6 +220,8 @@ func go_to_menu() -> void:
 
 
 func start_free_duel(scenario_index: int, archetype_index: int) -> void:
+	if is_instance_valid(hud):
+		hud.close_pause()
 	_bump_action_generation()
 	_set_mode(GameMode.FREE_DUEL)
 	hud.hide_menu()
@@ -174,6 +232,8 @@ func start_free_duel(scenario_index: int, archetype_index: int) -> void:
 
 
 func start_gauntlet() -> void:
+	if is_instance_valid(hud):
+		hud.close_pause()
 	_bump_action_generation()
 	_set_mode(GameMode.GAUNTLET)
 	hud.hide_menu()
@@ -183,6 +243,8 @@ func start_gauntlet() -> void:
 
 ## Restart the active free duel, gauntlet encounter, or (host) MP rematch.
 func reset_current_duel() -> void:
+	if is_instance_valid(hud):
+		hud.close_pause()
 	match mode:
 		GameMode.FREE_DUEL:
 			_bump_action_generation()
@@ -235,6 +297,8 @@ func _begin_ai_duel(scenario_index: int, archetype: AIArchetype, health_mult: fl
 # -- Multiplayer flow ---------------------------------------------------------
 
 func _on_session_started(as_host: bool) -> void:
+	if is_instance_valid(hud):
+		hud.close_pause()
 	_bump_action_generation()
 	_set_mode(GameMode.MULTIPLAYER)
 	hud.hide_menu()
@@ -242,9 +306,14 @@ func _on_session_started(as_host: bool) -> void:
 	duel.stop()
 	_clear_combatants()
 	if as_host:
-		var ips := NetworkManager.lan_addresses()
-		var ip_hint := ", ".join(ips) if not ips.is_empty() else "(no LAN IPv4)"
-		show_message("Waiting for a challenger… LAN %s" % ip_hint, 12.0)
+		if NetworkManager.transport_kind() == "steam":
+			show_message(
+					"Waiting for a challenger… Steam lobby (%s). Esc → Invite friends, or Shift+Tab."
+					% NetworkManager.steam_lobby_label(), 12.0)
+		else:
+			var ips := NetworkManager.lan_addresses()
+			var ip_hint := ", ".join(ips) if not ips.is_empty() else "(no LAN IPv4)"
+			show_message("Waiting for a challenger… LAN %s" % ip_hint, 12.0)
 		_load_scenario(current_scenario_index)
 		_place_local_player(current_scenario.get_player_spawn())
 	else:
@@ -357,7 +426,7 @@ func _mp_rematch() -> void:
 func _after_delay(seconds: float, callable: Callable) -> void:
 	var mode_at_schedule := mode
 	var generation_at_schedule := _action_generation
-	get_tree().create_timer(seconds, true, false, true).timeout.connect(func() -> void:
+	get_tree().create_timer(seconds, false, false, true).timeout.connect(func() -> void:
 		if mode == mode_at_schedule and _action_generation == generation_at_schedule:
 			callable.call())
 

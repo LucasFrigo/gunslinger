@@ -9,20 +9,27 @@ const FADE_TIME := 1.6
 
 var points := PackedVector3Array()
 var _immediate := ImmediateMesh.new()
-var _material := StandardMaterial3D.new()
+var _material: StandardMaterial3D
 var _finished := false
 var _fade_left := FADE_TIME
 var _base_color := Color(1.0, 0.85, 0.35)
 var _side_ref := Vector3.ZERO
 
 
+## Same flags as live trails so boot warmup compiles the ribbon shader.
+static func make_material(color: Color) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_color = color
+	return mat
+
+
 func _init() -> void:
 	mesh = _immediate
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_material.albedo_color = _base_color
+	_material = make_material(_base_color)
 	material_override = _material
 	top_level = true
 

@@ -2,8 +2,8 @@ class_name ScenarioBase
 extends Node3D
 ## Contract for every scenario scene: must contain PlayerSpawn and EnemySpawn
 ## Marker3D children (facing each other), plus its own lighting/environment.
-## Greybox geometry is built from CSG nodes named after the asset that will
-## eventually replace it (e.g. "BLD_Saloon" -> saloon building model).
+## Placeholder CSG in each scenario is throwaway; art passes start from a new
+## detailed greybox, then Blender meshes. Keep PlayerSpawn and EnemySpawn.
 
 var scenario_resource: ScenarioResource
 

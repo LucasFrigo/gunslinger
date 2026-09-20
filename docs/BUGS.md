@@ -11,11 +11,78 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
-*(none)*
+_(none)_
 
 ---
 
 ## Fixed
+
+### BUG-010 — First shot hitch (short freeze / FPS drop)
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-09-16 |
+| Fixed | 2026-09-16 |
+| Platforms | SP and MP; VR and flat (desktop). First launch of a process. |
+| Areas | `autoload/impact_feedback.gd`, `weapons/bullet.gd`, `weapons/bullet_trail.gd`, `assets/vfx/vfx_catalog.gd`, `assets/audio/audio_catalog.gd` |
+
+**What:** The first shot after opening the game hitchs the frame for a moment (full freeze or a sharp FPS dip). Later shots in the same run are fine. Seen in both single-player and multiplayer, and in both VR and flat.
+
+**Repro:**
+1. Start the game (editor or exported build; a fresh process).
+2. Enter a free duel, gauntlet, or 1v1 MP.
+3. Fire the first round.
+4. The game stutters briefly. Further shots do not repeat it.
+
+**Root cause:** First trigger pull compiled combat AV that had never been drawn or mixed: `GPUParticles3D` muzzle smoke, the unshaded alpha trail ribbon, the slug mesh, muzzle OmniLight, and procedural gunshot PCM. Later shots reused those pipelines.
+
+**Fix:** `ImpactFeedback.warmup()` runs from `GameManager.setup` on a boot loading screen (`ui/loading_screen.tscn`) before the menu opens. It precaches every `AudioCatalog` cue, builds the shared slug mesh, then parents a tiny compile draw to the live camera (XR swapchain / flat viewport) for a few frames so particle, trail, light, and gunshot shaders/mixers hitch behind "Loading..." instead of the first round. VR covers the HMD with a dark quad. Headless autotest skips the GPU draw.
+
+---
+
+### BUG-009 — Steam: cannot join or create a lobby after leaving
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `major` |
+| Filed | 2026-09-03 |
+| Fixed | 2026-09-16 |
+| Platforms | 1v1 Steam (desktop) |
+| Areas | `netcode/steam_transport.gd`, `autoload/network_manager.gd` `leave` |
+
+**What:** After leaving a Steam lobby, join and create both fail in the same process.
+
+**Repro (leave / rejoin):**
+1. HOST (STEAM), second player joins, play or quit.
+2. Leave the lobby (Quit to menu / leave session).
+3. Same process: JOIN an existing lobby, or HOST (STEAM) again.
+4. Join and create fail until the game is restarted.
+
+**Root cause:** GodotSteam 4.22's `SteamMultiplayerPeer.close()` does not release its Steam P2P listen socket, so Steam keeps that virtual port occupied for the rest of the process. `host_with_lobby` and `connect_to_lobby` both hardcode virtual port **0**, so the second session — host or join — died in `create_host` / `create_client` with `ERR_CANT_CREATE`. Confirmed by probe: after `close()`, a raw `Steam.createListenSocketP2P` on the same port returns `LISTEN_SOCKET_INVALID`, while a fresh port succeeds every time. Steam itself reuses ports fine when the socket is genuinely closed, so the leak is in the addon.
+
+**Fix:** Sessions no longer use the port-0 lobby helpers. Each one takes a virtual port this process has not spent (port 0 first, then random 1–999) via `create_host` / `create_client`, and the host publishes it as lobby metadata `gunslinger_port` so joiners dial the right one. `SteamTransport.close()` drops the peer before leaving the lobby and clears any in-flight request, `NetworkManager.leave()` always tears the long-lived Steam transport down (it used to skip it once `transport` was nulled), a lobby handed to us by a late Steam callback is left again instead of adopted, and `createLobby` / `joinLobby` now time out after 10s instead of hanging the menu. Since `create_host` / `create_client` do not set the addon's `tracked_lobby`, `SteamTransport` watches `lobby_chat_update` itself to drop the peer when the other player leaves the lobby.
+
+**Also confirmed:** "cannot join while drawn" was not a separate bug. A lobby in an active 2/2 duel is both `setLobbyJoinable(false)` and filtered out of the browse list, which is intended.
+
+**Regression test:** `--autotest=steamcycle` drives create → leave → create, an abandoned create, and a dead join against a live Steam client; it is a no-op when Steam is absent (CI).
+
+### BUG-008 — MP does not reject mismatched game versions
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `major` |
+| Filed | 2026-09-03 |
+| Fixed | 2026-09-09 |
+| Platforms | 1v1 Steam (desktop); LAN |
+| Areas | `netcode/steam_transport.gd`, `netcode/lan_discovery.gd`, `autoload/network_manager.gd` |
+
+**What:** Clients could join a host running a different `application/config/version`. Steam wrote `gunslinger_version` on lobby create but neither browse nor join compared it. LAN had no version metadata.
+
+**Fix:** Steam and LAN browse show versions and disable incompatible rows; join refuses when the known host version differs. LAN beacon is `ip|name|version`. After connect, a `_version_hello` handshake gates `session_started` / `peer_joined`; mismatch shows both strings and disconnects the joiner (host stays up).
 
 ### BUG-007 — Foul loss overwritten by a later hit
 

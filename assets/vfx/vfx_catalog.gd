@@ -17,6 +17,13 @@ const _SCENES := {
 static var OVERRIDES: Dictionary = {}
 
 
+static func cues() -> Array[StringName]:
+	var names: Array[StringName] = []
+	for key in _SCENES.keys():
+		names.append(key as StringName)
+	return names
+
+
 static func spawn(
 		cue: StringName,
 		parent: Node,
@@ -52,3 +59,28 @@ static func spawn(
 		else:
 			node.look_at(origin + n, Vector3.FORWARD)
 	return node
+
+
+## Tiny local-space bursts for shader compile. Does not auto-play on add_child.
+static func spawn_for_compile(parent: Node) -> void:
+	if parent == null or not is_instance_valid(parent):
+		return
+	for cue in cues():
+		var packed: PackedScene = null
+		if OVERRIDES.has(cue):
+			packed = OVERRIDES[cue] as PackedScene
+		elif _SCENES.has(cue):
+			packed = _SCENES[cue] as PackedScene
+		if packed == null:
+			continue
+		var node := packed.instantiate() as Node3D
+		if node is OneShotParticles:
+			(node as OneShotParticles).auto_play = false
+		if node is GPUParticles3D:
+			var particles := node as GPUParticles3D
+			particles.emitting = false
+			particles.local_coords = true
+		parent.add_child(node)
+		node.position = Vector3.ZERO
+		if node is GPUParticles3D:
+			(node as GPUParticles3D).emitting = true

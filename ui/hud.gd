@@ -1,26 +1,36 @@
 class_name Hud
 extends CanvasLayer
-## Screen-space HUD (flat mode) and owner of the main menu Control, which the
-## VR player borrows into a 3D panel via UIPanel3D.
+## Screen-space HUD (flat mode) and owner of the main menu / pause Controls,
+## which the VR player borrows into a 3D panel via UIPanel3D.
 
 @onready var message_label: Label = $Message
 @onready var reload_status: Label = $ReloadStatus
 @onready var health_status: Label = $HealthStatus
 @onready var version_tag: Label = $VersionTag
 @onready var red_flash: ColorRect = $RedFlash
+@onready var prop_radial: PropRadialOverlay = $PropRadial
 @onready var menu_holder: Control = $MenuHolder
+@onready var pause_holder: Control = $PauseHolder
+@onready var loading_screen: LoadingScreen = $LoadingScreen
 
-var _menu: Control
+var _menu: MainMenu
+var pause_menu: PauseMenu
 var _message_timer: SceneTreeTimer
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_menu = $MenuHolder/MainMenu
+	pause_menu = $PauseHolder/PauseMenu
 	message_label.visible = false
 	reload_status.visible = false
 	health_status.visible = false
 	red_flash.modulate.a = 0.0
+	prop_radial.visible = false
 	menu_holder.visible = false
+	pause_holder.visible = false
+	if loading_screen != null:
+		loading_screen.hide_screen()
 	version_tag.text = "v%s" % str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
 
 
@@ -28,7 +38,23 @@ func get_menu_control() -> Control:
 	return _menu
 
 
+func get_pause_control() -> Control:
+	return pause_menu
+
+
+func is_pause_open() -> bool:
+	return pause_menu != null and pause_menu.is_open
+
+
+func close_pause() -> void:
+	if pause_menu != null:
+		pause_menu.close()
+
+
 func show_menu(is_vr: bool) -> void:
+	close_pause()
+	if _menu.has_method("show_mode_select"):
+		_menu.show_mode_select()
 	if is_vr:
 		menu_holder.visible = false
 		return
@@ -43,13 +69,30 @@ func hide_menu() -> void:
 	menu_holder.visible = false
 
 
+func show_loading() -> void:
+	if loading_screen != null:
+		loading_screen.show_screen()
+
+
+func hide_loading() -> void:
+	if loading_screen != null:
+		loading_screen.hide_screen()
+
+
+func set_loading_progress(amount: float, status: String) -> void:
+	if loading_screen != null:
+		loading_screen.set_progress(amount, status)
+
+
 ## Called when a VR menu panel is torn down and gives the Control back.
 func reclaim_menu(control: Control) -> void:
 	if control.get_parent() != null:
 		control.get_parent().remove_child(control)
-	menu_holder.add_child(control)
+	var home := pause_holder if control == pause_menu else menu_holder
+	home.add_child(control)
 	control.set_anchors_preset(Control.PRESET_FULL_RECT)
-	menu_holder.visible = false
+	if control != pause_menu:
+		home.visible = false
 
 
 func _reparent_menu_home() -> void:
@@ -85,7 +128,44 @@ func set_health(current: float, max_hp: float) -> void:
 	health_status.visible = true
 
 
+# -- Prop radial (flat harness) ------------------------------------------------
+
+func show_prop_radial(labels: PackedStringArray) -> void:
+	prop_radial.show_wheel(labels)
+
+
+func set_prop_radial_highlight(index: int) -> void:
+	prop_radial.set_highlight(index)
+
+
+func hide_prop_radial() -> void:
+	prop_radial.hide_wheel()
+
+
 func flash_red() -> void:
 	red_flash.modulate.a = 0.55
 	var tween := create_tween()
 	tween.tween_property(red_flash, "modulate:a", 0.0, 0.6)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_action_pressed("ui_cancel"):
+		return
+	if GameManager.mode == GameManager.GameMode.BOOT:
+		get_viewport().set_input_as_handled()
+		return
+	if pause_menu != null and pause_menu.is_open:
+		if pause_menu.is_settings_open():
+			pause_menu.show_pause_root()
+		else:
+			pause_menu.close()
+		get_viewport().set_input_as_handled()
+		return
+	if _menu != null and _menu.is_visible_in_tree() and _menu.is_settings_open():
+		_menu.show_mode_select()
+		get_viewport().set_input_as_handled()
+		return
+	if pause_menu != null:
+		pause_menu.open()
+		if pause_menu.is_open:
+			get_viewport().set_input_as_handled()

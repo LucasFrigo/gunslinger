@@ -16,6 +16,7 @@ var _control: Control
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	add_to_group(GROUP)
 
 	viewport = SubViewport.new()

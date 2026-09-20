@@ -1,10 +1,24 @@
 """Build the low-poly A-pose gunslinger inside Blender (run via MCP execute_code)."""
 import math
 import os
+import sys
 
 import bmesh
 import bpy
-from mathutils import Matrix, Vector
+from mathutils import Vector
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from blender_kit import (  # noqa: E402
+    assign,
+    box,
+    clear_scene,
+    cone,
+    cyl,
+    disc,
+    join_into,
+    mat,
+    mesh_from_bm,
+)
 
 OUT_DIR = r"e:\Projetos\gunslinger\assets\models\characters"
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -17,106 +31,6 @@ COL_SPUR = (0.45, 0.38, 0.28, 1.0)
 COL_SCARF = (0.75, 0.18, 0.16, 1.0)
 COL_EYE = (0.02, 0.02, 0.02, 1.0)
 COL_SCLERA = (0.92, 0.90, 0.85, 1.0)
-
-
-def clear_scene():
-    for obj in list(bpy.data.objects):
-        bpy.data.objects.remove(obj, do_unlink=True)
-    for block in (bpy.data.meshes, bpy.data.materials, bpy.data.images):
-        for item in list(block):
-            if item.users == 0:
-                block.remove(item)
-
-
-def mat(name, color, roughness=0.9, metallic=0.0, spec=0.15):
-    m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
-    m.use_nodes = True
-    bsdf = m.node_tree.nodes.get("Principled BSDF")
-    bsdf.inputs["Base Color"].default_value = color
-    bsdf.inputs["Roughness"].default_value = roughness
-    bsdf.inputs["Metallic"].default_value = metallic
-    if "Specular IOR Level" in bsdf.inputs:
-        bsdf.inputs["Specular IOR Level"].default_value = spec
-    m.diffuse_color = color
-    return m
-
-
-def link(obj, parent=None):
-    if obj.name not in bpy.context.collection.objects:
-        bpy.context.collection.objects.link(obj)
-    if parent:
-        obj.parent = parent
-    return obj
-
-
-def mesh_from_bm(bm, name, parent=None):
-    me = bpy.data.meshes.new(name)
-    bm.to_mesh(me)
-    bm.free()
-    me.update()
-    obj = bpy.data.objects.new(name, me)
-    return link(obj, parent)
-
-
-def box(name, loc, size, parent=None):
-    bm = bmesh.new()
-    bmesh.ops.create_cube(bm, size=1.0)
-    for v in bm.verts:
-        v.co.x *= size[0]
-        v.co.y *= size[1]
-        v.co.z *= size[2]
-        v.co += Vector(loc)
-    return mesh_from_bm(bm, name, parent)
-
-
-def cyl(name, start, end, r1, r2=None, segs=8, parent=None):
-    if r2 is None:
-        r2 = r1
-    start, end = Vector(start), Vector(end)
-    d = end - start
-    length = d.length
-    if length < 1e-6:
-        length = 1e-6
-    bm = bmesh.new()
-    bmesh.ops.create_cone(
-        bm, cap_ends=True, cap_tris=False, segments=segs,
-        radius1=r1, radius2=r2, depth=length,
-    )
-    quat = Vector((0, 0, 1)).rotation_difference(d.normalized())
-    bmesh.ops.rotate(bm, verts=bm.verts, cent=Vector((0, 0, 0)), matrix=quat.to_matrix().to_4x4())
-    bmesh.ops.translate(bm, verts=bm.verts, vec=(start + end) * 0.5)
-    return mesh_from_bm(bm, name, parent)
-
-
-def cone(name, loc, radius, depth, parent=None, segs=4):
-    bm = bmesh.new()
-    bmesh.ops.create_cone(
-        bm, cap_ends=True, cap_tris=False, segments=segs,
-        radius1=radius, radius2=0.002, depth=depth,
-    )
-    bmesh.ops.translate(bm, verts=bm.verts, vec=Vector(loc) + Vector((0, 0, depth * 0.5)))
-    return mesh_from_bm(bm, name, parent)
-
-
-def disc(name, loc, radius, height, segs=12, parent=None):
-    return cyl(name, (loc[0], loc[1], loc[2] - height * 0.5), (loc[0], loc[1], loc[2] + height * 0.5), radius, radius, segs, parent)
-
-
-def assign(obj, material):
-    obj.data.materials.clear()
-    obj.data.materials.append(material)
-
-
-def join_into(target, others):
-    if not others:
-        return target
-    bpy.ops.object.select_all(action="DESELECT")
-    target.select_set(True)
-    for o in others:
-        o.select_set(True)
-    bpy.context.view_layer.objects.active = target
-    bpy.ops.object.join()
-    return target
 
 
 def make_poncho_image(path):

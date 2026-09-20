@@ -24,6 +24,8 @@ enum GunHand { NONE, LEFT, RIGHT }
 
 var use_vr := false
 var rig: Node3D
+## Off-hand misc props: equip radial + cigarette boomerang.
+var props: PropController
 var health := CombatRules.DEFAULT_HEALTH
 var max_health := CombatRules.DEFAULT_HEALTH
 var alive := true
@@ -44,6 +46,8 @@ var _pose_accum := 0.0
 var _menu_panel: UIPanel3D
 var _vr_message: Label3D
 var _vr_message_timer := 0.0
+var _boot_cover: MeshInstance3D
+var _boot_label: Label3D
 var _holding_hand: int = GunHand.NONE
 var _held_cartridge: CartridgePhysical = null
 var _reload_event := ""
@@ -64,11 +68,22 @@ func _ready() -> void:
 	rig.trigger_changed.connect(_on_trigger_changed)
 	rig.grip_changed.connect(_on_grip_changed)
 	rig.cock_pressed.connect(_on_cock_pressed)
-	rig.menu_button_pressed.connect(DebugMenu.toggle)
+	rig.menu_button_pressed.connect(_on_menu_button)
 	if rig.has_signal("reload_pressed"):
 		rig.reload_pressed.connect(_on_reload_pressed)
 	if rig.has_signal("gate_pressed"):
 		rig.gate_pressed.connect(_on_gate_pressed)
+	if rig.has_signal("trick_shot_changed"):
+		rig.trick_shot_changed.connect(_on_trick_shot_changed)
+
+	props = PropController.new()
+	props.name = "PropController"
+	add_child(props)
+	props.setup(self)
+	if rig.has_signal("prop_radial_changed"):
+		rig.prop_radial_changed.connect(_on_prop_radial_changed)
+	if rig.has_signal("prop_fire_changed"):
+		rig.prop_fire_changed.connect(_on_prop_fire_changed)
 
 	head_hitbox.owner_entity = self
 	torso_hitbox.owner_entity = self
@@ -91,7 +106,6 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_follow_body()
 	_recover_free_gun()
-	_update_vr_spin()
 	_update_vr_reload(delta)
 	_update_wound_status(delta)
 	_update_jam_clear(delta)
@@ -189,6 +203,7 @@ func reset_for_duel(spawn: Transform3D) -> void:
 	_disarm_remaining = 0.0
 	_leg_remaining = 0.0
 	_clear_held_cartridge(true)
+	props.reset_for_duel()
 	_holster_gun()
 	revolver.reset()
 	_refresh_health_hud()
@@ -259,6 +274,8 @@ func play_death_feedback() -> void:
 # -- Gun handling -----------------------------------------------------------------
 
 func _on_grip_changed(hand: StringName, pressed: bool) -> void:
+	if _combat_blocked():
+		return
 	if not use_vr:
 		if pressed:
 			_toggle_gun()
@@ -351,22 +368,23 @@ func _holding_hand_name() -> StringName:
 	return HAND_LEFT if _holding_hand == GunHand.LEFT else HAND_RIGHT
 
 
-func _update_vr_spin() -> void:
-	if not use_vr or not (rig is VRRig):
+func _on_trick_shot_changed(hand: StringName, pressed: bool) -> void:
+	if not use_vr:
 		return
 	if not revolver.held or _holding_hand == GunHand.NONE:
 		if revolver.is_spin_active():
 			revolver.end_spin(true)
 		return
-	var stick: Vector2 = (rig as VRRig).get_stick(_holding_hand_name())
-	var thresh := float(GameManager.tuning.get("spin_stick_threshold", 0.55))
-	if stick.y <= -thresh:
+	if hand != _holding_hand_name():
+		return
+	if pressed:
 		revolver.begin_spin()
-	elif stick.y >= thresh:
+	else:
 		revolver.end_spin(false)
 
 
-func _off_hand_name() -> StringName:
+## The hand that is not on the gun. Defaults to left while holstered.
+func off_hand_name() -> StringName:
 	return HAND_RIGHT if _holding_hand == GunHand.LEFT else HAND_LEFT
 
 
@@ -465,15 +483,60 @@ func _holster_gun() -> void:
 	_refresh_reload_status()
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	if GameManager.mode == GameManager.GameMode.BOOT:
+		return
+	if use_vr and event.is_action_pressed("toggle_debug"):
+		DebugMenu.toggle()
+		get_viewport().set_input_as_handled()
+
+
+func _on_menu_button() -> void:
+	if GameManager.mode == GameManager.GameMode.BOOT:
+		return
+	if use_vr:
+		if GameManager.mode == GameManager.GameMode.MENU:
+			DebugMenu.toggle()
+		elif is_instance_valid(GameManager.hud) and GameManager.hud.pause_menu != null:
+			GameManager.hud.pause_menu.toggle()
+	else:
+		DebugMenu.toggle()
+
+
+func _combat_blocked() -> bool:
+	return GameManager.is_pause_open() or GameManager.mode == GameManager.GameMode.BOOT
+
+
 func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
-	if not pressed or not alive:
+	# VR: the off-hand trigger throws the equipped prop instead of firing.
+	if use_vr and hand == off_hand_name() and props.has_prop():
+		props.on_fire_changed(pressed)
+		return
+	if not pressed or not alive or _combat_blocked():
 		return
 	if use_vr and (not revolver.held or hand != _holding_hand_name()):
 		return
 	revolver.try_fire(GameManager.tuning["auto_cock"], rig.get_aim_override())
 
 
+func _on_prop_radial_changed(hand: StringName, pressed: bool) -> void:
+	# VR: only the off-hand stick click opens the wheel. Releases carry the real
+	# hand so a gun swap mid-wheel cannot strand it open.
+	if use_vr:
+		if pressed and hand != off_hand_name():
+			return
+		props.on_radial_changed(hand, pressed)
+		return
+	props.on_radial_changed(off_hand_name(), pressed)
+
+
+func _on_prop_fire_changed(_hand: StringName, pressed: bool) -> void:
+	props.on_fire_changed(pressed)
+
+
 func _on_cock_pressed(hand: StringName) -> void:
+	if _combat_blocked():
+		return
 	if use_vr and (not revolver.held or hand != _holding_hand_name()):
 		return
 	if revolver.gate_open:
@@ -483,6 +546,8 @@ func _on_cock_pressed(hand: StringName) -> void:
 
 
 func _on_gate_pressed(hand: StringName) -> void:
+	if _combat_blocked():
+		return
 	if not use_vr:
 		return
 	if revolver.held and hand == _holding_hand_name():
@@ -502,7 +567,7 @@ func _on_gate_pressed(hand: StringName) -> void:
 
 func _on_reload_pressed() -> void:
 	# Flat: R opens + dumps, or chambers one while open.
-	if not alive or not revolver.held:
+	if not alive or not revolver.held or _combat_blocked():
 		return
 	if revolver.gate_open:
 		if revolver.try_chamber():
@@ -612,7 +677,7 @@ func _update_vr_reload(delta: float) -> void:
 		return
 	var vr := rig as VRRig
 	var gun_speed: float = vr.hand_speed(_holding_hand_name())
-	var off_speed: float = vr.hand_speed(_off_hand_name())
+	var off_speed: float = vr.hand_speed(off_hand_name())
 	# Thresholds live in GameManager.tuning (debug panel → Gunplay / AI).
 	var dump_speed: float = float(GameManager.tuning["reload_dump_speed"])
 	var dump_hold: float = float(GameManager.tuning["reload_dump_hold"])
@@ -663,7 +728,7 @@ func _reload_probe() -> Area3D:
 		return null
 	var vr := rig as VRRig
 	if revolver.held:
-		return vr.get_reload_probe(_off_hand_name())
+		return vr.get_reload_probe(off_hand_name())
 	return vr.get_reload_probe(HAND_LEFT)
 
 
@@ -758,7 +823,7 @@ func _reload_viz_color(shape_node: CollisionShape3D) -> Color:
 
 func _cartridge_attach() -> Node3D:
 	if rig is VRRig:
-		var hand := _off_hand_name() if revolver.held else HAND_LEFT
+		var hand := off_hand_name() if revolver.held else HAND_LEFT
 		return (rig as VRRig).get_cartridge_attach(hand)
 	if rig.has_method("get_wrist_attach"):
 		return rig.get_wrist_attach()
@@ -772,7 +837,7 @@ func _drop_held_cartridge() -> void:
 	var vel := Vector3.ZERO
 	if rig is VRRig:
 		var vr := rig as VRRig
-		var off := _off_hand_name() if revolver.held else HAND_LEFT
+		var off := off_hand_name() if revolver.held else HAND_LEFT
 		vel = vr.hand_velocity(off) * 0.25
 	_held_cartridge.drop_into_world(get_tree().current_scene, pos, vel)
 	_held_cartridge = null
@@ -809,6 +874,11 @@ func _update_reload_event(delta: float) -> void:
 
 func _holding_cartridge() -> bool:
 	return _held_cartridge != null and is_instance_valid(_held_cartridge)
+
+
+## A belt round owns the off hand, so an equipped prop parks at the mouth.
+func is_holding_cartridge() -> bool:
+	return _holding_cartridge()
 
 
 func _build_reload_status_text() -> String:
@@ -908,7 +978,7 @@ func _broadcast_pose(delta: float) -> void:
 func show_menu_panel(menu_control: Control) -> void:
 	hide_menu_panel()
 	_menu_panel = UIPanel3D.new()
-	_menu_panel.panel_size = Vector2(1.0, 0.7)
+	_menu_panel.panel_size = Vector2(1.0, 0.8)
 	add_child(_menu_panel)
 	var head := get_head_position()
 	var forward := -Basis(Vector3.UP, rig.get_head_transform().basis.get_euler().y).z
@@ -924,6 +994,52 @@ func hide_menu_panel() -> void:
 			GameManager.hud.reclaim_menu(control)
 		_menu_panel.queue_free()
 	_menu_panel = null
+
+
+## Dark FOV cover + status text on the HMD while boot shaders compile.
+func show_boot_loading(status := "Loading...") -> void:
+	hide_boot_loading()
+	if not use_vr or not is_instance_valid(rig):
+		return
+	var camera: Node3D = rig.get("camera") as Node3D
+	if camera == null:
+		return
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(4.0, 3.0)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(0.09, 0.06, 0.04, 1.0)
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.material = mat
+	_boot_cover = MeshInstance3D.new()
+	_boot_cover.name = "BootLoadingCover"
+	_boot_cover.mesh = mesh
+	_boot_cover.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_boot_cover.position = Vector3(0.0, 0.0, -0.95)
+	camera.add_child(_boot_cover)
+	_boot_label = Label3D.new()
+	_boot_label.name = "BootLoadingLabel"
+	_boot_label.font_size = 64
+	_boot_label.pixel_size = 0.002
+	_boot_label.outline_size = 12
+	_boot_label.modulate = Color(0.92, 0.86, 0.74, 1.0)
+	_boot_label.position = Vector3(0.0, 0.04, -0.9)
+	_boot_label.text = status
+	camera.add_child(_boot_label)
+
+
+func set_boot_loading_text(status: String) -> void:
+	if is_instance_valid(_boot_label) and not status.is_empty():
+		_boot_label.text = status
+
+
+func hide_boot_loading() -> void:
+	if is_instance_valid(_boot_cover):
+		_boot_cover.queue_free()
+	_boot_cover = null
+	if is_instance_valid(_boot_label):
+		_boot_label.queue_free()
+	_boot_label = null
 
 
 func show_vr_message(text: String, duration: float) -> void:

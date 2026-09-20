@@ -3,6 +3,7 @@ extends XROrigin3D
 ## VR rig: OpenXR camera + controllers, laser pointer for 3D UI panels,
 ## continuous thumbstick locomotion (left stick move, right stick turn), and
 ## physical + stick motion reporting for the Superhot slow-mo mode.
+## Combat buttons dispatch through PlayerSettings bind table.
 ## Placeholder hand meshes -- swap for real hand models under LeftHand /
 ## RightHand without touching this script.
 
@@ -10,11 +11,20 @@ signal trigger_changed(hand: StringName, pressed: bool)
 signal grip_changed(hand: StringName, pressed: bool)
 signal cock_pressed(hand: StringName)
 signal gate_pressed(hand: StringName)
+signal trick_shot_changed(hand: StringName, pressed: bool)
+signal prop_radial_changed(hand: StringName, pressed: bool)
 signal menu_button_pressed
 
 const HAND_LEFT := &"left_hand"
 const HAND_RIGHT := &"right_hand"
 const POINTER_LENGTH := 6.0
+const DIGITAL_SOURCES: Array[String] = [
+	"trigger_click",
+	"grip_click",
+	"ax_button",
+	"by_button",
+	"primary_click",
+]
 
 @onready var camera: XRCamera3D = $XRCamera3D
 @onready var left_hand: XRController3D = $LeftHand
@@ -41,8 +51,15 @@ var left_hand_velocity := Vector3.ZERO
 var right_hand_angular_velocity := Vector3.ZERO
 var left_hand_angular_velocity := Vector3.ZERO
 
+## Stick-down edge / hold state per hand (cock edge + trick-shot analog).
+var _stick_down_latched := {HAND_LEFT: false, HAND_RIGHT: false}
+var _stick_trick_active := {HAND_LEFT: false, HAND_RIGHT: false}
+## Hand whose stick is driving the prop radial, or empty when it is closed.
+var _prop_radial_hand: StringName = &""
+
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	left_hand.button_pressed.connect(_on_left_button.bind())
 	left_hand.button_released.connect(_on_left_button_released.bind())
 	right_hand.button_pressed.connect(_on_right_button.bind())
@@ -90,6 +107,34 @@ func get_reload_probe(hand: StringName = HAND_LEFT) -> Area3D:
 	return $LeftHand/ReloadProbe as Area3D
 
 
+## Where an equipped misc prop rides on the off hand.
+func get_prop_attach(hand: StringName = HAND_LEFT) -> Node3D:
+	if hand == HAND_RIGHT:
+		return $RightHand/PropAttach
+	return $LeftHand/PropAttach
+
+
+## Parking spot for a prop while the off hand is busy with a belt cartridge.
+func get_mouth_attach() -> Node3D:
+	return $XRCamera3D/MouthAttach
+
+
+## The controller node itself, for hanging world-space UI off a hand.
+func get_hand_node(hand: StringName) -> Node3D:
+	return left_hand if hand == HAND_LEFT else right_hand
+
+
+## While the prop radial is open, that stick is stolen from locomotion.
+func set_prop_radial_active(active: bool, hand: StringName = &"") -> void:
+	_prop_radial_hand = hand if active else &""
+
+
+func get_prop_radial_vector() -> Vector2:
+	if _prop_radial_hand == &"":
+		return Vector2.ZERO
+	return get_stick(_prop_radial_hand)
+
+
 func hand_speed(hand: StringName) -> float:
 	return left_hand_speed if hand == HAND_LEFT else right_hand_speed
 
@@ -122,16 +167,27 @@ func reset_locomotion() -> void:
 	left_hand_velocity = Vector3.ZERO
 	right_hand_angular_velocity = Vector3.ZERO
 	left_hand_angular_velocity = Vector3.ZERO
+	_stick_down_latched[HAND_LEFT] = false
+	_stick_down_latched[HAND_RIGHT] = false
+	_stick_trick_active[HAND_LEFT] = false
+	_stick_trick_active[HAND_RIGHT] = false
+	_prop_radial_hand = &""
 	var desired_yaw := global_transform.basis.get_euler().y
 	var head_yaw := camera.global_transform.basis.get_euler().y
 	_rotate_around_head(wrapf(desired_yaw - head_yaw, -PI, PI))
 
 
 func _process(delta: float) -> void:
+	if GameManager.is_pause_open() or get_tree().paused:
+		_update_pointer()
+		# Still poll stick-down while settings listen (pause / menu).
+		_update_stick_binds()
+		return
 	var stick_speed := _apply_locomotion(delta)
 	_update_hand_speeds(delta)
 	_report_motion(delta, stick_speed)
 	_update_pointer()
+	_update_stick_binds()
 
 
 func get_stick(hand: StringName) -> Vector2:
@@ -144,9 +200,13 @@ func _apply_locomotion(delta: float) -> float:
 	if KillCam.is_playing:
 		return 0.0
 	var move_input := _deadzone(left_hand.get_vector2("primary"), MovementConfig.stick_deadzone)
-	var spin_hand := _held_gun_hand()
-	if spin_hand == HAND_LEFT:
+	var gun_hand := _held_gun_hand()
+	# Steal gun-hand stick Y when a combat bind uses stick_down (cock or spin).
+	if PlayerSettings.vr_uses_stick_down() and gun_hand == HAND_LEFT:
 		move_input.y = 0.0
+	# An open prop radial owns that stick outright.
+	if _prop_radial_hand == HAND_LEFT:
+		move_input = Vector2.ZERO
 	var head_yaw := camera.global_transform.basis.get_euler().y
 	var basis := Basis(Vector3.UP, head_yaw)
 	# World XZ from HMD yaw, applied via global_position. Adding that vector to
@@ -155,7 +215,10 @@ func _apply_locomotion(delta: float) -> float:
 			* MovementConfig.vr_move_speed * _move_speed_mult() * delta
 	global_position += motion
 
-	_apply_turn(delta, right_hand.get_vector2("primary"))
+	var turn_input := right_hand.get_vector2("primary")
+	if _prop_radial_hand == HAND_RIGHT:
+		turn_input = Vector2.ZERO
+	_apply_turn(delta, turn_input)
 
 	var real_delta := delta / maxf(Engine.time_scale, 0.001)
 	if real_delta <= 0.0:
@@ -265,58 +328,145 @@ func _angular_velocity(prev: Basis, current: Basis, dt: float) -> Vector3:
 # -- Buttons -------------------------------------------------------------------
 
 func _on_left_button(button: String) -> void:
-	match button:
-		"menu_button":
-			menu_button_pressed.emit()
-		"by_button":
-			gate_pressed.emit(HAND_LEFT)
-		"ax_button":
-			cock_pressed.emit(HAND_LEFT)
-		"trigger_click":
-			trigger_changed.emit(HAND_LEFT, true)
-		"grip_click":
-			grip_changed.emit(HAND_LEFT, true)
+	if button == "menu_button":
+		if PlayerSettings.is_listening():
+			PlayerSettings.cancel_listen()
+			return
+		menu_button_pressed.emit()
+		return
+	_dispatch_button(HAND_LEFT, button, true)
 
 
 func _on_left_button_released(button: String) -> void:
-	match button:
-		"trigger_click":
-			trigger_changed.emit(HAND_LEFT, false)
-		"grip_click":
-			grip_changed.emit(HAND_LEFT, false)
+	_dispatch_button(HAND_LEFT, button, false)
 
 
 func _on_right_button(button: String) -> void:
-	match button:
-		"trigger_click":
-			_trigger_down = true
-			if _pointer_panel != null:
-				_pointer_panel.pointer_click(pointer_ray.get_collision_point(), true)
-			else:
-				trigger_changed.emit(HAND_RIGHT, true)
-		"grip_click":
-			grip_changed.emit(HAND_RIGHT, true)
-		"ax_button":
-			cock_pressed.emit(HAND_RIGHT)
-		"by_button":
-			gate_pressed.emit(HAND_RIGHT)
+	if button == "menu_button":
+		if PlayerSettings.is_listening():
+			PlayerSettings.cancel_listen()
+			return
+		menu_button_pressed.emit()
+		return
+	# UI laser always uses right trigger while pointing at a panel.
+	if button == "trigger_click":
+		_trigger_down = true
+		if _pointer_panel != null:
+			_pointer_panel.pointer_click(pointer_ray.get_collision_point(), true)
+			return
+	_dispatch_button(HAND_RIGHT, button, true)
 
 
 func _on_right_button_released(button: String) -> void:
-	match button:
-		"trigger_click":
-			if _trigger_down and _pointer_panel != null:
-				_pointer_panel.pointer_click(pointer_ray.get_collision_point(), false)
-			else:
-				trigger_changed.emit(HAND_RIGHT, false)
+	if button == "trigger_click":
+		if _trigger_down and _pointer_panel != null:
+			_pointer_panel.pointer_click(pointer_ray.get_collision_point(), false)
 			_trigger_down = false
-		"grip_click":
-			grip_changed.emit(HAND_RIGHT, false)
+			return
+		_trigger_down = false
+	_dispatch_button(HAND_RIGHT, button, false)
+
+
+func _dispatch_button(hand: StringName, button: String, pressed: bool) -> void:
+	if button not in DIGITAL_SOURCES:
+		return
+	if pressed and PlayerSettings.try_capture_vr_source(button):
+		return
+	if PlayerSettings.is_listening():
+		return
+	var action := PlayerSettings.vr_action_for_source(button)
+	if action == &"":
+		# Unbound source: left B still opens debug when not a combat bind.
+		if pressed and hand == HAND_LEFT and button == "by_button":
+			gate_pressed.emit(HAND_LEFT)
+		return
+	_emit_action(hand, action, pressed)
+
+
+func _emit_action(hand: StringName, action: StringName, pressed: bool) -> void:
+	match action:
+		&"fire":
+			trigger_changed.emit(hand, pressed)
+		&"grip":
+			grip_changed.emit(hand, pressed)
+		&"cock":
+			if pressed:
+				cock_pressed.emit(hand)
+		&"gate":
+			if pressed:
+				gate_pressed.emit(hand)
+		&"trick_shot":
+			trick_shot_changed.emit(hand, pressed)
+		&"prop_radial":
+			prop_radial_changed.emit(hand, pressed)
+		_:
+			pass
+	# Left B opens debug when that press is not consumed as gun-hand gate —
+	# handled in player._on_gate_pressed when gate_pressed fires on left.
+
+
+func _update_stick_binds() -> void:
+	var thresh := float(GameManager.tuning.get("spin_stick_threshold", 0.55))
+	var gun_hand := _held_gun_hand()
+	for hand in [HAND_LEFT, HAND_RIGHT]:
+		var stick := get_stick(hand)
+		var down := stick.y <= -thresh
+		var up := stick.y >= thresh
+		var latched: bool = _stick_down_latched[hand]
+		if down and not latched:
+			_stick_down_latched[hand] = true
+			if PlayerSettings.try_capture_vr_source("stick_down"):
+				continue
+			if PlayerSettings.is_listening():
+				continue
+			# Combat stick-down only on the hand holding the gun.
+			if hand != gun_hand:
+				continue
+			_on_stick_down_edge(hand)
+		elif not down and latched:
+			_stick_down_latched[hand] = false
+			if hand == gun_hand and not PlayerSettings.is_listening():
+				_on_stick_down_release(hand)
+		# Trick-shot on stick_down: hang while down, relock on stick up.
+		if hand != gun_hand or PlayerSettings.is_listening():
+			continue
+		if PlayerSettings.get_vr_bind(&"trick_shot") != "stick_down":
+			continue
+		var active: bool = _stick_trick_active[hand]
+		if down and not active:
+			_stick_trick_active[hand] = true
+			trick_shot_changed.emit(hand, true)
+		elif up and active:
+			_stick_trick_active[hand] = false
+			trick_shot_changed.emit(hand, false)
+
+func _on_stick_down_edge(hand: StringName) -> void:
+	var cock_src := PlayerSettings.get_vr_bind(&"cock")
+	var gate_src := PlayerSettings.get_vr_bind(&"gate")
+	var fire_src := PlayerSettings.get_vr_bind(&"fire")
+	var grip_src := PlayerSettings.get_vr_bind(&"grip")
+	if cock_src == "stick_down":
+		cock_pressed.emit(hand)
+	elif gate_src == "stick_down":
+		gate_pressed.emit(hand)
+	elif fire_src == "stick_down":
+		trigger_changed.emit(hand, true)
+	elif grip_src == "stick_down":
+		grip_changed.emit(hand, true)
+	# trick_shot stick_down is handled as hold in _update_stick_binds
+
+
+func _on_stick_down_release(hand: StringName) -> void:
+	if PlayerSettings.get_vr_bind(&"fire") == "stick_down":
+		trigger_changed.emit(hand, false)
+	if PlayerSettings.get_vr_bind(&"grip") == "stick_down":
+		grip_changed.emit(hand, false)
 
 
 # -- UI laser pointer -----------------------------------------------------------
 
 func _update_pointer() -> void:
+	pointer_ray.force_raycast_update()
 	var panel: UIPanel3D = null
 	var hit_point := Vector3.ZERO
 	if pointer_ray.is_colliding():

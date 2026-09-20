@@ -9,6 +9,7 @@ extends Control
 @onready var lan_list: ItemList = %LanList
 @onready var steam_list: ItemList = %SteamList
 @onready var status_label: Label = %StatusLabel
+@onready var settings_menu: SettingsMenu = $Center/Panel/Margin/SettingsMenu
 
 var _lan_hosts: Array = []
 var _steam_lobbies: Array = []
@@ -24,14 +25,16 @@ func _ready() -> void:
 	%GauntletButton.pressed.connect(GameManager.start_gauntlet)
 	%FreeDuelButton.pressed.connect(func() -> void:
 		GameManager.start_free_duel(scenario_option.selected, enemy_option.selected))
-	%HostLanButton.pressed.connect(func() -> void: NetworkManager.host_lan())
+	%HostLanButton.pressed.connect(_host_lan)
 	%JoinIpButton.pressed.connect(func() -> void: NetworkManager.join_lan(ip_edit.text))
 	%JoinLanButton.pressed.connect(_join_selected_lan)
 	lan_list.item_activated.connect(_join_lan_at)
-	%HostSteamButton.pressed.connect(func() -> void: NetworkManager.host_steam())
+	%HostSteamButton.pressed.connect(_host_steam)
 	%RefreshSteamButton.pressed.connect(NetworkManager.refresh_steam_lobbies)
 	%JoinSteamButton.pressed.connect(_join_selected_steam)
 	steam_list.item_activated.connect(_join_steam_at)
+	%SettingsButton.pressed.connect(_show_settings)
+	settings_menu.back_pressed.connect(show_mode_select)
 	%QuitButton.pressed.connect(func() -> void: get_tree().quit())
 
 	NetworkManager.lan_hosts_updated.connect(_on_lan_hosts)
@@ -48,15 +51,49 @@ func _ready() -> void:
 		for button in [%HostSteamButton, %RefreshSteamButton, %JoinSteamButton]:
 			(button as Button).disabled = true
 		%SteamNote.text = "Steam: GodotSteam extension not installed (LAN still works)."
+	else:
+		%SteamNote.text = "Steam lobbies refresh automatically. After hosting, Esc → Invite friends (or Shift+Tab) if you want the Steam overlay."
 
 	visibility_changed.connect(_on_visibility_changed)
 	_on_lan_hosts([])
+	if not OS.has_feature("android") and NetworkManager.steam_available():
+		steam_list.clear()
+		steam_list.add_item("Searching for Steam lobbies...")
+		steam_list.set_item_disabled(0, true)
 	_on_visibility_changed()
 
 
+func show_mode_select() -> void:
+	%Root.visible = true
+	settings_menu.visible = false
+
+
+func is_settings_open() -> bool:
+	return settings_menu.visible
+
+
+func _show_settings() -> void:
+	%Root.visible = false
+	settings_menu.visible = true
+	settings_menu.refresh()
+
+
 func _on_visibility_changed() -> void:
-	# Only scan the LAN while the menu is actually open.
-	NetworkManager.browse_lan(is_visible_in_tree())
+	var open := is_visible_in_tree()
+	NetworkManager.browse_lan(open)
+	NetworkManager.browse_steam(open and not OS.has_feature("android"))
+	if open:
+		show_mode_select()
+
+
+func _host_lan() -> void:
+	_set_status("Hosting LAN game...")
+	NetworkManager.host_lan()
+
+
+func _host_steam() -> void:
+	_set_status("Creating Steam lobby...")
+	NetworkManager.host_steam()
 
 
 func _join_selected_lan() -> void:
@@ -71,6 +108,10 @@ func _join_lan_at(index: int) -> void:
 	if index < 0 or index >= _lan_hosts.size():
 		return
 	var host: Dictionary = _lan_hosts[index]
+	var host_v := str(host.get("version", ""))
+	if not NetworkManager.versions_match(host_v, NetworkManager.game_version()):
+		_set_status(NetworkManager.version_mismatch_message(host_v, NetworkManager.game_version()))
+		return
 	_set_status("Joining %s..." % host["ip"])
 	NetworkManager.join_lan(host["ip"])
 
@@ -87,6 +128,10 @@ func _join_steam_at(index: int) -> void:
 	if index < 0 or index >= _steam_lobbies.size():
 		return
 	var lobby: Dictionary = _steam_lobbies[index]
+	var host_v := str(lobby.get("version", ""))
+	if not NetworkManager.versions_match(host_v, NetworkManager.game_version()):
+		_set_status(NetworkManager.version_mismatch_message(host_v, NetworkManager.game_version()))
+		return
 	_set_status("Joining lobby %s..." % lobby["name"])
 	NetworkManager.join_steam(lobby["id"])
 
@@ -94,8 +139,14 @@ func _join_steam_at(index: int) -> void:
 func _on_lan_hosts(hosts: Array) -> void:
 	_lan_hosts = hosts
 	lan_list.clear()
+	var local_v := NetworkManager.game_version()
 	for host in hosts:
-		lan_list.add_item("%s  (%s)" % [host["name"], host["ip"]])
+		var host_v := str(host.get("version", ""))
+		var compatible := NetworkManager.versions_match(host_v, local_v)
+		var version_label := host_v if not host_v.is_empty() else "?"
+		var idx := lan_list.add_item("%s  (%s)  v%s" % [host["name"], host["ip"], version_label])
+		if not compatible:
+			lan_list.set_item_disabled(idx, true)
 	if hosts.is_empty():
 		lan_list.add_item("Searching for LAN hosts...")
 		lan_list.set_item_disabled(0, true)
@@ -106,7 +157,14 @@ func _on_steam_lobbies(lobbies: Array) -> void:
 	_steam_lobbies = lobbies
 	steam_list.clear()
 	for lobby in lobbies:
-		steam_list.add_item("%s  (%d/2)" % [lobby["name"], lobby["players"]])
+		var host_v := str(lobby.get("version", ""))
+		var version_label := host_v if not host_v.is_empty() else "?"
+		var compatible: bool = bool(lobby.get("compatible",
+				NetworkManager.versions_match(host_v, NetworkManager.game_version())))
+		var idx := steam_list.add_item(
+				"%s  (%d/2)  v%s" % [lobby["name"], lobby["players"], version_label])
+		if not compatible:
+			steam_list.set_item_disabled(idx, true)
 	if lobbies.is_empty():
 		steam_list.add_item("No lobbies found. Refresh to retry.")
 		steam_list.set_item_disabled(0, true)
