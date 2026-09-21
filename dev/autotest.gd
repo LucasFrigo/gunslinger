@@ -8,8 +8,8 @@ extends Node
 ##   steam    - SteamTransport parses; is_available() is false without GodotSteam
 ##   steamcycle - create/leave/create + join recovery against a live Steam
 ##              client (BUG-009); passes as a no-op when Steam is absent
-##   load     - loads every scene/resource, then bind, prop, version, and
-##              host/leave/re-host (BUG-009) checks
+##   load     - loads every scene/resource, then bind, prop, version,
+##              main-menu SP/MP split, and host/leave/re-host (BUG-009) checks
 ## Prints AUTOTEST PASS / AUTOTEST FAIL and sets the exit code.
 
 var mode := "duel"
@@ -197,6 +197,8 @@ func _test_load_all() -> void:
 	var ladder: GauntletLadder = load(GameManager.GAUNTLET_LADDER)
 	if ladder.encounters.size() != 6:
 		return _fail("ladder has %d encounters, expected 6" % ladder.encounters.size())
+	if not _main_menu_split_ok():
+		return
 	if not _steam_transport_ok():
 		return
 	if not _binds_ok():
@@ -228,6 +230,62 @@ func _leave_rejoin_ok() -> bool:
 			_fail("leave() did not reset the multiplayer peer to offline")
 			return false
 	print("AUTOTEST: host -> leave -> host again ok, peer reset to offline")
+	return true
+
+
+## Landing is Singleplayer / Multiplayer / Settings / Quit. LAN/Steam browse
+## only starts while the MP page is showing.
+func _main_menu_split_ok() -> bool:
+	var menu: MainMenu = (load("res://ui/main_menu.tscn") as PackedScene).instantiate()
+	add_child(menu)
+	if not menu.get_node("%Landing").visible:
+		menu.queue_free()
+		_fail("main menu landing is hidden on open")
+		return false
+	if menu.get_node("%SingleplayerPage").visible or menu.get_node("%MultiplayerPage").visible:
+		menu.queue_free()
+		_fail("SP / MP pages should start hidden")
+		return false
+	if NetworkManager.discovery._role != LanDiscovery.Role.IDLE:
+		menu.queue_free()
+		_fail("LAN browse started on the landing page")
+		return false
+	menu.get_node("%SingleplayerButton").pressed.emit()
+	if not menu.get_node("%SingleplayerPage").visible or menu.get_node("%Landing").visible:
+		menu.queue_free()
+		_fail("Singleplayer button did not open the SP page")
+		return false
+	if not menu.go_back() or not menu.get_node("%Landing").visible:
+		menu.queue_free()
+		_fail("Back from Singleplayer did not return to landing")
+		return false
+	menu.get_node("%MultiplayerButton").pressed.emit()
+	if not menu.get_node("%MultiplayerPage").visible:
+		menu.queue_free()
+		_fail("Multiplayer button did not open the MP page")
+		return false
+	if NetworkManager.discovery._role != LanDiscovery.Role.BROWSE:
+		menu.queue_free()
+		_fail("LAN browse did not start on the Multiplayer page")
+		return false
+	if not OS.has_feature("android") and NetworkManager.steam_available() and not NetworkManager._steam_browse:
+		menu.queue_free()
+		_fail("Steam browse did not start on the Multiplayer page")
+		return false
+	if not menu.go_back():
+		menu.queue_free()
+		_fail("Back from Multiplayer did not return to landing")
+		return false
+	if NetworkManager.discovery._role != LanDiscovery.Role.IDLE:
+		menu.queue_free()
+		_fail("LAN browse kept running after leaving the Multiplayer page")
+		return false
+	if NetworkManager._steam_browse:
+		menu.queue_free()
+		_fail("Steam browse kept running after leaving the Multiplayer page")
+		return false
+	menu.queue_free()
+	print("AUTOTEST: main menu SP / MP split ok")
 	return true
 
 

@@ -1,7 +1,8 @@
 class_name MainMenu
 extends Control
-## Mode select + multiplayer lobby UI. Rendered fullscreen in flat mode and
-## inside a UIPanel3D quad in VR (same Control, reparented).
+## Landing (SP / MP / Settings / Quit) plus page-switch sub-UIs. Rendered
+## fullscreen in flat mode and inside a UIPanel3D quad in VR (same Control,
+## reparented).
 
 @onready var scenario_option: OptionButton = %ScenarioOption
 @onready var enemy_option: OptionButton = %EnemyOption
@@ -22,6 +23,10 @@ func _ready() -> void:
 	for path in GameManager.ARCHETYPES:
 		enemy_option.add_item((load(path) as AIArchetype).display_name)
 
+	%SingleplayerButton.pressed.connect(_show_singleplayer)
+	%MultiplayerButton.pressed.connect(_show_multiplayer)
+	%SpBackButton.pressed.connect(show_mode_select)
+	%MpBackButton.pressed.connect(show_mode_select)
 	%GauntletButton.pressed.connect(GameManager.start_gauntlet)
 	%FreeDuelButton.pressed.connect(func() -> void:
 		GameManager.start_free_duel(scenario_option.selected, enemy_option.selected))
@@ -64,26 +69,53 @@ func _ready() -> void:
 
 
 func show_mode_select() -> void:
-	%Root.visible = true
-	settings_menu.visible = false
+	_show_page(%Landing)
+
+
+## True when a sub-page (SP, MP, or Settings) was closed. Landing is a no-op.
+func go_back() -> bool:
+	if settings_menu.visible or %SingleplayerPage.visible or %MultiplayerPage.visible:
+		show_mode_select()
+		return true
+	return false
 
 
 func is_settings_open() -> bool:
 	return settings_menu.visible
 
 
+func _show_singleplayer() -> void:
+	_show_page(%SingleplayerPage)
+
+
+func _show_multiplayer() -> void:
+	_show_page(%MultiplayerPage)
+
+
 func _show_settings() -> void:
-	%Root.visible = false
-	settings_menu.visible = true
+	_show_page(settings_menu)
 	settings_menu.refresh()
 
 
+func _show_page(page: Control) -> void:
+	%Landing.visible = page == %Landing
+	%SingleplayerPage.visible = page == %SingleplayerPage
+	%MultiplayerPage.visible = page == %MultiplayerPage
+	settings_menu.visible = page == settings_menu
+	_sync_browse()
+
+
 func _on_visibility_changed() -> void:
-	var open := is_visible_in_tree()
-	NetworkManager.browse_lan(open)
-	NetworkManager.browse_steam(open and not OS.has_feature("android"))
-	if open:
+	if is_visible_in_tree():
 		show_mode_select()
+	else:
+		_sync_browse()
+
+
+func _sync_browse() -> void:
+	var mp_open: bool = is_visible_in_tree() and %MultiplayerPage.visible
+	NetworkManager.browse_lan(mp_open)
+	NetworkManager.browse_steam(mp_open and not OS.has_feature("android"))
 
 
 func _host_lan() -> void:

@@ -44,12 +44,12 @@ Design / lore: [`design/README.md`](design/README.md)
 
 | Feature | Status | Notes / key paths |
 |---|---|---|
-| Free duel (arena + AI pick) | `done` | `GameManager`, main menu |
+| Free duel (arena + AI pick) | `done` | `GameManager`, main menu Singleplayer page |
 | Practice hub (aim range + slots) | `planned` | Roadmap (Medium); non-duel area with regenerating bottles and a casino slot machine |
 | Duel vs up to 3 NPCs | `planned` | Roadmap (Medium); local 1–3 AI in one standoff |
 | Gauntlet (6 rungs, 3 lives, session score) | `done` | `gauntlet/gauntlet_controller.gd`, ladder `.tres` |
 | Persistent gauntlet high scores | `planned` | Score is session-only today |
-| 1v1 LAN multiplayer | `done` | `netcode/enet_transport.gd` + UDP discovery; Quest APK gets `INTERNET` + Wi-Fi multicast from `addons/gunslinger_lan_permissions/` at export. **Meta Store SKU is LAN-only** (no Steam / Meta online). Remote avatar is a full greybox (torso/legs/arms + holstered gun). Joiner on `EnemySpawn` faces the host; walk/strafe is world-XZ from look yaw so the 180° spawn root does not invert A/D. Main menu: double-click a LAN host (or Steam lobby on desktop) to join |
+| 1v1 LAN multiplayer | `done` | `netcode/enet_transport.gd` + UDP discovery; Quest APK gets `INTERNET` + Wi-Fi multicast from `addons/gunslinger_lan_permissions/` at export. **Meta Store SKU is LAN-only** (no Steam / Meta online). Remote avatar is a full greybox (torso/legs/arms + holstered gun). Joiner on `EnemySpawn` faces the host; walk/strafe is world-XZ from look yaw so the 180° spawn root does not invert A/D. Multiplayer page: double-click a LAN host (or Steam lobby on desktop) to join |
 | Proximity voice chat | `planned` | Roadmap (Polish / visual); spatial voice by distance; muted players show an X over the mouth |
 | 1v1 Steam lobbies | `done` | `netcode/steam_transport.gd` + GodotSteam 4.22 in `addons/godotsteam/` (Steamworks 1.65). **Desktop / Steam SKU only** — hidden and gated off on Android. Create / browse / join public 1v1 lobbies; Steam Datagram Relay. App ID **480** (`steam_appid.txt` + `steam/initialization/app_id`). Windows export copies the App ID file via `addons/gunslinger_steam_export/`. `dev/autotest.gd` `steam` mode still passes if the addon is absent. Leave then HOST / JOIN works in the same process: every session takes an unspent P2P virtual port and advertises it as `gunslinger_port` ([BUG-009](BUGS.md)); `steamcycle` mode covers it against a live client. Steam invite overlay is pause **Invite friends** / Shift+Tab, not auto-opened on HOST |
 | MP version check | `done` | Steam `gunslinger_version` compared on browse/join; LAN beacon `ip|name|version`; post-connect `_version_hello` handshake before `session_started` / `peer_joined`. Mismatched list rows disabled; both strings on failure ([BUG-008](BUGS.md)) |
@@ -80,7 +80,7 @@ Design / lore: [`design/README.md`](design/README.md)
 |---|---|---|
 | Debug panel + presets | `done` | `autoload/debug_menu.gd`, `user://*.cfg` |
 | Settings screen (main menu) | `done` | `ui/settings_menu.tscn` on main menu and pause. Master volume, holster side, VR turn mode; flat-only mouse sensitivity, window mode, resolution (**Apply Display**); Controls remapping (VR + flat). Scrollable panel. `PlayerSettings` → `user://settings.cfg`. Debug panel stays F3 / Quest menu on the main menu |
-| Main menu SP / MP split | `planned` | Roadmap (Polish / visual); landing Singleplayer / Multiplayer buttons that open the current SP and MP UIs in `ui/main_menu.tscn` |
+| Main menu SP / MP split | `done` | Landing is Singleplayer / Multiplayer / Settings / Quit (`ui/main_menu.tscn`). SP page: gauntlet + free-duel pick. MP page: LAN / Steam host-join. Page switch like Settings (`show_mode_select` / `go_back`). LAN/Steam browse only while the MP page is open |
 | In-duel pause / MP overlay | `done` | ESC (flat) / VR menu button. SP sets `get_tree().paused`; MP is overlay-only. Resume, Settings, Restart Duel/Gauntlet (host-only in MP), Quit to main menu. `ui/pause_menu.tscn` |
 | Blender MCP | `done` | Project `.cursor/mcp.json` → `uvx blender-mcp` → Blender addon on `localhost:9876`. Client helper `dev/blender_mcp.py` |
 | In-game version tag | `done` | HUD corner + main menu; `ProjectSettings` `application/config/version` (`VERSION`) |

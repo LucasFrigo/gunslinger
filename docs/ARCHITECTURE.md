@@ -14,7 +14,7 @@ Pre-release TODOs: [`RELEASE_TODOS.md`](RELEASE_TODOS.md). SFX checklist: [`SOUN
 
 1. `main.tscn` / `main.gd` boots, chooses VR vs flat rig.
 2. Boot loading screen (`ui/loading_screen.tscn`) compiles combat AV (`ImpactFeedback.warmup`) while `GameManager` stays in `BOOT`. VR also covers the HMD with a dark quad + status `Label3D`.
-3. Main menu (`ui/main_menu.tscn`) → free duel / gauntlet / host-join MP, plus a Settings page (`ui/settings_menu.tscn`). Menu and flat HUD show `v` + `application/config/version`.
+3. Main menu (`ui/main_menu.tscn`) landing: Singleplayer / Multiplayer / Settings / Quit. SP page is gauntlet + free duel; MP page is LAN / Steam host-join. Settings is `ui/settings_menu.tscn`. Menu and flat HUD show `v` + `application/config/version`.
 4. In-match overlay (`ui/pause_menu.tscn`): ESC / VR menu button. Single-player pauses the scene tree; multiplayer does not (host clock and pose stream keep running). Local fire is suppressed while the overlay is up.
 5. `GameManager` loads a scenario (`scenarios/`) and wires player + AI or remote peer.
 6. `gauntlet/duel_manager.gd` owns the duel state machine (standoff → bell → draw → resolve).
@@ -68,11 +68,11 @@ Build identity is `VERSION` (mirrored in `project.godot` → `application/config
 
 ## Menus / pause
 
-- Main menu and pause share `ui/settings_menu.tscn` (scrollable; Controls remapping). Back from Settings returns to mode select or the pause root.
+- Main menu and pause share `ui/settings_menu.tscn` (scrollable; Controls remapping). Back from Settings (or Esc) returns to the landing page or the pause root. Esc on the SP / MP pages also returns to landing.
 - `Hud` (`PROCESS_MODE_ALWAYS`) owns both Controls. VR reparents them into a world `UIPanel3D` (`Player.show_menu_panel`); `reclaim_menu` returns each to `MenuHolder` / `PauseHolder`.
 - SP pause: `get_tree().paused`. `TimeManager` / `KillCam` skip ticks while paused. `VRRig` stays `PROCESS_MODE_ALWAYS` so the laser can hit the overlay; locomotion is skipped while paused or the overlay is open.
 - MP overlay: title **Menu**, tree not paused, restart disabled for clients. Quit calls `GameManager.go_to_menu()` (`NetworkManager.leave()`).
-- Flat ESC toggles pause in-match; on Settings it goes Back first. VR left menu/Y opens pause in-match and still opens debug on the main menu. F3 stays debug.
+- Flat ESC toggles pause in-match; on a main-menu sub-page (SP, MP, Settings) it goes Back first. VR left menu/Y opens pause in-match and still opens debug on the main menu. F3 stays debug.
 
 ## Scenario art
 
@@ -83,4 +83,4 @@ Build identity is `VERSION` (mirrored in `project.godot` → `application/config
 
 ## Tests
 
-`dev/autotest.gd` — headless `--autotest=duel|gauntlet|load|host|join|steam|steamcycle`. Prefer extending these when changing duel or load paths. `steam` asserts `SteamTransport` parses and stays unavailable without GodotSteam (CI has no addon). `steamcycle` needs a running Steam client and drives create → leave → create, an abandoned create, and a dead join ([BUG-009](BUGS.md)); it passes as a no-op when Steam is absent. `load` also covers host → leave → host again.
+`dev/autotest.gd` — headless `--autotest=duel|gauntlet|load|host|join|steam|steamcycle`. Prefer extending these when changing duel or load paths. `steam` asserts `SteamTransport` parses and stays unavailable without GodotSteam (CI has no addon). `steamcycle` needs a running Steam client and drives create → leave → create, an abandoned create, and a dead join ([BUG-009](BUGS.md)); it passes as a no-op when Steam is absent. `load` also covers host → leave → host again, and the main-menu SP / MP page switch (browse only on the MP page).

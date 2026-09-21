@@ -161,8 +161,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			pause_menu.close()
 		get_viewport().set_input_as_handled()
 		return
-	if _menu != null and _menu.is_visible_in_tree() and _menu.is_settings_open():
-		_menu.show_mode_select()
+	if _menu != null and _menu.is_visible_in_tree() and _menu.go_back():
 		get_viewport().set_input_as_handled()
 		return
 	if pause_menu != null:

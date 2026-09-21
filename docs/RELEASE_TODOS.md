@@ -38,7 +38,7 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 ## Content / polish
 
 - [ ] Shorter bullet-trail fade (`weapons/bullet_trail.gd` `FADE_TIME` 1.6s). `from:` shorter bullet trails (planned)
-- [ ] Main menu: Singleplayer / Multiplayer buttons that open the current SP and MP UIs. `from:` main menu SP / MP split (planned)
+- [x] Main menu: Singleplayer / Multiplayer buttons that open the current SP and MP UIs. `from:` main menu SP / MP split
 - [ ] Lingering barrel smoke (stub `muzzle_smoke` is a short puff). `from:` barrel smoke (planned)
 - [ ] Outdoor wind bed per arena + visual gusts that play a gust SFX. Saloon is interior (no outdoor bed). `from:` wind bed + gusts (planned)
 - [ ] Persistent gauntlet high scores (session-only today). `from:` gauntlet scores (planned)
@@ -49,6 +49,7 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 ## Attention
 
 - Pause overlay: confirm ESC (flat) and VR menu in free duel, gauntlet, and 1v1. SP must freeze AI/bullets; MP overlay must not freeze the peer. Host-only restart; Quit returns to the main menu and drops the session.
+- Main menu landing: Singleplayer / Multiplayer pages, plus Settings / Quit. Esc or Back returns to landing. LAN/Steam host lists only refresh while the Multiplayer page is open.
 - Steam lobby testing needs the **Steam client** running; `steamInitEx` fails otherwise (`Steam is not running or failed to initialize.`).
 - After cloning, **restart the Godot editor** so `addons/godotsteam/` loads. If you use the Steam-store Godot editor on Windows, its bundled `steam_api64.dll` can be older than GodotSteam 4.22 — replace it with `addons/godotsteam/win64/steam_api64.dll` if the extension fails to load.
 - Two editors on one Steam account will not look like two players; use two accounts (Spacewar 480 is fine for that).

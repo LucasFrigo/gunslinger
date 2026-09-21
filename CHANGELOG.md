@@ -34,6 +34,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Changed
 
+- Main menu landing is now **Singleplayer** and **Multiplayer** (plus Settings / Quit). Singleplayer opens gauntlet and free-duel; Multiplayer opens the existing LAN / Steam host-join UI. Esc or Back returns to the landing page. LAN and Steam lobby lists only refresh while the Multiplayer page is open.
 - Main Street arena rebuilt from a Blender greybox kit (`assets/models/scenarios/main_street/`, headless `dev/build_main_street_blender.py`) — period false-fronts facing the street, boardwalks, depot vs closed cattle pens with greybox cows, flat desert terrain with collision, invisible street-side slope colliders on raised steps, seeded desert vegetation scatter (cacti / scrub) outside a 5 m town keep-out, and a clear late-afternoon sky. Flat mode now collides with world geometry. Old CSG boxes removed. Detail meshes still planned.
 - Boot shows a **Loading** screen (title + progress) while combat shaders and shot audio compile, then opens the main menu. The hitch from [BUG-010](docs/BUGS.md) stays off the first trigger pull and off the menu.
 - Steam **HOST** no longer pops the invite overlay by itself (that dialog opened on the same click as the button and could not be closed). Invite is now Esc → **Invite friends**, or Shift+Tab. Lobby create is unchanged; friends can still join from the public list.
