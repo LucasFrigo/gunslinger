@@ -218,7 +218,126 @@ func _test_load_all() -> void:
 		return
 	if not _leave_rejoin_ok():
 		return
+	if not _time_of_day_ok():
+		return
 	_pass()
+
+
+## Outdoor times recolor the sky but keep the fog distances and shadow fade
+## that hide the canyon plain and the train belt. Saloon has no sun.
+func _time_of_day_ok() -> bool:
+	var outdoor := [
+		"res://scenarios/main_street/main_street.tscn",
+		"res://scenarios/train_rooftop/train_rooftop.tscn",
+		"res://scenarios/canyon/canyon.tscn",
+	]
+	for path in outdoor:
+		if not _outdoor_time_ok(path):
+			return false
+	if not _saloon_time_ok():
+		return false
+	print("AUTOTEST: time of day keeps the horizon contract")
+	return true
+
+
+func _outdoor_time_ok(path: String) -> bool:
+	var instance := (load(path) as PackedScene).instantiate() as ScenarioBase
+	add_child(instance)
+	var snap := _horizon_snapshot(instance)
+	for t in [0.0, 0.5, 1.0]:
+		instance.apply_time(t)
+		if not _horizon_unchanged(instance, snap, path):
+			instance.queue_free()
+			return false
+		var world := instance.get_node("WorldEnvironment") as WorldEnvironment
+		var mat := world.environment.sky.sky_material as ProceduralSkyMaterial
+		if not world.environment.fog_light_color.is_equal_approx(mat.ground_horizon_color):
+			instance.queue_free()
+			_fail("%s fog tint drifted from the sky ground at t=%.1f" % [path, t])
+			return false
+		var sun := instance.get_node("Sun") as DirectionalLight3D
+		if sun.light_energy < 0.85 or sun.light_energy > 1.3:
+			instance.queue_free()
+			_fail("%s sun energy %.2f is outside the readable band" % [path, sun.light_energy])
+			return false
+		var yaw := atan2(sun.global_transform.basis.z.x, sun.global_transform.basis.z.z)
+		if absf(angle_difference(yaw, float(snap["yaw"]))) > 0.02:
+			instance.queue_free()
+			_fail("%s sun yaw moved off the authored azimuth" % path)
+			return false
+		if t == 0.0 or t == 1.0:
+			var elev := rad_to_deg(asin(clampf(sun.global_transform.basis.z.y, -1.0, 1.0)))
+			var expect: float = TimeOfDay.DUSK_ELEVATION_DEG
+			if is_equal_approx(t, 0.0):
+				expect = TimeOfDay.DAWN_ELEVATION_DEG
+			if absf(elev - expect) > 1.0:
+				instance.queue_free()
+				_fail("%s sun elevation %.1f, expected %.1f" % [path, elev, expect])
+				return false
+	instance.queue_free()
+	return true
+
+
+func _saloon_time_ok() -> bool:
+	var instance := (load("res://scenarios/saloon/saloon.tscn") as PackedScene).instantiate() as ScenarioBase
+	add_child(instance)
+	var lamp := instance.get_node("Chandelier") as OmniLight3D
+	var env := (instance.get_node("WorldEnvironment") as WorldEnvironment).environment
+	var energy := lamp.light_energy
+	var color := lamp.light_color
+	var background := env.background_color
+	var ambient := env.ambient_light_energy
+	instance.apply_time(0.25)
+	var unchanged := instance.get_node_or_null("Sun") == null \
+			and is_equal_approx(lamp.light_energy, energy) \
+			and lamp.light_color.is_equal_approx(color) \
+			and env.background_color.is_equal_approx(background) \
+			and is_equal_approx(env.ambient_light_energy, ambient)
+	instance.queue_free()
+	if not unchanged:
+		_fail("saloon lighting changed with time of day")
+		return false
+	return true
+
+
+func _horizon_snapshot(root: Node) -> Dictionary:
+	var env := (root.get_node("WorldEnvironment") as WorldEnvironment).environment
+	var mat := env.sky.sky_material as ProceduralSkyMaterial
+	var sun := root.get_node("Sun") as DirectionalLight3D
+	var toward_sun := sun.global_transform.basis.z
+	return {
+		"fog_mode": env.fog_mode,
+		"fog_density": env.fog_density,
+		"fog_depth_begin": env.fog_depth_begin,
+		"fog_depth_end": env.fog_depth_end,
+		"fog_depth_curve": env.fog_depth_curve,
+		"fog_aerial_perspective": env.fog_aerial_perspective,
+		"fog_sky_affect": env.fog_sky_affect,
+		"sky_curve": mat.sky_curve,
+		"ground_curve": mat.ground_curve,
+		"shadow_max": sun.directional_shadow_max_distance,
+		"shadow_fade": sun.directional_shadow_fade_start,
+		"split1": sun.directional_shadow_split_1,
+		"split2": sun.directional_shadow_split_2,
+		"split3": sun.directional_shadow_split_3,
+		"yaw": atan2(toward_sun.x, toward_sun.z),
+	}
+
+
+func _horizon_unchanged(root: Node, snap: Dictionary, path: String) -> bool:
+	var now := _horizon_snapshot(root)
+	for key in snap:
+		if key == "yaw":
+			continue
+		var before: Variant = snap[key]
+		var after: Variant = now[key]
+		var same: bool = before == after
+		if before is float and after is float:
+			same = is_equal_approx(before, after)
+		if not same:
+			_fail("%s changed %s when applying time of day" % [path, key])
+			return false
+	return true
 
 
 ## Proximity voice plumbing: the bus layout, the mute-X on the avatar, and the

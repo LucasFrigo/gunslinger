@@ -53,7 +53,7 @@ func start_ai_duel(ai: DuelistAI) -> void:
 
 func host_start_mp_duel(scenario_index: int, _new_peer: int) -> void:
 	stop()
-	_mp_begin.rpc(scenario_index)
+	_mp_begin.rpc(scenario_index, randf())
 
 
 func stop() -> void:
@@ -236,7 +236,7 @@ func _finish_sp(local_won: bool, reason: String) -> void:
 # -- Multiplayer RPCs -----------------------------------------------------------
 
 @rpc("authority", "call_local", "reliable")
-func _mp_begin(scenario_index: int) -> void:
+func _mp_begin(scenario_index: int, time_of_day: float) -> void:
 	is_mp = true
 	_peer_holstered = false
 	_mp_health_host = CombatRules.player_max_health()
@@ -244,7 +244,7 @@ func _mp_begin(scenario_index: int) -> void:
 	# Bind before setup: reset_for_duel emits holstered_changed, which the
 	# client must relay to the host.
 	_bind_player()
-	GameManager.setup_mp_duel(scenario_index)
+	GameManager.setup_mp_duel(scenario_index, time_of_day)
 	state = State.STANDOFF
 	_timer = 0.0
 	_apply_state()

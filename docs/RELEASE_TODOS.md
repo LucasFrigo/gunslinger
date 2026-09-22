@@ -42,6 +42,7 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 
 ## Content / polish
 
+- [ ] Time of day: on Canyon and Train Rooftop, scrub F3 `time_of_day` through dawn and dusk and confirm the desert edge and the belt wrap still dissolve into the sky (no horizon line, no shadow seam in front of the mesas, no popping tracks). Saloon stays lamp-lit. `from:` random time of day
 - [ ] Shorter bullet-trail fade (`weapons/bullet_trail.gd` `FADE_TIME` 1.6s). `from:` shorter bullet trails (planned)
 - [x] Main menu: Singleplayer / Multiplayer buttons that open the current SP and MP UIs. `from:` main menu SP / MP split
 - [ ] Lingering barrel smoke (stub `muzzle_smoke` is a short puff). `from:` barrel smoke (planned)

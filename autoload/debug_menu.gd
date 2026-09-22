@@ -61,6 +61,7 @@ var _movement_sliders: Dictionary = {}
 var _turn_mode_option: OptionButton
 var _preset_option: OptionButton
 var _preset_name_edit: LineEdit
+var _time_slider_widgets: Dictionary = {}
 var _reload_volume_toggle: CheckButton
 ## Session-only: translucent meshes on belt / chamber / bump / hand probe.
 var show_reload_volumes := false
@@ -497,6 +498,16 @@ func _build_movement_section(root: Control) -> void:
 
 
 func _build_session_section(root: Control) -> void:
+	_add_header(root, "Time of day")
+	_time_slider_widgets = _add_slider(root, "time_of_day", 0.0, 1.0, 0.01, 0.0,
+			func(value: float) -> void:
+				if _refreshing:
+					return
+				var scenario := GameManager.current_scenario
+				if scenario == null:
+					return
+				scenario.apply_time(value))
+
 	_add_header(root, "Session")
 	var reset_duel := Button.new()
 	reset_duel.text = "Reset duel"
@@ -632,6 +643,13 @@ func _refresh_from_systems() -> void:
 			mwidgets["label"].text = "%.2f" % mvalue
 	if _turn_mode_option != null:
 		_turn_mode_option.selected = MovementConfig.turn_mode
+	if not _time_slider_widgets.is_empty():
+		var time_value := 0.0
+		var scenario := GameManager.current_scenario
+		if scenario != null and scenario.time_of_day >= 0.0:
+			time_value = scenario.time_of_day
+		_time_slider_widgets["slider"].value = time_value
+		_time_slider_widgets["label"].text = "%.2f" % time_value
 	_refresh_preset_list()
 	_refreshing = false
 

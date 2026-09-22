@@ -346,9 +346,10 @@ func _on_session_ended(reason: String) -> void:
 
 
 ## Called by DuelManager on every peer when an MP duel begins.
-func setup_mp_duel(scenario_index: int) -> void:
+## `time_of_day` is the host's roll so both peers share one sky.
+func setup_mp_duel(scenario_index: int, time_of_day: float) -> void:
 	_clear_combatants()
-	_load_scenario(scenario_index)
+	_load_scenario(scenario_index, time_of_day)
 	var my_spawn := current_scenario.get_player_spawn() if NetworkManager.is_host() \
 			else current_scenario.get_enemy_spawn()
 	var their_spawn := current_scenario.get_enemy_spawn() if NetworkManager.is_host() \
@@ -450,7 +451,7 @@ func _set_mode(new_mode: int) -> void:
 
 # -- Scenario / player helpers -------------------------------------------------
 
-func _load_scenario(index: int) -> void:
+func _load_scenario(index: int, time_of_day := -1.0) -> void:
 	if current_scenario != null:
 		current_scenario.queue_free()
 		current_scenario = null
@@ -458,6 +459,11 @@ func _load_scenario(index: int) -> void:
 	var resource: ScenarioResource = load(SCENARIOS[current_scenario_index])
 	current_scenario = resource.scene.instantiate()
 	current_scenario.scenario_resource = resource
+	# Negative means this load picks its own time (SP, menu, host waiting).
+	# MP passes the host's roll so the client does not roll again.
+	if time_of_day < 0.0:
+		time_of_day = randf()
+	current_scenario.time_of_day = time_of_day
 	world_root.add_child(current_scenario)
 
 

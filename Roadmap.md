@@ -10,7 +10,6 @@ When an item below lands (or is clearly underway), update `docs/FEATURES.md`. Wh
 
 VFX, trail, and presentation tweaks. Not new mechanics.
 
-- **Random time of day:** On each map load, pick a time once so the same arena reads differently from duel to duel (dawn, noon, late afternoon, dusk). Outdoor scenes already have a `Sun` `DirectionalLight3D` and a `ProceduralSkyMaterial` on `WorldEnvironment` (Main Street late afternoon, Canyon dusk, Train Rooftop a clear day). Rotate the sun and lerp sky, fog, and light color along that curve. Saloon stays interior (chandelier, no sky). Host picks the time so both peers match. Cosmetic only. Hook in `scenarios/scenario_base.gd`.
 - **Shorter bullet trails:** Trails linger too long after the slug is gone. Drop `FADE_TIME` in `weapons/bullet_trail.gd` (currently 1.6s) so the ribbon disappears faster; optional debug knob.
 - **Flat jam as long clear animation:** Maybe drop the heat / chance / look-down hold clear and make a jam just play a long clear animation (cylinder fuss / shake) before you can fire again — same flat-only cadence punishment, less fiddly. Today: heat build + click + look down + hold Space (`weapons/weapon_base.gd` / FlatRig). Keep VR/AI jam-free.
 - **Barrel smoke:** Visible smoke coming out of the barrel after a shot. A short stub already plays (`VfxCatalog` `&"muzzle_smoke"` from `ImpactFeedback.shot_fired` / `assets/vfx/muzzle_smoke.tscn`); this is a lingering plume that reads as gunsmoke, not a 0.45s puff.
@@ -54,6 +53,7 @@ VFX, trail, and presentation tweaks. Not new mechanics.
 
 Newest at the top. Keep a one-line note of what shipped and where; details live in `[docs/FEATURES.md](docs/FEATURES.md)`.
 
+- **Random time of day:** Each outdoor load picks one time along dawn → noon → late afternoon → dusk (`scenarios/time_of_day.gd`). Fog distances and shadow fade stay on the scene, and the fog tint matches the sky ground, so Canyon’s plain and the Train Rooftop belt wrap still dissolve. Saloon stays lamp-lit. The host sends the time on the duel RPC. F3 scrubs it.
 - **Canyon art:** Greybox wash (`dev/build_canyon_blender.py` → `assets/models/scenarios/canyon/canyon.glb`). Winding cliffs, off-lane cover, sheer butte rim, and a desert horizon. Detail meshes still pending.
 - **Saloon art:** Greybox interior (`dev/build_saloon_blender.py` → `assets/models/scenarios/saloon/saloon_interior.glb`). Bar, tables off the 10 m lane, balcony, 4.2 m ceiling. Detail meshes still pending. Street false-front stays `bld_saloon.glb`.
 - **Main Street art:** Greybox kit (`dev/build_main_street_blender.py` → `assets/models/scenarios/main_street/`). Period false-fronts, boardwalks, depot vs cattle pens, 16 m lane. Detail meshes still pending.
