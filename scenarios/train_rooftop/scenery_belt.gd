@@ -20,7 +20,7 @@ const MID_LOOP := HORIZON_SPAN * MID_COUNT
 const FAR_LOOP := HORIZON_SPAN * FAR_COUNT
 const CACTUS_COUNT := 180
 
-@export var speed_mps := 10.0
+@export var speed_mps := 20.0
 @export var mid_speed_scale := 0.35
 @export var far_speed_scale := 0.12
 

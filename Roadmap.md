@@ -57,7 +57,7 @@ Newest at the top. Keep a one-line note of what shipped and where; details live 
 - **Canyon art:** Greybox wash (`dev/build_canyon_blender.py` → `assets/models/scenarios/canyon/canyon.glb`). Winding cliffs, off-lane cover, sheer butte rim, and a desert horizon. Detail meshes still pending.
 - **Saloon art:** Greybox interior (`dev/build_saloon_blender.py` → `assets/models/scenarios/saloon/saloon_interior.glb`). Bar, tables off the 10 m lane, balcony, 4.2 m ceiling. Detail meshes still pending. Street false-front stays `bld_saloon.glb`.
 - **Main Street art:** Greybox kit (`dev/build_main_street_blender.py` → `assets/models/scenarios/main_street/`). Period false-fronts, boardwalks, depot vs cattle pens, 16 m lane. Detail meshes still pending.
-- **Train Rooftop art:** Greybox cars and roofs (`dev/build_train_rooftop_blender.py` → `assets/models/scenarios/train_rooftop/`). The train stays put; Main Street tracks and cacti, plus slower horizon mesas, scroll in `scenarios/train_rooftop/scenery_belt.gd`. Detail meshes still pending. The passing-train duel stays the Train Map Concept item.
+- **Train Rooftop art:** Greybox consist (`dev/build_train_rooftop_blender.py` → `assets/models/scenarios/train_rooftop/`): six passenger cars and a steam engine at the front. The train stays put; Main Street tracks and cacti, plus slower horizon mesas, scroll in `scenarios/train_rooftop/scenery_belt.gd`. Detail meshes still pending. The passing-train duel stays the Train Map Concept item.
 
 - **Main menu SP / MP split:** Landing is Singleplayer / Multiplayer / Settings / Quit. SP page is gauntlet + free duel; MP page is LAN / Steam host-join. Browse only while the MP page is open. (`done` in FEATURES)
 

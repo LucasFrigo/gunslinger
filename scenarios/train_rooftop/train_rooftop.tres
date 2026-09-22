@@ -6,6 +6,6 @@
 [resource]
 script = ExtResource("1")
 display_name = "Train Rooftop"
-description = "Two coupled train cars. The desert and the canyon horizon slide past."
+description = "Six coupled train cars with the engine at the front. The desert and the canyon horizon slide past."
 scene = ExtResource("2")
 duel_distance = 20.0

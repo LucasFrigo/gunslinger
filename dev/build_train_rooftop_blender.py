@@ -2,8 +2,11 @@
 
 True metric scale, Z-up, 1 BU = 1 m. Export is glTF Y-up, so Blender
 (x, y, z) becomes Godot (x, z, -y). Roof tops stay at Godot y = 3.2 so
-the spawns at z = ±10 still stand on them. Car centers are Godot z = ±6.6,
-which leaves about 1.2 m between the bodies.
+the spawns at z = ±10 still stand on the duel cars (centers ±6.6).
+Cars are 12 m long with a 1.2 m coupler gap (pitch 13.2 m). Six cars:
+two trail behind the player, the duel pair stays put, two more sit
+ahead of the enemy. Scenery scrolls toward Godot +Z, so the train
+heads -Z and the engine is the front of the consist.
 
 Horizon spans are 48 m along Blender Y (Godot Z) and centered on the
 origin. ``scenarios/train_rooftop/scenery_belt.gd`` HORIZON_SPAN must
@@ -55,6 +58,14 @@ COL_WOOD = (0.40, 0.28, 0.16, 1.0)
 COL_ROCK = (0.62, 0.40, 0.26, 1.0)
 COL_ROCK_DARK = (0.42, 0.26, 0.18, 1.0)
 COL_CAP = (0.72, 0.52, 0.34, 1.0)
+COL_BOILER = (0.11, 0.11, 0.12, 1.0)
+COL_BRASS = (0.72, 0.52, 0.22, 1.0)
+COL_LAMP = (0.95, 0.86, 0.48, 1.0)
+
+# Body 12 m + 1.2 m gap. Duel cars stay at Godot z = ±6.6.
+CAR_PITCH = 13.2
+BODY_HALF = 6.0
+ROOF_HALF = 6.15
 
 
 def make_mats() -> dict:
@@ -68,6 +79,9 @@ def make_mats() -> dict:
         "rock": mat("M_Rock", COL_ROCK, 0.95),
         "rock_dark": mat("M_RockDark", COL_ROCK_DARK, 0.98),
         "cap": mat("M_Cap", COL_CAP, 0.92),
+        "boiler": mat("M_Boiler", COL_BOILER, 0.45, metallic=0.65),
+        "brass": mat("M_Brass", COL_BRASS, 0.35, metallic=0.75, spec=0.45),
+        "lamp": mat("M_Lamp", COL_LAMP, 0.2, metallic=0.15, spec=0.5),
     }
 
 
@@ -132,8 +146,8 @@ def build_ladder(root, mats, name, y):
         _paint(rung, mats["iron"])
 
 
-def build_car(parent, mats, name, godot_z, outer_sign):
-    """One passenger car. ``outer_sign`` is the local-Y sign of the end away from the gap."""
+def build_car(parent, mats, name, godot_z, ladder_sign=None):
+    """One passenger car. ``ladder_sign`` is the local-Y sign of a free end, or None."""
     root = empty(name, parent)
     # Godot z = -Blender y.
     root.location = Vector((0.0, -godot_z, 0.0))
@@ -172,46 +186,197 @@ def build_car(parent, mats, name, godot_z, outer_sign):
 
     build_truck(root, mats, f"{name}T0", -3.7)
     build_truck(root, mats, f"{name}T1", 3.7)
-    build_ladder(root, mats, f"{name}Ladder", outer_sign * 6.08)
+    if ladder_sign is not None:
+        build_ladder(root, mats, f"{name}Ladder", ladder_sign * 6.08)
     return root
 
 
-def build_coupler(root, mats):
+def build_coupler(parent, mats, name, godot_z):
     """Short link in the ~1.2 m gap. Visual only; the walk proxy is separate."""
-    draw = box("Coupler_Draw", (0, 0, 0.82), (0.22, 0.85, 0.16), root)
+    root = empty(name, parent)
+    root.location = Vector((0.0, -godot_z, 0.0))
+    draw = box(f"{name}_Draw", (0, 0, 0.82), (0.22, 0.85, 0.16), root)
     _paint(draw, mats["iron"])
-    for name, y in (("A", -0.4), ("B", 0.4)):
-        head = box(f"Coupler_Head{name}", (0, y, 0.86), (0.42, 0.22, 0.32), root)
+    for end, y in (("A", -0.4), ("B", 0.4)):
+        head = box(f"{name}_Head{end}", (0, y, 0.86), (0.42, 0.22, 0.32), root)
         _paint(head, mats["iron"])
-    pin = cyl("Coupler_Pin", (0, 0, 0.68), (0, 0, 1.05), 0.06, 0.06, 6, root)
+    pin = cyl(f"{name}_Pin", (0, 0, 0.68), (0, 0, 1.05), 0.06, 0.06, 6, root)
     _paint(pin, mats["iron"])
 
 
-def build_guards(root):
-    """Invisible walls around both roofs, plus a walk surface across the coupler.
+def _gap_walk(root, name, godot_z):
+    """Floor across a coupler gap. Overlaps each roof by ~0.3 m."""
+    convcol(name, (0.0, -godot_z, 3.1), (2.9, 1.8, 0.2), root)
 
-    Side walls and the outer ends only. Nothing crosses the shot lane (x = 0
-    between the duelists). Car bodies end near Blender y = ±0.6; roofs run to
-    about ±12.75.
+
+def build_engine(parent, mats, rear_face_godot_z) -> float:
+    """Steam locomotive and tender. Local +Y is the front (Godot -Z).
+
+    The root sits on the tender's rear face. Returns the blender-Y of the
+    front edge of the walkable cab roof.
+    """
+    root = empty("Engine", parent)
+    root.location = Vector((0.0, -rear_face_godot_z, 0.0))
+
+    tender_len = 6.8
+    tender_cy = 0.12 + tender_len * 0.5
+    body = box("Engine_Tender", (0, tender_cy, 2.01), (2.8, tender_len, 1.72), root)
+    _paint(body, mats["boiler"])
+    convcol("EngineTenderBody", (0, tender_cy, 2.01), (2.8, tender_len, 1.72), root)
+    deck = box("Engine_Deck", (0, tender_cy, 3.11), (3.05, tender_len + 0.1, 0.18), root)
+    _paint(deck, mats["boiler"])
+    convcol("EngineTenderRoof", (0, tender_cy, 3.1), (2.9, tender_len - 0.15, 0.2), root)
+
+    # Coal sits on the front half so the rear deck stays a clear platform.
+    coal = box("Engine_Coal", (0, 5.35, 3.58), (1.4, 2.5, 0.76), root)
+    _paint(coal, mats["car_dark"])
+    convcol("EngineCoal", (0, 5.35, 3.58), (1.4, 2.5, 0.76), root)
+    build_truck(root, mats, "EngineTenderT0", 1.55)
+    build_truck(root, mats, "EngineTenderT1", 5.45)
+
+    # Cab, a short drawbar ahead of the tender. Roof top matches the cars.
+    cab_rear = 7.40
+    cab_front = 9.55
+    cab_cy = (cab_rear + cab_front) * 0.5
+    cab_len = cab_front - cab_rear
+    cab = box("Engine_Cab", (0, cab_cy, 2.08), (2.55, cab_len - 0.08, 2.0), root)
+    _paint(cab, mats["boiler"])
+    convcol("EngineCabBody", (0, cab_cy, 2.08), (2.55, cab_len - 0.08, 2.0), root)
+    cab_roof = box("Engine_CabRoof", (0, cab_cy, 3.11), (2.95, cab_len + 0.12, 0.18), root)
+    _paint(cab_roof, mats["boiler"])
+    convcol("EngineCabRoof", (0, cab_cy, 3.1), (2.8, cab_len, 0.2), root)
+    for side, x in (("L", -1.32), ("R", 1.32)):
+        win = box(f"Engine_CabWin{side}", (x, cab_cy, 2.25), (0.06, 0.85, 0.72), root)
+        _paint(win, mats["window"])
+    front_win = box("Engine_CabFrontWin", (0, cab_front - 0.04, 2.35), (0.9, 0.06, 0.55), root)
+    _paint(front_win, mats["window"])
+
+    gap_y = (6.92 + cab_rear) * 0.5
+    plate = box("Engine_Plate", (0, gap_y, 3.18), (2.4, 0.7, 0.06), root)
+    _paint(plate, mats["iron"])
+    convcol("EngineGapWalk", (0, gap_y, 3.1), (2.6, 1.0, 0.2), root)
+    draw = box("Engine_Draw", (0, gap_y, 0.85), (0.22, 0.7, 0.14), root)
+    _paint(draw, mats["iron"])
+
+    boiler_y0, boiler_y1 = 9.2, 14.7
+    boiler_cy = (boiler_y0 + boiler_y1) * 0.5
+    boiler = cyl(
+        "Engine_Boiler",
+        (0, boiler_y0, 1.95), (0, boiler_y1, 1.95),
+        0.78, 0.78, 8, root,
+    )
+    _paint(boiler, mats["boiler"])
+    convcol("EngineBoiler", (0, boiler_cy, 1.95), (1.56, boiler_y1 - boiler_y0, 1.56), root)
+    smoke = cyl("Engine_Smokebox", (0, 14.15, 1.95), (0, 14.95, 1.95), 0.86, 0.86, 8, root)
+    _paint(smoke, mats["boiler"])
+    door = cyl("Engine_SmokeDoor", (0, 14.9, 1.95), (0, 15.05, 1.95), 0.64, 0.64, 8, root)
+    _paint(door, mats["iron"])
+    for i, y in enumerate((10.3, 12.7)):
+        band = cyl(f"Engine_Band{i}", (0, y, 1.95), (0, y + 0.1, 1.95), 0.84, 0.84, 8, root)
+        _paint(band, mats["brass"])
+    dome = cyl("Engine_Dome", (0, 11.35, 2.55), (0, 11.35, 3.35), 0.36, 0.2, 6, root)
+    _paint(dome, mats["brass"])
+    sand = cyl("Engine_Sand", (0, 12.85, 2.55), (0, 12.85, 3.15), 0.28, 0.16, 6, root)
+    _paint(sand, mats["boiler"])
+    stack = cyl("Engine_Stack", (0, 14.05, 2.65), (0, 14.05, 4.2), 0.26, 0.18, 6, root)
+    _paint(stack, mats["boiler"])
+    cap = cyl("Engine_StackCap", (0, 14.05, 4.15), (0, 14.05, 4.4), 0.42, 0.46, 6, root)
+    _paint(cap, mats["iron"])
+    bell = cyl("Engine_Bell", (0, 9.9, 2.85), (0, 9.9, 3.25), 0.1, 0.16, 6, root)
+    _paint(bell, mats["brass"])
+    lamp = cyl("Engine_Lamp", (0, 14.85, 2.55), (0, 15.2, 2.55), 0.2, 0.2, 6, root)
+    _paint(lamp, mats["brass"])
+    glass = cyl("Engine_LampGlass", (0, 15.15, 2.55), (0, 15.28, 2.55), 0.14, 0.14, 6, root)
+    _paint(glass, mats["lamp"])
+
+    frame = box("Engine_Frame", (0, 12.15, 0.72), (1.15, 6.2, 0.24), root)
+    _paint(frame, mats["iron"])
+    for side, x in (("L", -1.22), ("R", 1.22)):
+        board = box(f"Engine_Run{side}", (x, 12.1, 1.78), (0.28, 5.2, 0.08), root)
+        _paint(board, mats["iron"])
+
+    driver_ys = (10.55, 12.05, 13.55)
+    for i, y in enumerate(driver_ys):
+        axle = cyl(
+            f"Engine_Axle{i}",
+            (-0.85, y, 0.91), (0.85, y, 0.91),
+            0.07, 0.07, 6, root,
+        )
+        _paint(axle, mats["iron"])
+        for side, x in (("L", -1), ("R", 1)):
+            wheel = cyl(
+                f"Engine_Driver{i}{side}",
+                (x * 0.88, y, 0.91), (x * 1.12, y, 0.91),
+                0.70, 0.70, 8, root,
+            )
+            _paint(wheel, mats["iron"])
+    for side, x in (("L", -1.22), ("R", 1.22)):
+        rod = box(f"Engine_Rod{side}", (x, 12.05, 0.91), (0.08, 3.3, 0.1), root)
+        _paint(rod, mats["iron"])
+    for i, y in enumerate((14.55, 15.15)):
+        for side, x in (("L", -1), ("R", 1)):
+            wheel = cyl(
+                f"Engine_Pilot{i}{side}",
+                (x * 0.95, y, 0.55), (x * 1.12, y, 0.55),
+                0.34, 0.34, 8, root,
+            )
+            _paint(wheel, mats["iron"])
+
+    pilot = cyl("Engine_Pilot", (0, 15.15, 1.15), (0, 16.6, 0.7), 1.05, 0.1, 4, root)
+    _paint(pilot, mats["iron"])
+    beam = box("Engine_PilotBeam", (0, 15.2, 1.05), (2.15, 0.12, 0.1), root)
+    _paint(beam, mats["iron"])
+    convcol("EnginePilot", (0, 15.85, 0.75), (1.9, 1.5, 1.1), root)
+    return -rear_face_godot_z + cab_front
+
+
+def build_guards(root, y_rear, y_front):
+    """Invisible walls along every walkable roof. Ends only, so the shot lane stays open.
+
+    ``y_rear`` and ``y_front`` are the blender-Y edges of the roofs (front is +Y).
+    Nothing is placed on x = 0 between the duelists.
     """
     wall_h = 2.2
     z = 3.2 + wall_h * 0.5
-    half = 6.6 + 6.15
+    margin = 0.2
+    y0 = y_rear - margin
+    y1 = y_front + margin
+    mid = (y0 + y1) * 0.5
+    length = y1 - y0
     for name, x in (("L", -1.78), ("R", 1.78)):
-        convcol(f"GuardSide{name}", (x, 0.0, z), (0.28, half * 2.0 + 0.5, wall_h), root)
-    for name, y in (("A", -(half + 0.22)), ("B", half + 0.22)):
-        convcol(f"GuardEnd{name}", (0.0, y, z), (3.5, 0.28, wall_h), root)
-    # Overlaps each roof by ~0.3 m so there is no crack to fall through.
-    convcol("GapWalk", (0.0, 0.0, 3.1), (2.9, 1.8, 0.2), root)
+        convcol(f"GuardSide{name}", (x, mid, z), (0.28, length, wall_h), root)
+    convcol("GuardEndRear", (0.0, y_rear - 0.22, z), (3.5, 0.28, wall_h), root)
+    convcol("GuardEndFront", (0.0, y_front + 0.22, z), (3.5, 0.28, wall_h), root)
 
 
 def build_train(mats):
     root = empty("train_rooftop")
-    # Player car is Godot +Z. Its outer end points further +Z, which is Blender -Y.
-    build_car(root, mats, "CarA", 6.6, outer_sign=-1.0)
-    build_car(root, mats, "CarB", -6.6, outer_sign=1.0)
-    build_coupler(root, mats)
-    build_guards(root)
+    # Godot +Z is the rear. CarA (player) and CarB (enemy) stay on the spawns.
+    centers = (
+        ("CarRearB", 6.6 + 2 * CAR_PITCH),
+        ("CarRearA", 6.6 + CAR_PITCH),
+        ("CarA", 6.6),
+        ("CarB", -6.6),
+        ("CarFrontA", -6.6 - CAR_PITCH),
+        ("CarFrontB", -6.6 - 2 * CAR_PITCH),
+    )
+    for i, (name, z) in enumerate(centers):
+        # Only the free rear end gets a ladder. One in a coupler gap would block the walk.
+        ladder = -1.0 if i == 0 else None
+        build_car(root, mats, name, z, ladder)
+    for i in range(len(centers) - 1):
+        mid = (centers[i][1] + centers[i + 1][1]) * 0.5
+        build_coupler(root, mats, f"Coupler{i}", mid)
+        _gap_walk(root, f"GapWalk{i}", mid)
+
+    front_z = centers[-1][1]
+    gap = CAR_PITCH - BODY_HALF * 2
+    engine_rear_z = front_z - BODY_HALF - gap
+    cab_front_y = build_engine(root, mats, engine_rear_z)
+    _gap_walk(root, "GapWalkEngine", (front_z - BODY_HALF + engine_rear_z) * 0.5)
+
+    rear_y = -(centers[0][1] + ROOF_HALF)
+    build_guards(root, rear_y, cab_front_y)
     return root
 
 
