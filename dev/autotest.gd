@@ -184,6 +184,13 @@ func _test_load_all() -> void:
 		var instance: Node = (load(path) as PackedScene).instantiate()
 		add_child(instance)
 		await get_tree().process_frame
+		if path.ends_with("train_rooftop.tscn"):
+			var scenery := instance.get_node_or_null("Scenery")
+			# Tracks + cacti + both horizon bands. See scenery_belt.gd.
+			if scenery == null or scenery.get_child_count() < 80:
+				var count := 0 if scenery == null else scenery.get_child_count()
+				instance.queue_free()
+				return _fail("train rooftop scenery belt built %d pieces" % count)
 		instance.queue_free()
 		print("AUTOTEST: loaded %s" % path)
 	var resources: Array = []
@@ -207,9 +214,133 @@ func _test_load_all() -> void:
 		return
 	if not _version_check_ok():
 		return
+	if not await _voice_ok():
+		return
 	if not _leave_rejoin_ok():
 		return
 	_pass()
+
+
+## Proximity voice plumbing: the bus layout, the mute-X on the avatar, and the
+## codec round trip. Headless CI has no mic, so capture itself is not asserted —
+## only that everything downstream of it is wired and that voice stays off.
+func _voice_ok() -> bool:
+	for bus_name in ["Master", "Voice", "Mic"]:
+		if AudioServer.get_bus_index(bus_name) < 0:
+			_fail("audio bus %s missing (default_bus_layout.tres not loaded?)" % bus_name)
+			return false
+	var mic_bus := AudioServer.get_bus_index("Mic")
+	if not AudioServer.is_bus_mute(mic_bus):
+		_fail("the Mic bus must stay muted or players hear themselves")
+		return false
+	var has_capture := false
+	for i in AudioServer.get_bus_effect_count(mic_bus):
+		if AudioServer.get_bus_effect(mic_bus, i) is AudioEffectCapture:
+			has_capture = true
+			break
+	if not has_capture:
+		_fail("the Mic bus has no AudioEffectCapture")
+		return false
+	# Headless CI has no microphone, so only the dummy-driver case is asserted;
+	# on a real driver this doubles as a live check that capture starts.
+	var dummy_audio := OS.has_feature("headless") or AudioServer.get_driver_name() == "Dummy"
+	if dummy_audio and VoiceChat.is_available():
+		_fail("voice should report unavailable on the dummy audio driver")
+		return false
+	VoiceChat.add_monitor()
+	await get_tree().process_frame
+	if VoiceChat.is_capturing() != VoiceChat.is_available():
+		VoiceChat.remove_monitor()
+		_fail("a mic monitor should capture exactly when voice is available")
+		return false
+	VoiceChat.remove_monitor()
+	if VoiceChat.is_capturing():
+		_fail("dropping the last mic monitor should stop capture")
+		return false
+	print("AUTOTEST: audio driver %s, voice available=%s" % [
+		AudioServer.get_driver_name(), VoiceChat.is_available()])
+	if not _voice_codec_ok():
+		return false
+	var avatar: RemoteAvatar = (load("res://player/remote_avatar.tscn") as PackedScene).instantiate()
+	add_child(avatar)
+	await get_tree().process_frame
+	if avatar.voice_player == null or avatar.mute_icon == null:
+		avatar.queue_free()
+		_fail("remote avatar is missing VoicePlayer / MuteX under the mouth")
+		return false
+	if avatar.voice_player.bus != &"Voice":
+		avatar.queue_free()
+		_fail("avatar voice player is on bus %s, expected Voice" % avatar.voice_player.bus)
+		return false
+	avatar.apply_pose(Transform3D.IDENTITY, Transform3D.IDENTITY, Transform3D.IDENTITY,
+			NetworkManager.POSE_FLAG_VOICE_MUTED)
+	if not avatar.mute_icon.visible:
+		avatar.queue_free()
+		_fail("POSE_FLAG_VOICE_MUTED did not raise the mouth X")
+		return false
+	avatar.apply_pose(Transform3D.IDENTITY, Transform3D.IDENTITY, Transform3D.IDENTITY, 0)
+	if avatar.mute_icon.visible:
+		avatar.queue_free()
+		_fail("clearing the mute flag did not hide the mouth X")
+		return false
+	avatar.queue_free()
+	print("AUTOTEST: voice buses, mute X, and availability gate ok")
+	return true
+
+
+## Codec round trip with a synthetic tone, so the wire format is checked without
+## a microphone: driver-rate stereo in, one 20 ms mono PCM16 packet out.
+func _voice_codec_ok() -> bool:
+	const AMPLITUDE := 0.5
+	var rate := AudioServer.get_mix_rate()
+	var count := int(round(rate * float(VoiceChat.FRAME_SAMPLES) / float(VoiceChat.SEND_RATE)))
+	var frames := PackedVector2Array()
+	frames.resize(count)
+	for i in count:
+		var sample := sin(TAU * 440.0 * float(i) / rate) * AMPLITUDE
+		frames[i] = Vector2(sample, sample)
+	VoiceChat._hp_x = 0.0
+	VoiceChat._hp_y = 0.0
+	var pcm: PackedByteArray = VoiceChat._encode(frames)
+	var expected := VoiceChat.FRAME_SAMPLES * 2
+	if pcm.size() != expected:
+		_fail("voice packet is %d bytes, expected %d" % [pcm.size(), expected])
+		return false
+	var peak := 0.0
+	for i in VoiceChat.FRAME_SAMPLES:
+		peak = maxf(peak, absf(float(pcm.decode_s16(i * 2)) / 32767.0))
+	# Box-averaging a 440 Hz tone barely attenuates it, so the peak must survive.
+	# The high-pass sits at 180 Hz, well below this, and the noise-gate expander
+	# is a no-op above the cutoff.
+	if absf(peak - AMPLITUDE) > 0.08:
+		_fail("voice codec peak %.3f drifted from %.3f" % [peak, AMPLITUDE])
+		return false
+	if VoiceChat.last_rms < 0.2:
+		_fail("440 Hz tone RMS %.3f should look like speech" % VoiceChat.last_rms)
+		return false
+	# Room-tone should sit under the default gate so it is not transmitted.
+	var saved_gate := PlayerSettings.voice_gate_cutoff
+	PlayerSettings.voice_gate_cutoff = 0.08
+	var noise := PackedVector2Array()
+	noise.resize(count)
+	for i in count:
+		noise[i] = Vector2(0.01, 0.01)
+	VoiceChat._hp_x = 0.0
+	VoiceChat._hp_y = 0.0
+	var quiet: PackedByteArray = VoiceChat._encode(noise)
+	PlayerSettings.voice_gate_cutoff = saved_gate
+	if quiet.size() != expected:
+		_fail("quiet packet is %d bytes, expected %d" % [quiet.size(), expected])
+		return false
+	if VoiceChat.last_rms >= 0.08:
+		_fail("0.01 DC / rumble RMS %.3f should be below the default noise gate" % VoiceChat.last_rms)
+		return false
+	if VoiceChat._encode(PackedVector2Array()).size() != 0:
+		_fail("an empty capture buffer should not produce a packet")
+		return false
+	print("AUTOTEST: voice codec ok (%d frames @ %d Hz -> %d B, peak %.3f)" % [
+		count, int(rate), pcm.size(), peak])
+	return true
 
 
 ## BUG-009: transports are reused for the whole process, so leaving a session

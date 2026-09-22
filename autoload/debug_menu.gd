@@ -50,6 +50,9 @@ var _reload_sliders: Dictionary = {}
 var _release_sliders: Dictionary = {}
 var _spin_sliders: Dictionary = {}
 var _cig_sliders: Dictionary = {}
+var _voice_sliders: Dictionary = {}
+var _voice_gate_widgets: Dictionary = {}
+var _voice_status: Label
 var _cig_spin_axis_option: OptionButton
 var _holster_side_option: OptionButton
 var _combat_sliders: Dictionary = {}
@@ -132,6 +135,23 @@ func _process(delta: float) -> void:
 		"ONLINE" if NetworkManager.is_active() else "offline",
 		NetworkManager.transport_kind(),
 		NetworkManager.peer_count(),
+	]
+	_refresh_voice_status()
+
+
+func _refresh_voice_status() -> void:
+	if _voice_status == null:
+		return
+	var state := "idle"
+	if VoiceChat.is_muted():
+		state = "MUTED"
+	elif VoiceChat.transmitting:
+		state = "TX"
+	_voice_status.text = "mic: %s  rms %.2f  gate %.2f  %s" % [
+		"ready" if VoiceChat.is_available() else "unavailable",
+		VoiceChat.mic_level,
+		PlayerSettings.voice_gate_cutoff,
+		state,
 	]
 
 
@@ -413,6 +433,30 @@ func _build_gunplay_section(root: Control) -> void:
 		GameManager.set_tuning("cig_spin_axis", index))
 	root.add_child(_cig_spin_axis_option)
 
+	_add_header(root, "Voice")
+	const VOICE_SLIDERS := {
+		"voice_max_distance": [4.0, 80.0, 1.0],
+		"voice_unit_size": [1.0, 20.0, 0.5],
+	}
+	for voice_key in VOICE_SLIDERS:
+		var voice_range: Array = VOICE_SLIDERS[voice_key]
+		var tune_voice: String = voice_key
+		var voice_widgets := _add_slider(root, voice_key, voice_range[0], voice_range[1],
+				voice_range[2], float(GameManager.tuning[tune_voice]),
+				func(value: float) -> void:
+					if _refreshing:
+						return
+					GameManager.set_tuning(tune_voice, value))
+		_voice_sliders[tune_voice] = voice_widgets
+	_voice_gate_widgets = _add_slider(root, "voice_gate_cutoff", 0.0, 0.25, 0.005,
+			PlayerSettings.voice_gate_cutoff,
+			func(value: float) -> void:
+				if _refreshing:
+					return
+				PlayerSettings.set_voice_gate_cutoff(value))
+	_voice_status = Label.new()
+	root.add_child(_voice_status)
+
 
 func _build_movement_section(root: Control) -> void:
 	_add_header(root, "Movement (Flat)")
@@ -555,6 +599,16 @@ func _refresh_from_systems() -> void:
 		var cig_value: float = float(GameManager.tuning[key])
 		cig_widgets["slider"].value = cig_value
 		cig_widgets["label"].text = "%.2f" % cig_value
+	for key in _voice_sliders:
+		var voice_widgets: Dictionary = _voice_sliders[key]
+		var voice_value: float = float(GameManager.tuning[key])
+		voice_widgets["slider"].value = voice_value
+		voice_widgets["label"].text = "%.3f" % voice_value
+	if not _voice_gate_widgets.is_empty():
+		var gate_value := PlayerSettings.voice_gate_cutoff
+		_voice_gate_widgets["slider"].value = gate_value
+		_voice_gate_widgets["label"].text = "%.3f" % gate_value
+	_refresh_voice_status()
 	if _cig_spin_axis_option != null:
 		_cig_spin_axis_option.selected = int(GameManager.tuning["cig_spin_axis"])
 	for key in _combat_sliders:

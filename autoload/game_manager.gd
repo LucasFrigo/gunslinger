@@ -109,6 +109,12 @@ var tuning := {
 	## near enough rotationally symmetric that it is the only spin that reads).
 	## 0 = roll around the paper tube.
 	"cig_spin_axis": 1,
+	## Proximity voice: metres past which the peer is inaudible. The duel lane is
+	## 16 m, so the default keeps a standoff conversation clear and fades anyone
+	## who wanders off.
+	"voice_max_distance": 26.0,
+	## Distance (m) at which voice plays at full volume before it falls off.
+	"voice_unit_size": 6.0,
 	## Metres from muzzle before a shot can hit the shooter's gun-hand arm.
 	## Torso / head / off-hand / legs are not covered — a muzzle into the body
 	## still counts. Arm capsules also inset from the wrist so a normal forward
@@ -356,9 +362,11 @@ func _spawn_avatar(spawn: Transform3D) -> void:
 	remote_avatar = load(AVATAR_SCENE).instantiate()
 	world_root.add_child(remote_avatar)
 	remote_avatar.global_transform = spawn
+	VoiceChat.bind_voice_player(remote_avatar.voice_player)
 
 
 func _despawn_avatar() -> void:
+	VoiceChat.bind_voice_player(null)
 	if is_instance_valid(remote_avatar):
 		remote_avatar.queue_free()
 	remote_avatar = null

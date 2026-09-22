@@ -9,6 +9,11 @@ enum WindowModeSetting { WINDOWED, BORDERLESS, EXCLUSIVE }
 signal binds_changed
 signal listen_cancelled
 signal vr_source_captured(source: String)
+signal voice_changed
+signal audio_devices_changed
+
+## Name AudioServer uses for "follow the OS default".
+const DEFAULT_DEVICE := "Default"
 
 const RESOLUTION_PRESETS: Array[Vector2i] = [
 	Vector2i(1280, 720),
@@ -24,9 +29,13 @@ const VR_ACTIONS: Array[StringName] = [
 	&"fire", &"grip", &"cock", &"trick_shot", &"gate", &"prop_radial",
 ]
 
-## Flat InputMap actions that players may remap.
+## Flat InputMap actions that players may remap. Voice lives here too: on flat
+## there are spare keys, so mute and push-to-talk are ordinary rebindable rows.
+## VR has no spare source (all six are combat), so VR voice stays on the
+## Settings toggles and always-on transmission.
 const FLAT_ACTIONS: Array[StringName] = [
 	&"fire", &"draw_toggle", &"cock_hammer", &"reload", &"prop_radial", &"prop_fire",
+	&"voice_mute", &"voice_ptt",
 ]
 
 const VR_SOURCES: Array[String] = [
@@ -67,6 +76,8 @@ const FLAT_ACTION_LABELS := {
 	"reload": "Reload",
 	"prop_radial": "Prop Radial",
 	"prop_fire": "Cigarette / Prop",
+	"voice_mute": "Mute Mic",
+	"voice_ptt": "Push To Talk",
 }
 
 const VR_ACTION_LABELS := {
@@ -79,6 +90,17 @@ const VR_ACTION_LABELS := {
 }
 
 var master_volume := 1.0
+## Incoming proximity voice only (the Voice bus), not gunshots.
+var voice_volume := 1.0
+var voice_muted := false
+## Off: always-on with a voice gate. On: only transmit while voice_ptt is held.
+var voice_ptt_enabled := false
+## RMS below this is treated as room tone and is not sent (0 = gate off).
+## Same units as the Settings mic-level bar.
+var voice_gate_cutoff := 0.08
+## AudioServer device names, or DEFAULT_DEVICE to follow the OS.
+var input_device := DEFAULT_DEVICE
+var output_device := DEFAULT_DEVICE
 var window_mode: int = WindowModeSetting.WINDOWED
 var window_width := 1280
 var window_height := 720
@@ -96,6 +118,8 @@ func _ready() -> void:
 	_reset_binds_to_defaults(false)
 	_load_config()
 	apply_audio()
+	if apply_devices():
+		_save_config()  # a saved device is gone; do not ask for it again
 	apply_binds()
 
 
@@ -103,6 +127,64 @@ func set_master_volume(value: float) -> void:
 	master_volume = clampf(value, 0.0, 1.0)
 	apply_audio()
 	_save_config()
+
+
+func set_voice_volume(value: float) -> void:
+	voice_volume = clampf(value, 0.0, 1.0)
+	apply_audio()
+	_save_config()
+	voice_changed.emit()
+
+
+func set_voice_muted(value: bool) -> void:
+	if voice_muted == value:
+		return
+	voice_muted = value
+	_save_config()
+	voice_changed.emit()
+
+
+func set_voice_ptt_enabled(value: bool) -> void:
+	if voice_ptt_enabled == value:
+		return
+	voice_ptt_enabled = value
+	_save_config()
+	voice_changed.emit()
+
+
+func set_voice_gate_cutoff(value: float) -> void:
+	voice_gate_cutoff = clampf(value, 0.0, 0.25)
+	_save_config()
+
+
+func set_input_device(device: String) -> void:
+	input_device = device if not device.is_empty() else DEFAULT_DEVICE
+	apply_devices()
+	_save_config()
+	audio_devices_changed.emit()
+
+
+func set_output_device(device: String) -> void:
+	output_device = device if not device.is_empty() else DEFAULT_DEVICE
+	apply_devices()
+	_save_config()
+	audio_devices_changed.emit()
+
+
+func input_device_choices() -> PackedStringArray:
+	return _device_choices(AudioServer.get_input_device_list())
+
+
+func output_device_choices() -> PackedStringArray:
+	return _device_choices(AudioServer.get_output_device_list())
+
+
+## Device pickers are desktop-only: on Quest the list is just the headset and
+## OpenXR owns it, so there is nothing useful to choose.
+func can_pick_audio_devices() -> bool:
+	if OS.has_feature("android") or OS.has_feature("headless"):
+		return false
+	return AudioServer.get_driver_name() != "Dummy"
 
 
 func set_window_mode(mode: int) -> void:
@@ -127,13 +209,47 @@ func apply_display(mode: int, size: Vector2i) -> void:
 
 
 func apply_audio() -> void:
-	var bus := AudioServer.get_bus_index("Master")
+	_apply_bus_volume("Master", master_volume)
+	_apply_bus_volume("Voice", voice_volume)
+
+
+## Point AudioServer at the saved devices. Returns true when a saved name was
+## missing and got reset to Default, so the caller can rewrite the config.
+func apply_devices() -> bool:
+	if not can_pick_audio_devices():
+		return false
+	var fell_back := false
+	if input_device != DEFAULT_DEVICE \
+			and input_device not in AudioServer.get_input_device_list():
+		input_device = DEFAULT_DEVICE
+		fell_back = true
+	if output_device != DEFAULT_DEVICE \
+			and output_device not in AudioServer.get_output_device_list():
+		output_device = DEFAULT_DEVICE
+		fell_back = true
+	AudioServer.input_device = input_device
+	AudioServer.output_device = output_device
+	return fell_back
+
+
+func _apply_bus_volume(bus_name: String, volume: float) -> void:
+	var bus := AudioServer.get_bus_index(bus_name)
 	if bus < 0:
 		return
-	if master_volume <= 0.0:
+	if volume <= 0.0:
 		AudioServer.set_bus_volume_db(bus, -80.0)
 	else:
-		AudioServer.set_bus_volume_db(bus, linear_to_db(master_volume))
+		AudioServer.set_bus_volume_db(bus, linear_to_db(volume))
+
+
+## AudioServer already reports "Default" first on most drivers; make sure it is
+## there exactly once either way.
+func _device_choices(devices: PackedStringArray) -> PackedStringArray:
+	var out := PackedStringArray([DEFAULT_DEVICE])
+	for device in devices:
+		if device != DEFAULT_DEVICE and not device.is_empty():
+			out.append(device)
+	return out
 
 
 func apply_window() -> void:
@@ -385,6 +501,14 @@ func _default_flat_event(action: StringName) -> InputEvent:
 			var key4 := InputEventKey.new()
 			key4.physical_keycode = KEY_G
 			return key4
+		&"voice_mute":
+			var key5 := InputEventKey.new()
+			key5.physical_keycode = KEY_M
+			return key5
+		&"voice_ptt":
+			var key6 := InputEventKey.new()
+			key6.physical_keycode = KEY_V
+			return key6
 	return null
 
 
@@ -460,6 +584,12 @@ func _can_query_display() -> bool:
 func _save_config() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("audio", "master_volume", master_volume)
+	cfg.set_value("audio", "voice_volume", voice_volume)
+	cfg.set_value("audio", "voice_muted", voice_muted)
+	cfg.set_value("audio", "voice_ptt_enabled", voice_ptt_enabled)
+	cfg.set_value("audio", "voice_gate_cutoff", voice_gate_cutoff)
+	cfg.set_value("audio", "input_device", input_device)
+	cfg.set_value("audio", "output_device", output_device)
 	cfg.set_value("video", "window_mode", window_mode)
 	cfg.set_value("video", "window_width", window_width)
 	cfg.set_value("video", "window_height", window_height)
@@ -476,6 +606,12 @@ func _load_config() -> void:
 	if cfg.load(CONFIG_PATH) != OK:
 		return
 	master_volume = clampf(float(cfg.get_value("audio", "master_volume", master_volume)), 0.0, 1.0)
+	voice_volume = clampf(float(cfg.get_value("audio", "voice_volume", voice_volume)), 0.0, 1.0)
+	voice_muted = bool(cfg.get_value("audio", "voice_muted", voice_muted))
+	voice_ptt_enabled = bool(cfg.get_value("audio", "voice_ptt_enabled", voice_ptt_enabled))
+	voice_gate_cutoff = clampf(float(cfg.get_value("audio", "voice_gate_cutoff", voice_gate_cutoff)), 0.0, 0.25)
+	input_device = str(cfg.get_value("audio", "input_device", input_device))
+	output_device = str(cfg.get_value("audio", "output_device", output_device))
 	window_mode = clampi(int(cfg.get_value("video", "window_mode", window_mode)), 0, WindowModeSetting.EXCLUSIVE)
 	window_width = maxi(int(cfg.get_value("video", "window_width", window_width)), 640)
 	window_height = maxi(int(cfg.get_value("video", "window_height", window_height)), 360)

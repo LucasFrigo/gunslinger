@@ -12,6 +12,8 @@ const MOUSE_MAX := 0.01
 var _refreshing := false
 ## action StringName → { label: Label, button: Button, is_vr: bool }
 var _bind_rows: Dictionary = {}
+## True while this panel holds a VoiceChat mic monitor open for the level bar.
+var _monitoring := false
 
 
 func _ready() -> void:
@@ -29,6 +31,13 @@ func _ready() -> void:
 		%WindowModeOption.add_item("Exclusive Fullscreen")
 	%BackButton.pressed.connect(_on_back)
 	%VolumeSlider.value_changed.connect(_on_volume_changed)
+	%VoiceVolumeSlider.value_changed.connect(_on_voice_volume_changed)
+	%VoiceMuteCheck.toggled.connect(_on_voice_mute_toggled)
+	%VoicePttCheck.toggled.connect(_on_voice_ptt_toggled)
+	%VoiceGateSlider.value_changed.connect(_on_voice_gate_changed)
+	%InputDeviceOption.item_selected.connect(_on_input_device_selected)
+	%OutputDeviceOption.item_selected.connect(_on_output_device_selected)
+	PlayerSettings.voice_changed.connect(_refresh_voice_rows)
 	%HolsterOption.item_selected.connect(_on_holster_selected)
 	%TurnModeOption.item_selected.connect(_on_turn_mode_selected)
 	%SmoothTurnSlider.value_changed.connect(_on_smooth_turn_changed)
@@ -40,12 +49,40 @@ func _ready() -> void:
 	%ResetBindsButton.pressed.connect(_on_reset_binds)
 	PlayerSettings.binds_changed.connect(_refresh_bind_labels)
 	PlayerSettings.listen_cancelled.connect(_refresh_bind_labels)
+	visibility_changed.connect(_on_visibility_changed)
 	_build_bind_rows()
 	refresh()
+	_on_visibility_changed()
 
 
 func _exit_tree() -> void:
 	PlayerSettings.cancel_listen()
+	_release_mic_monitor()
+
+
+func _process(_delta: float) -> void:
+	%MicLevelBar.value = VoiceChat.mic_level
+
+
+## The mic only runs while this panel is on screen, so the level bar can be read
+## when picking a device without leaving the mic open for the whole session.
+func _on_visibility_changed() -> void:
+	var showing := is_visible_in_tree()
+	set_process(showing)
+	if not showing:
+		_release_mic_monitor()
+		return
+	if not _monitoring:
+		_monitoring = true
+		VoiceChat.add_monitor()
+	refresh()
+
+
+func _release_mic_monitor() -> void:
+	if not _monitoring:
+		return
+	_monitoring = false
+	VoiceChat.remove_monitor()
 
 
 func _input(event: InputEvent) -> void:
@@ -70,6 +107,8 @@ func refresh() -> void:
 	_refreshing = true
 	%VolumeSlider.value = PlayerSettings.master_volume * 100.0
 	%VolumeValue.text = "%d%%" % int(round(%VolumeSlider.value))
+	_refresh_voice_rows()
+	_fill_device_options()
 	%HolsterOption.selected = int(GameManager.tuning.get("holster_side", 0))
 	%TurnModeOption.selected = MovementConfig.turn_mode
 	%SmoothTurnSlider.value = MovementConfig.smooth_turn_speed
@@ -188,8 +227,45 @@ func _fill_resolution_options() -> void:
 	option.selected = selected
 
 
+func _refresh_voice_rows() -> void:
+	var was_refreshing := _refreshing
+	_refreshing = true
+	%VoiceVolumeSlider.value = PlayerSettings.voice_volume * 100.0
+	%VoiceVolumeValue.text = "%d%%" % int(round(%VoiceVolumeSlider.value))
+	%VoiceMuteCheck.button_pressed = PlayerSettings.voice_muted
+	%VoicePttCheck.button_pressed = PlayerSettings.voice_ptt_enabled
+	%VoiceGateSlider.value = PlayerSettings.voice_gate_cutoff
+	%VoiceGateValue.text = "%.2f" % PlayerSettings.voice_gate_cutoff
+	_refreshing = was_refreshing
+
+
+func _fill_device_options() -> void:
+	_fill_device_option(%InputDeviceOption, PlayerSettings.input_device_choices(),
+			PlayerSettings.input_device)
+	_fill_device_option(%OutputDeviceOption, PlayerSettings.output_device_choices(),
+			PlayerSettings.output_device)
+
+
+func _fill_device_option(option: OptionButton, choices: PackedStringArray,
+		current: String) -> void:
+	option.clear()
+	var selected := 0
+	for i in choices.size():
+		option.add_item(choices[i])
+		option.set_item_metadata(i, choices[i])
+		if choices[i] == current:
+			selected = i
+	option.selected = selected
+
+
 func _apply_platform_rows() -> void:
 	var vr := GameManager.is_vr
+	# Quest has one headset mic that OpenXR owns, so there is nothing to pick.
+	var pick_devices: bool = PlayerSettings.can_pick_audio_devices()
+	%InputDeviceRow.visible = pick_devices
+	%OutputDeviceRow.visible = pick_devices
+	%DeviceHint.visible = pick_devices
+	%MicLevelRow.visible = VoiceChat.is_available()
 	%TurnRow.visible = vr
 	%SmoothTurnRow.visible = vr and MovementConfig.turn_mode == MovementConfig.TurnMode.SMOOTH
 	%SnapTurnRow.visible = vr and MovementConfig.turn_mode == MovementConfig.TurnMode.SNAP
@@ -208,6 +284,44 @@ func _on_volume_changed(value: float) -> void:
 	if _refreshing:
 		return
 	PlayerSettings.set_master_volume(value / 100.0)
+
+
+func _on_voice_volume_changed(value: float) -> void:
+	%VoiceVolumeValue.text = "%d%%" % int(round(value))
+	if _refreshing:
+		return
+	PlayerSettings.set_voice_volume(value / 100.0)
+
+
+func _on_voice_mute_toggled(pressed: bool) -> void:
+	if _refreshing:
+		return
+	PlayerSettings.set_voice_muted(pressed)
+
+
+func _on_voice_ptt_toggled(pressed: bool) -> void:
+	if _refreshing:
+		return
+	PlayerSettings.set_voice_ptt_enabled(pressed)
+
+
+func _on_voice_gate_changed(value: float) -> void:
+	%VoiceGateValue.text = "%.2f" % value
+	if _refreshing:
+		return
+	PlayerSettings.set_voice_gate_cutoff(value)
+
+
+func _on_input_device_selected(index: int) -> void:
+	if _refreshing:
+		return
+	PlayerSettings.set_input_device(str(%InputDeviceOption.get_item_metadata(index)))
+
+
+func _on_output_device_selected(index: int) -> void:
+	if _refreshing:
+		return
+	PlayerSettings.set_output_device(str(%OutputDeviceOption.get_item_metadata(index)))
 
 
 func _on_holster_selected(index: int) -> void:

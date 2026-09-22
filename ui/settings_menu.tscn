@@ -59,6 +59,157 @@ layout_mode = 2
 text = "100%"
 horizontal_alignment = 2
 
+[node name="VoiceSep" type="HSeparator" parent="Scroll/Content"]
+layout_mode = 2
+
+[node name="VoiceTitle" type="Label" parent="Scroll/Content"]
+layout_mode = 2
+text = "Voice Chat"
+horizontal_alignment = 1
+
+[node name="VoiceVolumeRow" type="HBoxContainer" parent="Scroll/Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="VoiceVolumeLabel" type="Label" parent="Scroll/Content/VoiceVolumeRow"]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+text = "Voice Volume"
+
+[node name="VoiceVolumeSlider" type="HSlider" parent="Scroll/Content/VoiceVolumeRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+max_value = 100.0
+step = 1.0
+value = 100.0
+
+[node name="VoiceVolumeValue" type="Label" parent="Scroll/Content/VoiceVolumeRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 0)
+layout_mode = 2
+text = "100%"
+horizontal_alignment = 2
+
+[node name="VoiceMuteRow" type="HBoxContainer" parent="Scroll/Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="VoiceMuteLabel" type="Label" parent="Scroll/Content/VoiceMuteRow"]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+text = "Mute My Mic"
+
+[node name="VoiceMuteCheck" type="CheckButton" parent="Scroll/Content/VoiceMuteRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VoicePttRow" type="HBoxContainer" parent="Scroll/Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="VoicePttLabel" type="Label" parent="Scroll/Content/VoicePttRow"]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+text = "Push To Talk"
+
+[node name="VoicePttCheck" type="CheckButton" parent="Scroll/Content/VoicePttRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VoiceGateRow" type="HBoxContainer" parent="Scroll/Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="VoiceGateLabel" type="Label" parent="Scroll/Content/VoiceGateRow"]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+text = "Noise Gate"
+
+[node name="VoiceGateSlider" type="HSlider" parent="Scroll/Content/VoiceGateRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+max_value = 0.25
+step = 0.005
+value = 0.08
+
+[node name="VoiceGateValue" type="Label" parent="Scroll/Content/VoiceGateRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 0)
+layout_mode = 2
+text = "0.08"
+horizontal_alignment = 2
+
+[node name="VoiceGateHint" type="Label" parent="Scroll/Content"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Raise until the mic bar stays low when you are quiet. 0 is off."
+autowrap_mode = 3
+
+[node name="InputDeviceRow" type="HBoxContainer" parent="Scroll/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="InputDeviceLabel" type="Label" parent="Scroll/Content/InputDeviceRow"]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+text = "Input Device"
+
+[node name="InputDeviceOption" type="OptionButton" parent="Scroll/Content/InputDeviceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+clip_text = true
+
+[node name="MicLevelRow" type="HBoxContainer" parent="Scroll/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="MicLevelLabel" type="Label" parent="Scroll/Content/MicLevelRow"]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+text = "Mic Level"
+
+[node name="MicLevelBar" type="ProgressBar" parent="Scroll/Content/MicLevelRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 14)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+max_value = 1.0
+step = 0.01
+show_percentage = false
+
+[node name="OutputDeviceRow" type="HBoxContainer" parent="Scroll/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="OutputDeviceLabel" type="Label" parent="Scroll/Content/OutputDeviceRow"]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+text = "Output Device"
+
+[node name="OutputDeviceOption" type="OptionButton" parent="Scroll/Content/OutputDeviceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+clip_text = true
+
+[node name="DeviceHint" type="Label" parent="Scroll/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Output device applies to all game audio, not just voice."
+autowrap_mode = 3
+
 [node name="HolsterRow" type="HBoxContainer" parent="Scroll/Content"]
 layout_mode = 2
 theme_override_constants/separation = 8

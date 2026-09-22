@@ -44,6 +44,9 @@ func join(target: Variant) -> Error:
 func _new_peer() -> ENetMultiplayerPeer:
 	var peer := ENetMultiplayerPeer.new()
 	peer.set_bind_ip(BIND_IPV4)
+	# Default channel_count is 3 (0..2). Voice RPCs use 1/2 so they are not
+	# stalled behind reliable shots on channel 0. Do not set channel_count here:
+	# Godot 4.7 rejects the assignment before the peer is listening.
 	return peer
 
 

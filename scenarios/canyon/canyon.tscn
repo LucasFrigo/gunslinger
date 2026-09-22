@@ -1,12 +1,14 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene format=3 uid="uid://d2m1810atknts"]
 
-[ext_resource type="Script" path="res://scenarios/scenario_base.gd" id="1"]
+[ext_resource type="Script" uid="uid://rqeigq13k8h7" path="res://scenarios/scenario_base.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://d2mq1t0ld1b6w" path="res://assets/models/scenarios/canyon/canyon.glb" id="2"]
 
 [sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
 sky_top_color = Color(0.25, 0.15, 0.3, 1)
 sky_horizon_color = Color(0.95, 0.5, 0.25, 1)
-ground_bottom_color = Color(0.25, 0.15, 0.1, 1)
-ground_horizon_color = Color(0.8, 0.45, 0.25, 1)
+ground_bottom_color = Color(0.72, 0.4, 0.2, 1)
+ground_horizon_color = Color(0.95, 0.55, 0.28, 1)
+ground_curve = 0.12
 
 [sub_resource type="Sky" id="sky"]
 sky_material = SubResource("sky_mat")
@@ -16,63 +18,39 @@ background_mode = 2
 sky = SubResource("sky")
 ambient_light_source = 3
 ambient_light_sky_contribution = 0.6
+fog_enabled = true
+fog_mode = 1
+fog_light_color = Color(0.95, 0.55, 0.28, 1)
+fog_sun_scatter = 0.35
+fog_density = 0.012
+fog_aerial_perspective = 0.9
+fog_sky_affect = 0.85
+fog_depth_curve = 1.4
+fog_depth_begin = 60.0
+fog_depth_end = 220.0
 
-[sub_resource type="StandardMaterial3D" id="mat_rock"]
-albedo_color = Color(0.6, 0.32, 0.2, 1)
-roughness = 1.0
-
-[sub_resource type="StandardMaterial3D" id="mat_rock_dark"]
-albedo_color = Color(0.45, 0.24, 0.16, 1)
-roughness = 1.0
-
-[sub_resource type="StandardMaterial3D" id="mat_sand"]
-albedo_color = Color(0.7, 0.5, 0.32, 1)
-roughness = 1.0
-
-[node name="CanyonAtDusk" type="Node3D"]
+[node name="CanyonAtDusk" type="Node3D" unique_id=748255427]
 script = ExtResource("1")
 
-[node name="PlayerSpawn" type="Marker3D" parent="."]
+[node name="PlayerSpawn" type="Marker3D" parent="." unique_id=1193863305]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 11)
 
-[node name="EnemySpawn" type="Marker3D" parent="."]
+[node name="EnemySpawn" type="Marker3D" parent="." unique_id=425122107]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, -11)
 
-[node name="Sun" type="DirectionalLight3D" parent="."]
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1542466499]
 transform = Transform3D(0.965926, -0.066987, 0.25, 0, 0.965926, 0.258819, -0.258819, -0.25, 0.933013, 0, 8, 0)
 light_color = Color(1, 0.6, 0.35, 1)
 light_energy = 1.2
 shadow_enabled = true
+directional_shadow_split_1 = 0.03
+directional_shadow_split_2 = 0.1
+directional_shadow_split_3 = 0.25
+directional_shadow_blend_splits = true
+directional_shadow_fade_start = 0.35
+directional_shadow_max_distance = 360.0
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=70494584]
 environment = SubResource("env")
 
-[node name="GND_CanyonFloor" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
-use_collision = true
-size = Vector3(18, 1, 50)
-material = SubResource("mat_sand")
-
-[node name="RCK_WallWest" type="CSGBox3D" parent="."]
-transform = Transform3D(0.996195, 0, 0.087156, 0, 1, 0, -0.087156, 0, 0.996195, -9.5, 8, 0)
-use_collision = true
-size = Vector3(4, 18, 50)
-material = SubResource("mat_rock")
-
-[node name="RCK_WallEast" type="CSGBox3D" parent="."]
-transform = Transform3D(0.996195, 0, -0.087156, 0, 1, 0, 0.087156, 0, 0.996195, 9.5, 8, 0)
-use_collision = true
-size = Vector3(4, 18, 50)
-material = SubResource("mat_rock_dark")
-
-[node name="RCK_BoulderA" type="CSGSphere3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0.6, 4)
-use_collision = true
-radius = 1.2
-material = SubResource("mat_rock_dark")
-
-[node name="RCK_BoulderB" type="CSGSphere3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.5, 0.8, -5)
-use_collision = true
-radius = 1.5
-material = SubResource("mat_rock")
+[node name="Canyon" parent="." unique_id=95919766 instance=ExtResource("2")]

@@ -1,12 +1,16 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scenarios/scenario_base.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/train_rooftop/train_rooftop.glb" id="2"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/main_street/env_terrain.glb" id="3"]
+[ext_resource type="Script" path="res://scenarios/train_rooftop/scenery_belt.gd" id="4"]
 
 [sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
-sky_top_color = Color(0.3, 0.5, 0.85, 1)
-sky_horizon_color = Color(0.75, 0.8, 0.85, 1)
-ground_bottom_color = Color(0.45, 0.4, 0.32, 1)
-ground_horizon_color = Color(0.7, 0.66, 0.55, 1)
+sky_top_color = Color(0.32, 0.52, 0.82, 1)
+sky_horizon_color = Color(0.78, 0.68, 0.5, 1)
+sky_curve = 0.08
+ground_bottom_color = Color(0.45, 0.34, 0.22, 1)
+ground_horizon_color = Color(0.68, 0.55, 0.38, 1)
 
 [sub_resource type="Sky" id="sky"]
 sky_material = SubResource("sky_mat")
@@ -15,20 +19,15 @@ sky_material = SubResource("sky_mat")
 background_mode = 2
 sky = SubResource("sky")
 ambient_light_source = 3
+ambient_light_color = Color(0.85, 0.78, 0.65, 1)
 ambient_light_sky_contribution = 0.8
-
-[sub_resource type="StandardMaterial3D" id="mat_car"]
-albedo_color = Color(0.35, 0.18, 0.14, 1)
-roughness = 0.6
-metallic = 0.3
-
-[sub_resource type="StandardMaterial3D" id="mat_roof"]
-albedo_color = Color(0.5, 0.32, 0.24, 1)
-roughness = 0.8
-
-[sub_resource type="StandardMaterial3D" id="mat_ground"]
-albedo_color = Color(0.6, 0.52, 0.38, 1)
-roughness = 1.0
+ambient_light_energy = 0.4
+fog_enabled = true
+fog_light_color = Color(0.82, 0.74, 0.6, 1)
+fog_sun_scatter = 0.2
+fog_density = 0.006
+fog_aerial_perspective = 0.35
+fog_sky_affect = 0.4
 
 [node name="TrainRooftop" type="Node3D"]
 script = ExtResource("1")
@@ -46,38 +45,9 @@ shadow_enabled = true
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("env")
 
-[node name="GND_Desert" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
-use_collision = true
-size = Vector3(80, 1, 80)
-material = SubResource("mat_ground")
+[node name="Terrain" parent="." instance=ExtResource("3")]
 
-[node name="TRN_CarA" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 9)
-use_collision = true
-size = Vector3(3, 3, 12)
-material = SubResource("mat_car")
+[node name="Train" parent="." instance=ExtResource("2")]
 
-[node name="TRN_CarARoof" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.1, 9)
-use_collision = true
-size = Vector3(3.2, 0.2, 12.2)
-material = SubResource("mat_roof")
-
-[node name="TRN_CarB" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -9)
-use_collision = true
-size = Vector3(3, 3, 12)
-material = SubResource("mat_car")
-
-[node name="TRN_CarBRoof" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.1, -9)
-use_collision = true
-size = Vector3(3.2, 0.2, 12.2)
-material = SubResource("mat_roof")
-
-[node name="TRN_Coupling" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 0)
-use_collision = true
-size = Vector3(1.2, 2.4, 6)
-material = SubResource("mat_car")
+[node name="Scenery" type="Node3D" parent="."]
+script = ExtResource("4")

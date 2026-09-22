@@ -88,7 +88,6 @@ Do not produce files until the feature exists. Tracked in [`FEATURES.md`](FEATUR
 | Scenario wind bed (loop) | Roadmap **Wind bed + gusts**. Slot is `ScenarioResource.ambience` (`scenario_base.gd`); no `.tres` assigns a stream. Mix per outdoor arena: still Main Street, drier Canyon, more air on Train Rooftop. Saloon is interior — do not use the outdoor bed |
 | `wind_gust` | Same item. One-shot that plays **only** when a visual gust spawns (`VfxCatalog`). Not a second loop |
 | Menu / standoff music | No music player |
-| Proximity voice | Planned MP feature |
 | Practice-hub bottles / slots | Planned mode |
 | Extra props | Radial is cigarette-only |
 
@@ -138,3 +137,4 @@ Replace in this order so the duel reads as a gunfight, not a synth demo:
 - Mechanical close-ups (cock, gate, chamber, brass) benefit more from recordings than synthesis.
 - Spatial cues are one-shots spawned at the event origin (`ImpactFeedback`) or on the gun (`WeaponBase._shot_audio`). Do not bake a huge outdoor tail into every gunshot if arenas will get ambience later.
 - `duel_end` is 2D. Keep it a sting, not another gunshot.
+- Buses (`assets/audio/default_bus_layout.tres`): **Master** carries every cue in this document. **Voice** is incoming proximity voice only, on its own player slider. **Mic** is the muted local capture bus. Leave new SFX on Master — a cue routed to Voice would be dragged around by the voice volume setting. Voice is 16 kHz mono speech, so leave headroom for it around 300 Hz–3.4 kHz when mixing gunshot tails; a duel is meant to stay intelligible.

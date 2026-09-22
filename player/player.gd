@@ -962,6 +962,8 @@ func _broadcast_pose(delta: float) -> void:
 		flags |= NetworkManager.POSE_FLAG_GUN_HELD_LEFT
 	if int(GameManager.tuning["holster_side"]) != 0:
 		flags |= NetworkManager.POSE_FLAG_HOLSTER_LEFT
+	if PlayerSettings.voice_muted:
+		flags |= NetworkManager.POSE_FLAG_VOICE_MUTED
 	var gun_xf := Transform3D.IDENTITY
 	if revolver.drawn and (not revolver.held or revolver.is_spin_active()):
 		gun_xf = revolver.global_transform

@@ -11,6 +11,9 @@ const SHOULDER_LOCAL := Vector3(0.18, 0.22, 0.0)
 const HOLSTER_LOCAL := Vector3(0.25, 0.0, 0.05)
 
 @onready var head: Node3D = $Head
+## Proximity voice comes out of the mouth, so falloff is plain 3D attenuation.
+@onready var voice_player: AudioStreamPlayer3D = $Head/MouthMarker/VoicePlayer
+@onready var mute_icon: Label3D = $Head/MouthMarker/MuteX
 @onready var left_hand: Node3D = $LeftHand
 @onready var right_hand: Node3D = $RightHand
 @onready var left_arm: MeshInstance3D = $LeftArm
@@ -62,8 +65,16 @@ func apply_pose(head_t: Transform3D, left_t: Transform3D, right_t: Transform3D, 
 	_gun_spinning = flags & NetworkManager.POSE_FLAG_GUN_SPINNING != 0
 	_gun_held_left = flags & NetworkManager.POSE_FLAG_GUN_HELD_LEFT != 0
 	_holster_left = flags & NetworkManager.POSE_FLAG_HOLSTER_LEFT != 0
+	set_voice_muted(flags & NetworkManager.POSE_FLAG_VOICE_MUTED != 0)
 	_apply_gun_parent(flags & NetworkManager.POSE_FLAG_GUN_DRAWN != 0)
 	_has_pose = true
+
+
+## Mute state has to read at a glance across the duel lane, so it is an X over
+## the mouth rather than a HUD line.
+func set_voice_muted(muted: bool) -> void:
+	if mute_icon != null:
+		mute_icon.visible = muted
 
 
 func _freeze_gun() -> void:
