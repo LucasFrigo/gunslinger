@@ -73,8 +73,8 @@ Defaults below; remappable under **Settings → Controls** (`user://settings.cfg
 | Action | VR (Quest 3) | Flat |
 |---|---|---|
 | Draw | Grip near the chosen hip (debug **Holster side**) | Right mouse button toggles |
-| Hold / toss / holster | Hold grip to keep the gun; release near a still hip to holster, or flick to toss | Right mouse button toggles |
-| Catch / swap hands | Grip near a tossed gun (either hand) or grip near the gun in the other hand | — |
+| Hold / toss / holster | Hold grip to keep the gun; release near a still hip to holster, or flick to toss | Right mouse button toggles while the gun is in hand or on the hip |
+| Catch / swap hands | Grip near a tossed gun (either hand) or grip near the gun in the other hand | Look at a loose gun and press right mouse button (air or ground) |
 | Fire | Gun-hand trigger (right if right-held, left if left-held) | Left mouse button |
 | Cock hammer (single-action) | Gun-hand stick down | Space (closes gate if open) |
 | Trick shot (Ocelot spin) | Hold gun-hand A / X; stick up relocks if spin is on stick | — |
@@ -83,7 +83,7 @@ Defaults below; remappable under **Settings → Controls** (`user://settings.cfg
 | Move / lean | Left stick move, right stick turn | WASD / Q + E |
 | Debug / tuning panel | Quest menu button (always); left B when not bound as gun-hand gate | F3 |
 
-Reload dump/close feel: F3 → **Gunplay / AI** → **VR Reload** sliders (`reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close`), persisted in `user://tuning.cfg`. **VR Gun Release** has **Holster side** (right/left hip) plus `gun_catch_radius`, `gun_holster_max_speed`, `gun_throw_scale`, `gun_throw_spin_scale`. **Show reload volumes** draws the belt / chamber / bump / both-hand probe shapes (edit those `CollisionShape3D`s in the scenes to fit future meshes). Regional hit knobs (`player_health`, `arm_disarm_duration`, `leg_slow_duration`, `leg_speed_mult`) live under **Regional Hits** in the same panel.
+Reload dump/close feel: F3 → **Gunplay / AI** → **VR Reload** sliders (`reload_dump_speed`, `reload_dump_hold`, `reload_swing_close`, `reload_bump_close`), persisted in `user://tuning.cfg`. **VR Gun Release** has **Holster side** (right/left hip) plus `gun_catch_radius`, `gun_holster_max_speed`, `gun_throw_scale`, `gun_throw_spin_scale`. **Show reload volumes** draws the belt / chamber / bump / both-hand probe shapes (edit those `CollisionShape3D`s in the scenes to fit future meshes). Regional hit knobs (`player_health`, `arm_disarm_duration`, `gun_pain_toss_up`, `gun_pain_toss_spin`, `gun_flat_grab_range`, `gun_flat_grab_radius`, `leg_slow_duration`, `leg_speed_mult`) live under **Regional Hits** in the same panel. An arm hit flings the revolver up; `arm_disarm_duration` is how long the AI waits before snatching it back.
 
 ## Slow motion (single-player only)
 

@@ -2,7 +2,8 @@ extends Node
 ## Headless smoke tests, launched via `--autotest=<mode>` after `--`:
 ##   duel     - free duel vs AI; passes when bullets actually resolve the duel
 ##   props    - equips the cigarette from the radial and throws/catches it
-##   gauntlet - clears two gauntlet rungs by force-killing the AI
+##   gauntlet - clears two gauntlet rungs by force-killing the AI;
+##              first rung also checks the pain-jerk toss
 ##   host     - hosts a LAN game, waits for a peer, wins the MP duel
 ##   join     - joins 127.0.0.1, expects to lose the MP duel
 ##   steam    - SteamTransport parses; is_available() is false without GodotSteam
@@ -62,6 +63,8 @@ func _test_gauntlet() -> void:
 	for rung in 2:
 		if not await _wait_for_state(DuelManager.State.DRAW, 25.0):
 			return _fail("gauntlet rung %d never reached DRAW" % (rung + 1))
+		if rung == 0 and not _assert_pain_jerk():
+			return
 		# Arm the listener before the kill: duel_finished fires synchronously.
 		var result := _arm_duel_listener()
 		GameManager.current_ai.take_bullet_hit(99.0, PackedVector3Array())
@@ -72,6 +75,42 @@ func _test_gauntlet() -> void:
 	if GameManager.gauntlet.encounter_index < 1:
 		return _fail("gauntlet did not advance")
 	_pass()
+
+
+## Arm hit flings a held gun and does not block an immediate catch. AI gun leaves the arm.
+func _assert_pain_jerk() -> bool:
+	var player := GameManager.local_player
+	if player == null or player.revolver == null:
+		_fail("pain-jerk: no local player")
+		return false
+	player._draw_gun()
+	if not player.revolver.held:
+		_fail("pain-jerk: gun was not in hand")
+		return false
+	player.apply_wound(CombatRules.REGION_ARM, player.health)
+	if not player.revolver.drawn or player.revolver.held:
+		_fail("pain-jerk: arm hit did not toss the player gun")
+		return false
+	if player.revolver.linear_velocity.y <= 0.0:
+		_fail("pain-jerk: player toss had no upward velocity")
+		return false
+	player._attach_gun_to_hand(&"right_hand")
+	if not player.revolver.held:
+		_fail("pain-jerk: catch was blocked after the toss")
+		return false
+	var ai := GameManager.current_ai
+	if ai == null or ai.revolver == null:
+		_fail("pain-jerk: no AI duelist")
+		return false
+	ai.take_bullet_hit(0.0, PackedVector3Array(), CombatRules.REGION_ARM)
+	if ai.revolver.get_parent() == ai.arm:
+		_fail("pain-jerk: AI arm hit did not toss the gun")
+		return false
+	if ai.revolver.linear_velocity.y <= 0.0:
+		_fail("pain-jerk: AI toss had no upward velocity")
+		return false
+	print("AUTOTEST: pain-jerk toss ok")
+	return true
 
 
 func _test_host() -> void:

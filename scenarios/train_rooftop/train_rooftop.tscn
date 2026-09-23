@@ -1,9 +1,9 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene format=3 uid="uid://bi5rfitg0ve23"]
 
-[ext_resource type="Script" path="res://scenarios/scenario_base.gd" id="1"]
-[ext_resource type="PackedScene" path="res://assets/models/scenarios/train_rooftop/train_rooftop.glb" id="2"]
-[ext_resource type="PackedScene" path="res://assets/models/scenarios/main_street/env_terrain.glb" id="3"]
-[ext_resource type="Script" path="res://scenarios/train_rooftop/scenery_belt.gd" id="4"]
+[ext_resource type="Script" uid="uid://rqeigq13k8h7" path="res://scenarios/scenario_base.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://dn0el7qivd0v1" path="res://assets/models/scenarios/train_rooftop/train_rooftop.glb" id="2"]
+[ext_resource type="PackedScene" uid="uid://bakqgn6ekd6uh" path="res://assets/models/scenarios/main_street/env_terrain.glb" id="3"]
+[ext_resource type="Script" uid="uid://c2k2mqdp2f4mh" path="res://scenarios/train_rooftop/scenery_belt.gd" id="4"]
 
 [sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
 sky_top_color = Color(0.32, 0.52, 0.82, 1)
@@ -29,25 +29,25 @@ fog_density = 0.006
 fog_aerial_perspective = 0.35
 fog_sky_affect = 0.4
 
-[node name="TrainRooftop" type="Node3D"]
+[node name="TrainRooftop" type="Node3D" unique_id=954112534]
 script = ExtResource("1")
 
-[node name="PlayerSpawn" type="Marker3D" parent="."]
+[node name="PlayerSpawn" type="Marker3D" parent="." unique_id=135262534]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 10)
 
-[node name="EnemySpawn" type="Marker3D" parent="."]
+[node name="EnemySpawn" type="Marker3D" parent="." unique_id=769817657]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 3.2, -10)
 
-[node name="Sun" type="DirectionalLight3D" parent="."]
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=298167983]
 transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 0, 15, 0)
 shadow_enabled = true
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1840380755]
 environment = SubResource("env")
 
-[node name="Terrain" parent="." instance=ExtResource("3")]
+[node name="Terrain" parent="." unique_id=1415572440 instance=ExtResource("3")]
 
-[node name="Train" parent="." instance=ExtResource("2")]
+[node name="Train" parent="." unique_id=634539408 instance=ExtResource("2")]
 
-[node name="Scenery" type="Node3D" parent="."]
+[node name="Scenery" type="Node3D" parent="." unique_id=1293527590]
 script = ExtResource("4")

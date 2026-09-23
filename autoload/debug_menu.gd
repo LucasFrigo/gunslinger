@@ -283,6 +283,10 @@ func _build_gunplay_section(root: Control) -> void:
 	const COMBAT_SLIDERS := {
 		"player_health": [1.0, 6.0, 0.5],
 		"arm_disarm_duration": [0.2, 4.0, 0.1],
+		"gun_pain_toss_up": [0.5, 12.0, 0.1],
+		"gun_pain_toss_spin": [0.0, 20.0, 0.5],
+		"gun_flat_grab_range": [0.5, 6.0, 0.1],
+		"gun_flat_grab_radius": [0.05, 0.8, 0.01],
 		"leg_slow_duration": [0.2, 6.0, 0.1],
 		"leg_speed_mult": [0.1, 1.0, 0.05],
 	}

@@ -57,7 +57,6 @@ var _prev_gate_open := false
 var _dump_armed := true
 var _close_armed := true
 var _dump_hold_accum := 0.0
-var _disarm_remaining := 0.0
 var _leg_remaining := 0.0
 var _jam_clear_accum := 0.0
 
@@ -200,7 +199,6 @@ func reset_for_duel(spawn: Transform3D) -> void:
 	alive = true
 	killed_by_self = false
 	move_speed_mult = 1.0
-	_disarm_remaining = 0.0
 	_leg_remaining = 0.0
 	_clear_held_cartridge(true)
 	props.reset_for_duel()
@@ -253,18 +251,9 @@ func apply_wound(region: StringName, new_health: float) -> void:
 	_apply_nonfatal(region)
 
 
-func force_holster() -> void:
-	_holster_gun()
-
-
-func is_disarmed() -> bool:
-	return _disarm_remaining > 0.0
-
-
 func play_death_feedback() -> void:
 	alive = false
 	move_speed_mult = 1.0
-	_disarm_remaining = 0.0
 	_leg_remaining = 0.0
 	ImpactFeedback.player_hurt(true)
 	GameManager.hud.flash_red()
@@ -324,6 +313,10 @@ func _on_vr_grip_release(hand: StringName) -> void:
 
 
 func _toggle_gun() -> void:
+	if revolver.drawn and not revolver.held:
+		if _flat_looking_at_loose_gun():
+			_attach_gun_to_hand(HAND_RIGHT)
+		return
 	if revolver.drawn:
 		_holster_gun()
 	else:
@@ -332,8 +325,6 @@ func _toggle_gun() -> void:
 
 func _attach_gun_to_hand(hand: StringName) -> void:
 	var was_holstered := not revolver.drawn
-	if was_holstered and _disarm_remaining > 0.0:
-		return
 	revolver.attach_to(_gun_attach_node(hand), hand)
 	_holding_hand = GunHand.LEFT if hand == HAND_LEFT else GunHand.RIGHT
 	_dump_armed = true
@@ -413,12 +404,57 @@ func _recover_free_gun() -> void:
 		_holster_gun()
 
 
+func _pain_toss_gun() -> void:
+	revolver.pain_jerk_into_world(get_tree().current_scene)
+	_holding_hand = GunHand.NONE
+	_refresh_reload_status()
+
+
+## Flat draw bind while the revolver is loose: true when the camera ray can take it.
+func _flat_looking_at_loose_gun() -> bool:
+	if not (rig is FlatRig):
+		return false
+	var flat := rig as FlatRig
+	var origin := flat.get_head_transform().origin
+	var direction := flat.get_aim_override()
+	if direction.length_squared() < 0.0001:
+		return false
+	direction = direction.normalized()
+	var reach := maxf(float(GameManager.tuning["gun_flat_grab_range"]), 0.05)
+	var radius := maxf(float(GameManager.tuning["gun_flat_grab_radius"]), 0.0)
+	var space := get_world_3d().direct_space_state
+	if space == null:
+		return false
+	var end := origin + direction * reach
+	var mask := WeaponBase.COLLISION_LAYER_WORLD | WeaponBase.COLLISION_LAYER_WEAPON
+	var query := PhysicsRayQueryParameters3D.create(origin, end, mask)
+	var hit := space.intersect_ray(query)
+	if not hit.is_empty() and _hit_is_revolver(hit["collider"]):
+		return true
+	var to_gun := revolver.global_position - origin
+	var along := clampf(to_gun.dot(direction), 0.0, reach)
+	var closest := origin + direction * along
+	if revolver.global_position.distance_to(closest) > radius:
+		return false
+	if not hit.is_empty():
+		var hit_along := (hit["position"] as Vector3 - origin).dot(direction)
+		if hit_along < along - 0.02:
+			return false
+	return true
+
+
+func _hit_is_revolver(collider: Object) -> bool:
+	if collider == revolver:
+		return true
+	return collider is Node and revolver.is_ancestor_of(collider)
+
+
 func _apply_nonfatal(region: StringName) -> void:
 	ImpactFeedback.player_hurt(false)
 	if region == CombatRules.REGION_ARM:
-		force_holster()
-		_disarm_remaining = float(GameManager.tuning["arm_disarm_duration"])
-		GameManager.show_message("Disarmed!", 1.5)
+		if revolver.held:
+			_pain_toss_gun()
+			GameManager.show_message("Disarmed!", 1.5)
 	elif region == CombatRules.REGION_LEG:
 		_leg_remaining = float(GameManager.tuning["leg_slow_duration"])
 		move_speed_mult = float(GameManager.tuning["leg_speed_mult"])
@@ -427,10 +463,6 @@ func _apply_nonfatal(region: StringName) -> void:
 
 func _update_wound_status(delta: float) -> void:
 	var real_delta := delta / maxf(Engine.time_scale, 0.001)
-	if _disarm_remaining > 0.0:
-		_disarm_remaining -= real_delta
-		if _disarm_remaining < 0.0:
-			_disarm_remaining = 0.0
 	if _leg_remaining > 0.0:
 		_leg_remaining -= real_delta
 		if _leg_remaining <= 0.0:
@@ -896,7 +928,10 @@ func _build_reload_status_text() -> String:
 	elif not revolver.drawn:
 		ready_line = "HOLSTERED"
 	elif not revolver.held:
-		ready_line = "GUN IN AIR — catch to fire"
+		if use_vr:
+			ready_line = "GUN IN AIR — catch to fire"
+		else:
+			ready_line = "GUN IN AIR — look at it, RMB"
 	elif revolver.gate_open:
 		if use_vr:
 			ready_line = "RELOADING — shake dump / belt grab / bump-swing close"

@@ -56,8 +56,16 @@ var tuning := {
 	"gun_throw_spin_scale": 1.0,
 	## Starting HP so one torso/limb hit is not fatal (head is always lethal).
 	"player_health": 2.0,
-	## Seconds the gun stays holstered after an arm hit.
+	## Seconds before a disarmed AI snatches its revolver back. Players have no redraw lock.
 	"arm_disarm_duration": 1.5,
+	## Pain-jerk: upward speed (m/s) when an arm hit flings the revolver.
+	"gun_pain_toss_up": 4.0,
+	## Pain-jerk: tumble (rad/s) around the gun's local X.
+	"gun_pain_toss_spin": 8.0,
+	## Flat pickup: look-ray length (m) that can grab a loose revolver.
+	"gun_flat_grab_range": 3.0,
+	## Flat pickup: gun origin within this distance (m) of the look ray still counts.
+	"gun_flat_grab_radius": 0.28,
 	## Seconds a leg hit slows locomotion.
 	"leg_slow_duration": 2.5,
 	## Move-speed multiplier while limping (1 = no penalty).

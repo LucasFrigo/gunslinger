@@ -185,6 +185,16 @@ func release_into_world(parent: Node, velocity: Vector3, spin: Vector3) -> void:
 	angular_velocity = spin + extra_spin
 
 
+## Arm-hit fling: a short upward pop, not the hand's throw velocity. Stays drawn.
+func pain_jerk_into_world(parent: Node) -> void:
+	var up_speed := _tune("gun_pain_toss_up", 4.0)
+	var spin_speed := _tune("gun_pain_toss_spin", 8.0)
+	var axis := global_basis.x
+	if axis.length_squared() < 0.0001:
+		axis = Vector3.RIGHT
+	release_into_world(parent, Vector3.UP * up_speed, axis.normalized() * spin_speed)
+
+
 func holster_to(holster: Node3D) -> void:
 	reset_spin()
 	_freeze_attached()

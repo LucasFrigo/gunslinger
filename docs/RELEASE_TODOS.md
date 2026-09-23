@@ -42,6 +42,7 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 
 ## Content / polish
 
+- [ ] Pain-jerk disarm: flat look + RMB grabs the loose gun in the air and on the ground (RMB off the gun does not snap it to the hip). VR either-hand catch. AI gun leaves the hand and comes back. 1v1 peer sees the loose gun. `from:` pain-jerk disarm
 - [ ] Time of day: on Canyon and Train Rooftop, scrub F3 `time_of_day` through dawn and dusk and confirm the desert edge and the belt wrap still dissolve into the sky (no horizon line, no shadow seam in front of the mesas, no popping tracks). Saloon stays lamp-lit. `from:` random time of day
 - [ ] Shorter bullet-trail fade (`weapons/bullet_trail.gd` `FADE_TIME` 1.6s). `from:` shorter bullet trails (planned)
 - [x] Main menu: Singleplayer / Multiplayer buttons that open the current SP and MP UIs. `from:` main menu SP / MP split

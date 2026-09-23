@@ -217,12 +217,18 @@ func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 
 func _disarm() -> void:
 	revolver.close_gate()
-	revolver.drawn = false
-	revolver.held = false
 	_draw_progress = 0.0
 	arm.transform.basis = _rest_arm_basis
 	state = AIState.DISARMED
 	_disarm_remaining = float(GameManager.tuning["arm_disarm_duration"])
+	if revolver.get_parent() == arm:
+		revolver.pain_jerk_into_world(get_tree().current_scene)
+
+
+func _snatch_gun() -> void:
+	if not is_instance_valid(revolver):
+		return
+	revolver.holster_to(arm)
 
 
 func _tick_wounds(delta: float) -> void:
@@ -238,9 +244,19 @@ func _tick_wounds(delta: float) -> void:
 	if _disarm_remaining > 0.0:
 		return
 	_disarm_remaining = 0.0
+	_snatch_gun()
 	state = AIState.IDLE
 	if GameManager.duel != null and GameManager.duel.state == DuelManager.State.DRAW:
 		begin_draw()
+
+
+func _exit_tree() -> void:
+	if not is_instance_valid(revolver):
+		return
+	var parent := revolver.get_parent()
+	if parent == arm or parent == self:
+		return
+	revolver.queue_free()
 
 
 func _die(trail_points: PackedVector3Array) -> void:
