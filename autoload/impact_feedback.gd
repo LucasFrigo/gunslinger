@@ -42,6 +42,27 @@ func body_impact(origin: Vector3, normal: Vector3, region: StringName = REGION_T
 	_play_spatial(AudioCatalog.get_stream(&"impact_flesh"), origin)
 
 
+## Practice-hub bottle breaking (shot or thrown).
+func glass_shatter(origin: Vector3) -> void:
+	var parent := _scene_root()
+	if parent != null:
+		VfxCatalog.spawn(&"glass_shatter", parent, origin, Vector3.UP)
+	_play_spatial(AudioCatalog.get_stream(&"glass_break"), origin)
+
+
+## Practice-hub slot machine clicks: `slot_pull` / `slot_stop`.
+func slot_sound(cue: StringName, origin: Vector3, volume_db := 0.0) -> void:
+	_play_spatial(AudioCatalog.get_stream(cue), origin, volume_db)
+
+
+## Slot machine match: coins out of the tray along `direction`.
+func slot_win(origin: Vector3, direction: Vector3) -> void:
+	var parent := _scene_root()
+	if parent != null:
+		VfxCatalog.spawn(&"coin_burst", parent, origin, direction)
+	_play_spatial(AudioCatalog.get_stream(&"slot_win"), origin)
+
+
 func player_hurt(is_fatal: bool) -> void:
 	_play_local(AudioCatalog.get_stream(&"hurt"))
 	CombatHaptics.hurt(is_fatal)

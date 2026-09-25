@@ -140,6 +140,7 @@ addons/      godot-xr-tools (hands/pickup/teleport toolkit for expansion)
 ```powershell
 godot --headless --path . -- --autotest=duel      # AI duel resolves via real bullets
 godot --headless --path . -- --autotest=gauntlet  # gauntlet progression
+godot --headless --path . -- --autotest=practice  # bottles shatter / respawn, slot, flat backdrop
 godot --headless --path . -- --autotest=load      # every scene/resource loads
 godot --headless --path . -- --autotest=steam     # SteamTransport loads without GodotSteam
 # multiplayer: run host first, then join in a second terminal

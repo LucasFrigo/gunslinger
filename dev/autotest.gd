@@ -11,6 +11,8 @@ extends Node
 ##              client (BUG-009); passes as a no-op when Steam is absent
 ##   load     - loads every scene/resource, then bind, prop, version,
 ##              main-menu SP/MP split, and host/leave/re-host (BUG-009) checks
+##   practice - practice hub: shot / thrown bottles shatter, count, respawn on
+##              the rail, reset, slot machine spin, no wounds, flat backdrop
 ## Prints AUTOTEST PASS / AUTOTEST FAIL and sets the exit code.
 
 var mode := "duel"
@@ -34,6 +36,8 @@ func _ready() -> void:
 			_test_load_all()
 		"props":
 			_test_props()
+		"practice":
+			_test_practice()
 		"steam":
 			_test_steam()
 		"steamcycle":
@@ -149,6 +153,105 @@ func _test_join() -> void:
 	_pass()
 
 
+func _test_practice() -> void:
+	await _sleep(1.0)
+	if not GameManager.is_menu_backdrop():
+		return _fail("flat boot is not on the menu backdrop")
+	if GameManager.current_scenario.process_mode != Node.PROCESS_MODE_DISABLED:
+		return _fail("flat menu backdrop is not frozen")
+	if GameManager.in_practice():
+		return _fail("flat menu loaded the hub instead of a duel arena")
+	GameManager.start_practice()
+	await _sleep(0.5)
+	var hub := GameManager.practice_hub()
+	if hub == null or GameManager.mode != GameManager.GameMode.PRACTICE:
+		return _fail("start_practice did not load the hub")
+	if hub.bottles().size() != 12:
+		return _fail("hub spawned %d bottles, expected 12" % hub.bottles().size())
+	if hub.slot_machine == null:
+		return _fail("hub has no slot machine")
+
+	var player := GameManager.local_player
+	var hp := player.health
+	player.take_bullet_hit(99.0, PackedVector3Array(), CombatRules.REGION_HEAD)
+	if not player.alive or player.health != hp:
+		return _fail("practice wound was not ignored")
+
+	# A real slug from 2 m in front of a rail bottle.
+	var target: PracticeBottle = hub.bottles()[0]
+	var aim := target.center()
+	Bullet.spawn(get_tree().current_scene, aim + Vector3(0.0, 0.0, 2.0), Vector3.FORWARD,
+			55.0, true, [], true)
+	if not await _wait_for(func() -> bool: return target.state == PracticeBottle.State.BROKEN, 2.0):
+		return _fail("bullet did not shatter the bottle")
+	if hub.broken != 1:
+		return _fail("counter %d after one shot" % hub.broken)
+	if not await _wait_for(func() -> bool: return target.state == PracticeBottle.State.HOME, 4.0):
+		return _fail("shot bottle did not respawn")
+	if target.global_position.distance_to(target.home_transform().origin) > 0.001:
+		return _fail("respawn is not on the rail pose")
+
+	# Pick up, shoot it in the hand, then throw the respawned bottle down range.
+	var thrown: PracticeBottle = hub.bottles()[1]
+	if not player._grab_bottle(thrown, player.off_hand_name(), Transform3D.IDENTITY):
+		return _fail("could not pick up a bottle")
+	await _sleep(0.1)
+	if not player.is_holding_bottle() or thrown.state != PracticeBottle.State.HELD:
+		return _fail("bottle is not held after pickup")
+	if (thrown.collision_layer & PracticeBottle.LAYER) == 0:
+		return _fail("held bottle dropped its bullet layer")
+	var from := thrown.center() + Vector3(0.0, 0.0, -0.2)
+	Bullet.spawn(get_tree().current_scene, from, Vector3(0.0, 0.0, 1.0),
+			55.0, true, player.hitbox_rids(), true)
+	if not await _wait_for(func() -> bool: return thrown.state == PracticeBottle.State.BROKEN, 2.0):
+		return _fail("bullet did not shatter the held bottle")
+	if hub.broken != 2:
+		return _fail("counter %d after shot + held shot" % hub.broken)
+	if not await _wait_for(func() -> bool: return thrown.state == PracticeBottle.State.HOME, 4.0):
+		return _fail("held bottle did not respawn")
+	if not player._grab_bottle(thrown, player.off_hand_name(), Transform3D.IDENTITY):
+		return _fail("could not pick the respawned bottle back up")
+	player._throw_held_bottle()
+	if thrown.state != PracticeBottle.State.LOOSE:
+		return _fail("thrown bottle is not loose")
+	if not await _wait_for(func() -> bool: return thrown.state == PracticeBottle.State.BROKEN, 4.0):
+		return _fail("thrown bottle never shattered (at %s)" % thrown.global_position)
+	if hub.broken != 3:
+		return _fail("counter %d after shot + held shot + throw" % hub.broken)
+	if not await _wait_for(func() -> bool: return thrown.state == PracticeBottle.State.HOME, 4.0):
+		return _fail("thrown bottle did not respawn")
+	if thrown.global_position.distance_to(thrown.home_transform().origin) > 0.001:
+		return _fail("thrown bottle respawned off its rail pose")
+
+	# A gentle set-down stays whole.
+	var soft: PracticeBottle = hub.bottles()[2]
+	player._grab_bottle(soft, player.off_hand_name(), Transform3D.IDENTITY)
+	soft.throw(Vector3.ZERO, Vector3.ZERO)
+	player._held_bottle = null
+	soft.global_position = Vector3(3.0, 0.08, 2.0)
+	await _sleep(1.0)
+	if soft.state != PracticeBottle.State.LOOSE:
+		return _fail("soft set-down broke the bottle")
+
+	GameManager.reset_current_duel()
+	if hub.broken != 0 or soft.state != PracticeBottle.State.HOME:
+		return _fail("reset range did not clear the counter and send bottles home")
+
+	if not hub.slot_machine.pull():
+		return _fail("slot lever did not pull")
+	if hub.slot_machine.pull():
+		return _fail("slot pulled again mid-spin")
+	if not await _wait_for(func() -> bool: return not hub.slot_machine.spinning, 4.0):
+		return _fail("slot reels never stopped")
+
+	GameManager.go_to_menu()
+	await _sleep(0.3)
+	if GameManager.in_practice() or not GameManager.is_menu_backdrop():
+		return _fail("quit from practice did not return to the flat backdrop")
+	print("AUTOTEST: practice hub ok")
+	_pass()
+
+
 ## Off-hand props on a live flat player: equip through the radial, throw the
 ## cigarette, and catch it back onto the hand attach.
 func _test_props() -> void:
@@ -218,6 +321,9 @@ func _test_load_all() -> void:
 		"res://scenarios/saloon/saloon.tscn",
 		"res://scenarios/train_rooftop/train_rooftop.tscn",
 		"res://scenarios/canyon/canyon.tscn",
+		"res://scenarios/practice_hub/practice_hub.tscn",
+		"res://practice/practice_bottle.tscn",
+		"res://practice/slot_machine.tscn",
 	]
 	for path in scenes:
 		var instance: Node = (load(path) as PackedScene).instantiate()
@@ -236,6 +342,7 @@ func _test_load_all() -> void:
 	resources.append_array(GameManager.SCENARIOS)
 	resources.append_array(GameManager.ARCHETYPES)
 	resources.append(GameManager.GAUNTLET_LADDER)
+	resources.append(GameManager.PRACTICE_HUB)
 	for path in resources:
 		if load(path) == null:
 			return _fail("resource failed to load: %s" % path)

@@ -14,7 +14,7 @@ extends Node3D
 const GROUP := "bullets"
 const MAX_RANGE := 120.0
 const NEAR_MISS_RADIUS := 0.45
-const HIT_MASK := 0b101  # world + hitbox layers
+const HIT_MASK := 0b1000101  # world + hitbox + practice_prop layers
 
 static var _bullet_mesh: SphereMesh
 
@@ -140,6 +140,8 @@ func _on_impact(hit: Dictionary) -> void:
 		if authoritative and is_instance_valid(_trail):
 			var self_inflicted := from_local_player and hitbox.owner_entity == GameManager.local_player
 			hitbox.receive_hit(_trail.points.duplicate(), self_inflicted)
+	elif collider != null and collider.has_method("take_bullet"):
+		collider.take_bullet(pos, direction)
 	else:
 		ImpactFeedback.world_impact(pos, normal)
 	_expire()
@@ -160,7 +162,7 @@ func _clear_for_reset() -> void:
 
 
 func _check_near_miss(from: Vector3, to: Vector3) -> void:
-	if _near_miss_done or from_local_player:
+	if _near_miss_done or from_local_player or GameManager.in_practice():
 		return
 	var player := GameManager.local_player
 	if not is_instance_valid(player):

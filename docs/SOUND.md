@@ -60,6 +60,15 @@ Flesh vs world is the only material split today. Head/torso/arm/leg share `impac
 
 `duel_end` is the only real file in the folder. Revisit if the sting should change with a full mix pass.
 
+### Practice hub
+
+| Done | Cue | File | Plays when |
+|---|---|---|---|
+| [ ] | `glass_break` | `glass_break.ogg` | Bottle shatters from a bullet or a hard throw (`ImpactFeedback.glass_shatter`, `practice/practice_bottle.gd`) |
+| [ ] | `slot_pull` | `slot_pull.ogg` | Slot lever pulled (`practice/slot_machine.gd` `pull`) |
+| [ ] | `slot_stop` | `slot_stop.ogg` | Each reel lands, −4 dB (`slot_machine.gd`) |
+| [ ] | `slot_win` | `slot_win.ogg` | Three of a kind, with the coin burst (`ImpactFeedback.slot_win`) |
+
 ## Silent (code, no cue)
 
 These already happen in gameplay with haptics or VFX but no `AudioCatalog` key. Add a cue + call site when designing them; then move the row into Catalog.
@@ -88,7 +97,6 @@ Do not produce files until the feature exists. Tracked in [`FEATURES.md`](FEATUR
 | Scenario wind bed (loop) | Roadmap **Wind bed + gusts**. Slot is `ScenarioResource.ambience` (`scenario_base.gd`); no `.tres` assigns a stream. Mix per outdoor arena: still Main Street, drier Canyon, more air on Train Rooftop. Saloon is interior — do not use the outdoor bed |
 | `wind_gust` | Same item. One-shot that plays **only** when a visual gust spawns (`VfxCatalog`). Not a second loop |
 | Menu / standoff music | No music player |
-| Practice-hub bottles / slots | Planned mode |
 | Extra props | Radial is cigarette-only |
 
 ## Household Foley
@@ -111,6 +119,8 @@ Do **not** record live gunfire for `gunshot`. Build it from a licensed crack (li
 | `bell` | Small bell, glass + spoon, bicycle bell. One clean note, long tail |
 | `ui_click` | Same metal-click pile as `click`, quieter / shorter |
 | `cig_throw` / `cig_catch` | Light whoosh + a small object landing in the palm |
+| `glass_break` | Drop a cheap glass bottle into a cardboard box lined with a towel (safety glasses); layer a jar lid rattle for shards |
+| `slot_pull` / `slot_stop` / `slot_win` | Ratchet or bike lever for the pull; stapler thunks for reels; coins poured onto a plate plus a small bell for the win |
 | `footstep_dirt` | Shoes in dirt, sandbox, or a tray of cat litter / dry rice on a towel |
 | Outdoor air / gusts | Night rooftop or open window; sock or foam on the capsule; sheltered take for the bed, exposed take for gusts. City noise will be edited out |
 

@@ -43,6 +43,9 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 ## Content / polish
 
 - [ ] Pain-jerk disarm: flat look + RMB grabs the loose gun in the air and on the ground (RMB off the gun does not snap it to the hip). VR either-hand catch. AI gun leaves the hand and comes back. 1v1 peer sees the loose gun. `from:` pain-jerk disarm
+- [ ] Practice hub, **VR on device**. The first thing after boot should be standing on the porch with the menu floating. Shoot bottles while the menu is up. Grab a bottle with the off-hand grip and throw it hard into a rail; it should shatter and respawn on its spot. Set one down gently; it should stay whole. Confirm a held revolver or cigarette blocks the grab. Pull the slot lever with a trigger press while your hand is on it; that press must not fire. Pause **Reset Range**. **Flat:** confirm the menu shows a random arena, frozen and dimmed. Press **TUTORIAL / PRACTICE**, press F to pick up a bottle, then F to throw it. F while looking at the slot machine pulls it. Confirm the HUD shows **Bottles N** and not HP. Quit returns to a fresh random backdrop. Check bottle readability at dawn and dusk; at noon the lot washes out like every other outdoor map. `from:` practice hub
+- [ ] Practice hub is greybox (`dev/build_practice_hub_blender.py`); detail meshes before a paid listing, same as the arenas. The slot machine is primitive meshes in `practice/slot_machine.tscn`. `from:` practice hub
+- [ ] Practice hub is local-only: no MP hangout and no persistence for the bottle count or slot wins. Do not advertise either. `from:` practice hub
 - [ ] Time of day: on Canyon and Train Rooftop, scrub F3 `time_of_day` through dawn and dusk and confirm the desert edge and the belt wrap still dissolve into the sky (no horizon line, no shadow seam in front of the mesas, no popping tracks). Saloon stays lamp-lit. `from:` random time of day
 - [ ] Shorter bullet-trail fade (`weapons/bullet_trail.gd` `FADE_TIME` 1.6s). `from:` shorter bullet trails (planned)
 - [x] Main menu: Singleplayer / Multiplayer buttons that open the current SP and MP UIs. `from:` main menu SP / MP split
@@ -57,7 +60,7 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 
 - Voice chat needs `audio/driver/enable_input=true`, and Godot opens the input device when the audio driver initialises — so the OS "microphone in use" indicator can light up at launch even in single-player. `VoiceChat` still only *streams* during a session (and only while the gate is open), but expect the question in reviews, and check the Quest mic indicator behaviour on device.
 - Pause overlay: confirm ESC (flat) and VR menu in free duel, gauntlet, and 1v1. SP must freeze AI/bullets; MP overlay must not freeze the peer. Host-only restart; Quit returns to the main menu and drops the session.
-- Main menu landing: Singleplayer / Multiplayer pages, plus Settings / Quit. Esc or Back returns to landing. LAN/Steam host lists only refresh while the Multiplayer page is open.
+- Main menu landing: Singleplayer / Multiplayer pages, plus Tutorial / Practice, Settings, and Quit. Esc or Back returns to landing. LAN/Steam host lists only refresh while the Multiplayer page is open.
 - Steam lobby testing needs the **Steam client** running; `steamInitEx` fails otherwise (`Steam is not running or failed to initialize.`).
 - After cloning, **restart the Godot editor** so `addons/godotsteam/` loads. If you use the Steam-store Godot editor on Windows, its bundled `steam_api64.dll` can be older than GodotSteam 4.22 — replace it with `addons/godotsteam/win64/steam_api64.dll` if the extension fails to load.
 - Two editors on one Steam account will not look like two players; use two accounts (Spacewar 480 is fine for that).

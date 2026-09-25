@@ -12,6 +12,7 @@ signal cock_pressed(hand: StringName)
 signal reload_pressed
 signal prop_radial_changed(hand: StringName, pressed: bool)
 signal prop_fire_changed(hand: StringName, pressed: bool)
+signal interact_pressed
 signal menu_button_pressed
 
 const EYE_HEIGHT := 1.7
@@ -60,6 +61,11 @@ func get_prop_attach(_hand: StringName = OFF_HAND) -> Node3D:
 	return $Pivot/Camera3D/PropAttach
 
 
+## Practice-hub bottle hold, left of the camera in the virtual off hand.
+func get_bottle_attach(_hand: StringName = OFF_HAND) -> Node3D:
+	return $Pivot/Camera3D/BottleAttach
+
+
 ## Flat reload is R / Space, so there is nothing to stow for.
 func get_mouth_attach() -> Node3D:
 	return null
@@ -96,6 +102,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if PlayerSettings.is_listening() and not PlayerSettings.listen_is_vr:
 		# SettingsMenu._input owns flat rebind capture while listening.
 		return
+	if GameManager.is_menu_backdrop():
+		# The paused arena behind the flat menu is scenery: no capture, no fire.
+		if event.is_action_pressed("toggle_debug"):
+			menu_button_pressed.emit()
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		if _prop_radial_active:
 			_prop_radial_vector = radial_vector_from_motion(
@@ -126,6 +137,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		cock_pressed.emit(&"right_hand")
 	elif event.is_action_pressed("reload"):
 		reload_pressed.emit()
+	elif event.is_action_pressed("interact"):
+		interact_pressed.emit()
 	elif event.is_action_pressed("toggle_debug"):
 		menu_button_pressed.emit()
 
@@ -149,6 +162,11 @@ func _physics_process(delta: float) -> void:
 	# Walk in world XZ from look yaw (not local basis + local position). The
 	# joiner's Player root is yawed 180° with EnemySpawn; mixing a world-facing
 	# camera with parent-local motion inverted A/D (BUG-006).
+	if GameManager.is_menu_backdrop():
+		# The backdrop arena is process-disabled, so its colliders are out of
+		# the physics space: stand still instead of falling through it.
+		velocity = Vector3.ZERO
+		return
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var look_yaw := atan2(global_transform.basis.z.x, global_transform.basis.z.z)
 	var wish := (Basis(Vector3.UP, look_yaw) * Vector3(input_dir.x, 0, input_dir.y)) \

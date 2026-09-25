@@ -19,6 +19,14 @@ const GUN_RECOVER_Y := -5.0
 const GUN_RECOVER_DIST := 20.0
 const HAND_LEFT := &"left_hand"
 const HAND_RIGHT := &"right_hand"
+## Practice-hub bottles. VR holds the bottle upright with the fist round its middle.
+const BOTTLE_HOLD_VR := Transform3D(Basis.IDENTITY, Vector3(0.0, -0.11, 0.0))
+const BOTTLE_GRAB_RADIUS_MIN := 0.2
+const BOTTLE_FLAT_REACH := 2.5
+const BOTTLE_FLAT_RADIUS := 0.2
+const BOTTLE_FLAT_THROW_SPEED := 10.0
+const BOTTLE_FLAT_THROW_LIFT := 1.2
+const BOTTLE_FLAT_THROW_SPIN := 9.0
 
 enum GunHand { NONE, LEFT, RIGHT }
 
@@ -59,6 +67,8 @@ var _close_armed := true
 var _dump_hold_accum := 0.0
 var _leg_remaining := 0.0
 var _jam_clear_accum := 0.0
+var _held_bottle: PracticeBottle
+var _held_bottle_hand: StringName = &""
 
 
 func _ready() -> void:
@@ -83,6 +93,8 @@ func _ready() -> void:
 		rig.prop_radial_changed.connect(_on_prop_radial_changed)
 	if rig.has_signal("prop_fire_changed"):
 		rig.prop_fire_changed.connect(_on_prop_fire_changed)
+	if rig.has_signal("interact_pressed"):
+		rig.interact_pressed.connect(_on_interact_pressed)
 
 	head_hitbox.owner_entity = self
 	torso_hitbox.owner_entity = self
@@ -108,6 +120,7 @@ func _physics_process(delta: float) -> void:
 	_update_vr_reload(delta)
 	_update_wound_status(delta)
 	_update_jam_clear(delta)
+	_update_held_bottle()
 
 
 func _process(delta: float) -> void:
@@ -201,6 +214,7 @@ func reset_for_duel(spawn: Transform3D) -> void:
 	move_speed_mult = 1.0
 	_leg_remaining = 0.0
 	_clear_held_cartridge(true)
+	_release_held_bottle()
 	props.reset_for_duel()
 	_holster_gun()
 	revolver.reset()
@@ -224,7 +238,7 @@ func reset_for_duel(spawn: Transform3D) -> void:
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 		region: StringName = CombatRules.REGION_TORSO, self_inflicted := false) -> void:
-	if not alive:
+	if not alive or GameManager.in_practice():
 		return
 	if NetworkManager.is_active():
 		# MP: host resolves HP/status; application arrives via _mp_wound / _mp_finish.
@@ -289,15 +303,19 @@ func _on_vr_grip_press(hand: StringName) -> void:
 				_drop_held_cartridge()
 		_attach_gun_to_hand(hand)
 		return
-	if not revolver.drawn:
-		if near_holster:
-			_attach_gun_to_hand(hand)
+	if not revolver.drawn and near_holster:
+		_attach_gun_to_hand(hand)
+		return
+	if _try_grab_bottle_vr(hand):
 		return
 	if revolver.held:
 		_try_grab_from_belt()
 
 
 func _on_vr_grip_release(hand: StringName) -> void:
+	if _holding_bottle() and hand == _held_bottle_hand:
+		_throw_held_bottle()
+		return
 	if revolver.held and _holding_hand_name() == hand:
 		var speed := 0.0
 		if rig is VRRig:
@@ -495,7 +513,8 @@ func _update_jam_clear(delta: float) -> void:
 func _refresh_health_hud() -> void:
 	if GameManager.hud == null:
 		return
-	if GameManager.mode == GameManager.GameMode.MENU or GameManager.mode == GameManager.GameMode.BOOT:
+	if GameManager.mode in [GameManager.GameMode.MENU, GameManager.GameMode.BOOT, GameManager.GameMode.PRACTICE] \
+			or GameManager.in_practice():
 		GameManager.hud.set_health(0.0, 0.0)
 		return
 	GameManager.hud.set_health(health, max_health)
@@ -536,7 +555,8 @@ func _on_menu_button() -> void:
 
 
 func _combat_blocked() -> bool:
-	return GameManager.is_pause_open() or GameManager.mode == GameManager.GameMode.BOOT
+	return GameManager.is_pause_open() or GameManager.mode == GameManager.GameMode.BOOT \
+			or GameManager.is_menu_backdrop()
 
 
 func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
@@ -545,6 +565,9 @@ func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
 		props.on_fire_changed(pressed)
 		return
 	if not pressed or not alive or _combat_blocked():
+		return
+	# A hand on the slot lever pulls it; that press never fires.
+	if use_vr and _try_pull_slot_lever(hand):
 		return
 	if use_vr and (not revolver.held or hand != _holding_hand_name()):
 		return
@@ -564,6 +587,112 @@ func _on_prop_radial_changed(hand: StringName, pressed: bool) -> void:
 
 func _on_prop_fire_changed(_hand: StringName, pressed: bool) -> void:
 	props.on_fire_changed(pressed)
+
+
+# -- Practice hub: bottles + slot machine -------------------------------------------
+
+func is_holding_bottle() -> bool:
+	return _holding_bottle()
+
+
+func _holding_bottle() -> bool:
+	return _held_bottle != null and is_instance_valid(_held_bottle)
+
+
+## A reset range or a respawn takes the bottle back; drop the stale reference.
+func _update_held_bottle() -> void:
+	if _held_bottle == null:
+		return
+	if not is_instance_valid(_held_bottle) or not _held_bottle.is_held_by(_bottle_attach(_held_bottle_hand)):
+		_held_bottle = null
+		_held_bottle_hand = &""
+
+
+func _release_held_bottle() -> void:
+	if _holding_bottle() and _held_bottle.state == PracticeBottle.State.HELD:
+		_held_bottle.go_home()
+	_held_bottle = null
+	_held_bottle_hand = &""
+
+
+func _bottle_attach(hand: StringName) -> Node3D:
+	if rig != null and rig.has_method("get_bottle_attach"):
+		return rig.get_bottle_attach(hand)
+	return null
+
+
+## The off hand only, and only when it is empty (no prop, no belt round).
+func _off_hand_free_for_bottle(hand: StringName) -> bool:
+	return hand == off_hand_name() and not props.has_prop() and not _holding_cartridge() \
+			and not _holding_bottle()
+
+
+func _grab_bottle(bottle: PracticeBottle, hand: StringName, local: Transform3D) -> bool:
+	if bottle == null or not bottle.hold(_bottle_attach(hand), local):
+		return false
+	_held_bottle = bottle
+	_held_bottle_hand = hand
+	return true
+
+
+func _try_grab_bottle_vr(hand: StringName) -> bool:
+	var hub := GameManager.practice_hub()
+	if hub == null or not alive or not _off_hand_free_for_bottle(hand):
+		return false
+	var radius := maxf(float(GameManager.tuning["gun_catch_radius"]), BOTTLE_GRAB_RADIUS_MIN)
+	var bottle := hub.nearest_bottle(_hand_position(hand), radius)
+	return _grab_bottle(bottle, hand, BOTTLE_HOLD_VR)
+
+
+func _throw_held_bottle() -> void:
+	if not _holding_bottle():
+		return
+	var bottle := _held_bottle
+	var vel := Vector3.ZERO
+	var spin := Vector3.ZERO
+	if rig is VRRig:
+		var vr := rig as VRRig
+		vel = vr.hand_velocity(_held_bottle_hand) * float(GameManager.tuning["gun_throw_scale"])
+		spin = vr.hand_angular_velocity(_held_bottle_hand) * float(GameManager.tuning["gun_throw_spin_scale"])
+	else:
+		var aim: Vector3 = rig.get_aim_override().normalized()
+		vel = aim * BOTTLE_FLAT_THROW_SPEED + Vector3.UP * BOTTLE_FLAT_THROW_LIFT
+		spin = -rig.get_head_transform().basis.x * BOTTLE_FLAT_THROW_SPIN
+	_held_bottle = null
+	_held_bottle_hand = &""
+	bottle.throw(vel, spin)
+
+
+func _try_pull_slot_lever(hand: StringName) -> bool:
+	var hub := GameManager.practice_hub()
+	if hub == null or hub.slot_machine == null:
+		return false
+	if not hub.slot_machine.is_hand_on_lever(_hand_position(hand)):
+		return false
+	hub.slot_machine.pull()
+	return true
+
+
+## Flat `interact` (F): throw the held bottle, else pick up the bottle under the
+## look ray, else pull the slot machine you are looking at.
+func _on_interact_pressed() -> void:
+	var hub := GameManager.practice_hub()
+	if hub == null or not alive or _combat_blocked():
+		return
+	if _holding_bottle():
+		_throw_held_bottle()
+		return
+	var origin: Vector3 = rig.get_head_transform().origin
+	var direction: Vector3 = rig.get_aim_override().normalized()
+	var bottle := hub.bottle_along_ray(origin, direction, BOTTLE_FLAT_REACH, BOTTLE_FLAT_RADIUS)
+	if bottle != null:
+		if props.has_prop():
+			GameManager.show_message("Off hand is full", 1.2)
+			return
+		_grab_bottle(bottle, off_hand_name(), Transform3D.IDENTITY)
+		return
+	if hub.slot_machine != null and hub.slot_machine.is_looked_at(origin, direction, BOTTLE_FLAT_REACH):
+		hub.slot_machine.pull()
 
 
 func _on_cock_pressed(hand: StringName) -> void:

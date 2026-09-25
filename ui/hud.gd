@@ -6,6 +6,7 @@ extends CanvasLayer
 @onready var message_label: Label = $Message
 @onready var reload_status: Label = $ReloadStatus
 @onready var health_status: Label = $HealthStatus
+@onready var practice_status: Label = $PracticeStatus
 @onready var version_tag: Label = $VersionTag
 @onready var red_flash: ColorRect = $RedFlash
 @onready var prop_radial: PropRadialOverlay = $PropRadial
@@ -25,6 +26,7 @@ func _ready() -> void:
 	message_label.visible = false
 	reload_status.visible = false
 	health_status.visible = false
+	practice_status.visible = false
 	red_flash.modulate.a = 0.0
 	prop_radial.visible = false
 	menu_holder.visible = false
@@ -55,6 +57,7 @@ func show_menu(is_vr: bool) -> void:
 	close_pause()
 	if _menu.has_method("show_mode_select"):
 		_menu.show_mode_select()
+	_menu.set_backdrop_dim(is_vr)
 	if is_vr:
 		menu_holder.visible = false
 		return
@@ -126,6 +129,15 @@ func set_health(current: float, max_hp: float) -> void:
 		return
 	health_status.text = "HP %d / %d" % [ceili(current), ceili(max_hp)]
 	health_status.visible = true
+
+
+## Practice-hub bottle counter. Negative hides it (hub unloaded).
+func set_practice_count(count: int) -> void:
+	if count < 0:
+		practice_status.visible = false
+		return
+	practice_status.text = "Bottles %d" % count
+	practice_status.visible = true
 
 
 # -- Prop radial (flat harness) ------------------------------------------------

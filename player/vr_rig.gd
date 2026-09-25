@@ -119,6 +119,11 @@ func get_mouth_attach() -> Node3D:
 	return $XRCamera3D/MouthAttach
 
 
+## Practice-hub bottle hold: the controller itself (Player adds the grip offset).
+func get_bottle_attach(hand: StringName = HAND_LEFT) -> Node3D:
+	return get_hand_node(hand)
+
+
 ## The controller node itself, for hanging world-space UI off a hand.
 func get_hand_node(hand: StringName) -> Node3D:
 	return left_hand if hand == HAND_LEFT else right_hand

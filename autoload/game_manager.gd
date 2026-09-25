@@ -7,7 +7,7 @@ extends Node
 signal mode_changed(mode: int)
 signal tuning_changed(key: String, value: Variant)
 
-enum GameMode { BOOT, MENU, FREE_DUEL, GAUNTLET, MULTIPLAYER }
+enum GameMode { BOOT, MENU, FREE_DUEL, GAUNTLET, MULTIPLAYER, PRACTICE }
 
 const TUNING_PATH := "user://tuning.cfg"
 
@@ -18,6 +18,9 @@ const SCENARIOS: Array[String] = [
 	"res://scenarios/train_rooftop/train_rooftop.tres",
 	"res://scenarios/canyon/canyon.tres",
 ]
+
+## Local warmup lot. Deliberately not in SCENARIOS, so no menu offers it as a duel.
+const PRACTICE_HUB := "res://scenarios/practice_hub/practice_hub.tres"
 
 const ARCHETYPES: Array[String] = [
 	"res://ai/archetypes/drunk.tres",
@@ -215,6 +218,8 @@ func is_pause_open() -> bool:
 	return is_instance_valid(hud) and hud.is_pause_open()
 
 
+## Flat: a random duel arena, frozen, behind the fullscreen menu. VR: the
+## practice hub, live, with the menu floating in front of the player.
 func go_to_menu() -> void:
 	if is_instance_valid(hud):
 		hud.close_pause()
@@ -226,11 +231,48 @@ func go_to_menu() -> void:
 	TimeManager.reset()
 	_clear_combatants()
 	_set_mode(GameMode.MENU)
-	_load_scenario(0)
+	if is_vr:
+		_instance_scenario(load(PRACTICE_HUB))
+	else:
+		_instance_scenario(load(SCENARIOS[randi() % SCENARIOS.size()]))
+		current_scenario.process_mode = Node.PROCESS_MODE_DISABLED
 	_place_local_player(current_scenario.get_player_spawn())
 	hud.show_menu(is_vr)
 	if is_vr:
 		_spawn_vr_menu_panel()
+
+
+## Tutorial / Practice. VR is already standing in the hub, so this only drops
+## the menu and keeps the range as it is.
+func start_practice() -> void:
+	if is_instance_valid(hud):
+		hud.close_pause()
+	_bump_action_generation()
+	var already_there := in_practice()
+	_set_mode(GameMode.PRACTICE)
+	hud.hide_menu()
+	_remove_vr_menu_panel()
+	if already_there:
+		return
+	KillCam.cancel()
+	TimeManager.reset()
+	_clear_combatants()
+	_instance_scenario(load(PRACTICE_HUB))
+	_place_local_player(current_scenario.get_player_spawn())
+
+
+## True whenever the practice hub is loaded, including under the VR menu.
+func in_practice() -> bool:
+	return current_scenario is PracticeHub
+
+
+func practice_hub() -> PracticeHub:
+	return current_scenario as PracticeHub
+
+
+## Flat main menu: the arena behind it is a frozen picture, not a level.
+func is_menu_backdrop() -> bool:
+	return mode == GameMode.MENU and not is_vr
 
 
 func start_free_duel(scenario_index: int, archetype_index: int) -> void:
@@ -285,6 +327,10 @@ func reset_current_duel() -> void:
 			TimeManager.reset()
 			duel.host_start_mp_duel(current_scenario_index, 0)
 			show_message("Duel reset", 1.5)
+		GameMode.PRACTICE:
+			if in_practice():
+				practice_hub().reset_range()
+				show_message("Range reset", 1.5)
 		_:
 			show_message("No active duel to reset.", 1.5)
 
@@ -460,11 +506,16 @@ func _set_mode(new_mode: int) -> void:
 # -- Scenario / player helpers -------------------------------------------------
 
 func _load_scenario(index: int, time_of_day := -1.0) -> void:
+	current_scenario_index = clampi(index, 0, SCENARIOS.size() - 1)
+	_instance_scenario(load(SCENARIOS[current_scenario_index]), time_of_day)
+
+
+## Swap the live scenario without touching `current_scenario_index` (the menu
+## backdrop and the practice hub must not change which arena MP hosts on).
+func _instance_scenario(resource: ScenarioResource, time_of_day := -1.0) -> void:
 	if current_scenario != null:
 		current_scenario.queue_free()
 		current_scenario = null
-	current_scenario_index = clampi(index, 0, SCENARIOS.size() - 1)
-	var resource: ScenarioResource = load(SCENARIOS[current_scenario_index])
 	current_scenario = resource.scene.instantiate()
 	current_scenario.scenario_resource = resource
 	# Negative means this load picks its own time (SP, menu, host waiting).

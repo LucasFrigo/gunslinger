@@ -80,6 +80,11 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "MULTIPLAYER"
 
+[node name="PracticeButton" type="Button" parent="Center/Panel/Margin/Landing"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "TUTORIAL / PRACTICE"
+
 [node name="Sep2" type="HSeparator" parent="Center/Panel/Margin/Landing"]
 layout_mode = 2
 

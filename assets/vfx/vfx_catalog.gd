@@ -3,7 +3,8 @@ extends RefCounted
 ## Spawns combat VFX. Assign PackedScenes in OVERRIDES to swap placeholders
 ## for real art without changing call sites.
 ##
-## Cue names: muzzle_smoke, world_dust, wood_chip, blood_burst, near_miss_whoosh
+## Cue names: muzzle_smoke, world_dust, wood_chip, blood_burst, near_miss_whoosh,
+## glass_shatter, coin_burst
 
 const _SCENES := {
 	&"muzzle_smoke": preload("res://assets/vfx/muzzle_smoke.tscn"),
@@ -11,6 +12,8 @@ const _SCENES := {
 	&"wood_chip": preload("res://assets/vfx/wood_chip.tscn"),
 	&"blood_burst": preload("res://assets/vfx/blood_burst.tscn"),
 	&"near_miss_whoosh": preload("res://assets/vfx/near_miss_whoosh.tscn"),
+	&"glass_shatter": preload("res://assets/vfx/glass_shatter.tscn"),
+	&"coin_burst": preload("res://assets/vfx/coin_burst.tscn"),
 }
 
 ## Optional cue → PackedScene overrides.

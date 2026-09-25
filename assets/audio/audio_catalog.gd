@@ -7,7 +7,8 @@ extends RefCounted
 ## Expected filenames when assets arrive (see assets/audio/README.md):
 ##   gunshot.ogg, click.ogg, dry_fire.ogg, bell.ogg, whizz.ogg,
 ##   impact_flesh.ogg, impact_world.ogg, ricochet.ogg, hurt.ogg,
-##   near_miss_whoosh.ogg, shell_eject.ogg, chamber.ogg, duel_end.wav
+##   near_miss_whoosh.ogg, shell_eject.ogg, chamber.ogg, duel_end.wav,
+##   glass_break.ogg, slot_pull.ogg, slot_stop.ogg, slot_win.ogg
 
 const DUEL_END := preload("res://assets/audio/duel_end.wav")
 
@@ -15,6 +16,7 @@ const WARMUP_CUES: Array[StringName] = [
 	&"gunshot", &"click", &"dry_fire", &"bell", &"whizz",
 	&"impact_flesh", &"impact_world", &"ricochet", &"hurt",
 	&"near_miss_whoosh", &"shell_eject", &"chamber", &"duel_end",
+	&"glass_break", &"slot_pull", &"slot_stop", &"slot_win",
 ]
 
 ## Optional: StringName cue → AudioStream. Checked before placeholders.
@@ -57,6 +59,14 @@ static func get_stream(cue: StringName) -> AudioStream:
 			return PlaceholderAudio.chamber()
 		"duel_end":
 			return DUEL_END
+		"glass_break":
+			return PlaceholderAudio.glass_break()
+		"slot_pull":
+			return PlaceholderAudio.slot_pull()
+		"slot_stop":
+			return PlaceholderAudio.slot_stop()
+		"slot_win":
+			return PlaceholderAudio.slot_win()
 		_:
 			push_warning("AudioCatalog: unknown cue '%s'" % cue)
 			return PlaceholderAudio.click()

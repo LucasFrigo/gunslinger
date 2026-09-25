@@ -98,6 +98,10 @@ func _refresh_buttons() -> void:
 			restart_button.text = "RESTART DUEL"
 			restart_button.disabled = not NetworkManager.is_host()
 			host_note.visible = restart_button.disabled
+		GameManager.GameMode.PRACTICE:
+			restart_button.text = "RESET RANGE"
+			restart_button.disabled = false
+			host_note.visible = false
 		_:
 			restart_button.text = "RESTART DUEL"
 			restart_button.disabled = false
@@ -130,4 +134,5 @@ func _in_match() -> bool:
 		GameManager.GameMode.FREE_DUEL,
 		GameManager.GameMode.GAUNTLET,
 		GameManager.GameMode.MULTIPLAYER,
+		GameManager.GameMode.PRACTICE,
 	]

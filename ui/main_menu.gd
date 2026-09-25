@@ -4,6 +4,9 @@ extends Control
 ## fullscreen in flat mode and inside a UIPanel3D quad in VR (same Control,
 ## reparented).
 
+const BACKDROP_SOLID_ALPHA := 0.94
+const BACKDROP_FLAT_ALPHA := 0.2
+
 @onready var scenario_option: OptionButton = %ScenarioOption
 @onready var enemy_option: OptionButton = %EnemyOption
 @onready var ip_edit: LineEdit = %IpEdit
@@ -25,6 +28,7 @@ func _ready() -> void:
 
 	%SingleplayerButton.pressed.connect(_show_singleplayer)
 	%MultiplayerButton.pressed.connect(_show_multiplayer)
+	%PracticeButton.pressed.connect(GameManager.start_practice)
 	%SpBackButton.pressed.connect(show_mode_select)
 	%MpBackButton.pressed.connect(show_mode_select)
 	%GauntletButton.pressed.connect(GameManager.start_gauntlet)
@@ -70,6 +74,12 @@ func _ready() -> void:
 
 func show_mode_select() -> void:
 	_show_page(%Landing)
+
+
+## Flat shows the frozen arena through a light tint; the VR quad keeps its
+## solid backing so it reads against the hub.
+func set_backdrop_dim(solid: bool) -> void:
+	$Background.color.a = BACKDROP_SOLID_ALPHA if solid else BACKDROP_FLAT_ALPHA
 
 
 ## True when a sub-page (SP, MP, or Settings) was closed. Landing is a no-op.

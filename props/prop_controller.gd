@@ -238,8 +238,11 @@ func _clear_prop() -> void:
 func _can_use_props() -> bool:
 	if not is_instance_valid(_player) or not _player.alive:
 		return false
-	if GameManager.is_pause_open():
+	if GameManager.is_pause_open() or _player.is_holding_bottle():
 		return false
+	# The hub is live under the VR menu too.
+	if GameManager.in_practice():
+		return true
 	return GameManager.mode in [
 		GameManager.GameMode.FREE_DUEL,
 		GameManager.GameMode.GAUNTLET,

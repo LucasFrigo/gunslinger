@@ -1,0 +1,61 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scenarios/practice_hub/practice_hub.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://cw1k51fgxlnce" path="res://assets/models/scenarios/practice_hub/practice_hub.glb" id="2"]
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
+sky_top_color = Color(0.28, 0.55, 0.92, 1)
+sky_horizon_color = Color(0.7, 0.84, 0.98, 1)
+sky_curve = 0.08
+ground_bottom_color = Color(0.4, 0.32, 0.22, 1)
+ground_horizon_color = Color(0.58, 0.52, 0.4, 1)
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_mat")
+
+[sub_resource type="Environment" id="env"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 3
+ambient_light_color = Color(0.75, 0.85, 1, 1)
+ambient_light_sky_contribution = 0.85
+ambient_light_energy = 0.35
+fog_enabled = true
+fog_light_color = Color(0.58, 0.52, 0.4, 1)
+fog_sun_scatter = 0.25
+fog_density = 0.0015
+fog_aerial_perspective = 0.4
+fog_sky_affect = 0.45
+
+[node name="PracticeHub" type="Node3D"]
+script = ExtResource("1")
+
+[node name="PlayerSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 4)
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.766044, -0.430109, 0.477684, 0, 0.743145, 0.669131, -0.642788, -0.512584, 0.569282, 0, 18, 0)
+light_color = Color(1, 0.94, 0.82, 1)
+light_energy = 1.25
+shadow_enabled = true
+shadow_blur = 1.2
+directional_shadow_split_1 = 0.03
+directional_shadow_split_2 = 0.1
+directional_shadow_split_3 = 0.25
+directional_shadow_blend_splits = true
+directional_shadow_fade_start = 0.35
+directional_shadow_max_distance = 360.0
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="Model" parent="." instance=ExtResource("2")]
+
+[node name="Scoreboard" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, -13.72)
+pixel_size = 0.003
+modulate = Color(0.98, 0.9, 0.7, 1)
+outline_modulate = Color(0.12, 0.07, 0.04, 1)
+outline_size = 24
+font_size = 200
+text = "BOTTLES 0"

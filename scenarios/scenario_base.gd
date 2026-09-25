@@ -1,7 +1,8 @@
 class_name ScenarioBase
 extends Node3D
-## Contract for every scenario scene: must contain PlayerSpawn and EnemySpawn
-## Marker3D children (facing each other), plus its own lighting/environment.
+## Contract for every scenario scene: must contain a PlayerSpawn Marker3D plus
+## its own lighting/environment. Duel scenes also need an EnemySpawn facing the
+## player; the practice hub has none.
 ## Placeholder CSG in each scenario is throwaway; art passes start from a new
 ## detailed greybox, then Blender meshes. Keep PlayerSpawn and EnemySpawn.
 
@@ -17,7 +18,6 @@ var _environment_detached := false
 
 func _ready() -> void:
 	assert(has_node("PlayerSpawn"), "%s is missing a PlayerSpawn Marker3D" % name)
-	assert(has_node("EnemySpawn"), "%s is missing an EnemySpawn Marker3D" % name)
 	if scenario_resource != null and scenario_resource.ambience != null:
 		_ambience_player = AudioStreamPlayer.new()
 		_ambience_player.stream = scenario_resource.ambience
@@ -56,4 +56,5 @@ func get_player_spawn() -> Transform3D:
 
 
 func get_enemy_spawn() -> Transform3D:
+	assert(has_node("EnemySpawn"), "%s is missing an EnemySpawn Marker3D" % name)
 	return ($EnemySpawn as Marker3D).global_transform

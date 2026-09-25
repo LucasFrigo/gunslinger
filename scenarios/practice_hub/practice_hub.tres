@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="ScenarioResource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenarios/scenario_resource.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenarios/practice_hub/practice_hub.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Practice Hub"
+description = "Bottles on the rails and a slot machine under the porch. No duel."
+scene = ExtResource("2")

@@ -64,6 +64,15 @@ label_settings = SubResource("reload_settings")
 text = "HP 2 / 2"
 visible = false
 
+[node name="PracticeStatus" type="Label" parent="."]
+offset_left = 24.0
+offset_top = 16.0
+offset_right = 260.0
+offset_bottom = 52.0
+label_settings = SubResource("reload_settings")
+text = "Bottles 0"
+visible = false
+
 [node name="VersionTag" type="Label" parent="."]
 anchors_preset = 3
 anchor_left = 1.0

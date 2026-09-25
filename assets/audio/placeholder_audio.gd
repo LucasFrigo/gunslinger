@@ -69,6 +69,26 @@ static func chamber() -> AudioStreamWAV:
 		return _tone(480.0, 0.05, 0.35, 50.0))
 
 
+static func glass_break() -> AudioStreamWAV:
+	return _cached("glass_break", func() -> AudioStreamWAV:
+		return _noise_burst(0.35, 0.6, 12.0, 3400.0))
+
+
+static func slot_pull() -> AudioStreamWAV:
+	return _cached("slot_pull", func() -> AudioStreamWAV:
+		return _noise_burst(0.1, 0.4, 30.0, 300.0))
+
+
+static func slot_stop() -> AudioStreamWAV:
+	return _cached("slot_stop", func() -> AudioStreamWAV:
+		return _tone(620.0, 0.06, 0.35, 45.0))
+
+
+static func slot_win() -> AudioStreamWAV:
+	return _cached("slot_win", func() -> AudioStreamWAV:
+		return _tone(1320.0, 0.9, 0.45, 3.0))
+
+
 static func _cached(key: String, generator: Callable) -> AudioStreamWAV:
 	if not _cache.has(key):
 		_cache[key] = generator.call()
