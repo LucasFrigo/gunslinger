@@ -9,8 +9,22 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ## [Unreleased]
 
+### Fixed
+
+- The off-hand bottle stands upright in the hand. `PropAttach` still aims a child's +Y forward for the cigarette; the longneck now counters that seat.
+
+### Changed
+
+- Practice-hub ground: the imported 80 m pad no longer sits above the desert visual, so a thrown ace rests on the sand instead of floating past the fence. The card is heavier and snaps back onto a surface if it tunnels. Flat **G** flips the coin on press (it no longer reseats in the same instant). A toss now picks heads or tails instead of always returning the default tails-up face.
+- The cigarette shatters practice bottles on the way home as well as on the way out.
+
 ### Added
 
+- Bottle off-hand prop: equip **Bottle** from the radial. Hold-to-charge throw matches the ace; a bullet or a hard impact shatters it with the same glass burst as a practice-hub rail bottle, and it does not come back. A still-whole loose bottle picks up with F / off-hand grip. Reselecting the wedge vends a fresh one. Rail bottles stay range targets.
+- Cigarette flight collision: a thrown cigarette that hits a wall or other solid turns around immediately instead of hanging at the far end; a practice bottle in its path shatters the same way a bullet or a hard throw would.
+- Coin toss off-hand prop: equip **Coin** from the radial. Flat **G** flips it straight up so it can land heads or tails back on the hand, or miss and fall; a miss is a real physics object that rests on the floor (F / off-hand grip picks it up). VR still drops it if the palm tilts. Debug panel **Coin Toss**.
+- Ace of spades off-hand prop: equip **Ace of Spades** from the radial. Hold-to-charge throw matches the cigarette, then the card is a physics object — it can bounce, rest, shatter a practice bottle, and be picked back up with F / off-hand grip. Reselecting the same radial wedge despawns the old instance.
+- Tutorial billboard on the practice-hub porch: an old-town news board that lists draw, fire, cock, reload, jam clear, off-hand props, bottle grab / throw, and the slot lever. The same board in flat and VR; the printed binds follow Settings remaps.
 - Practice hub: a local outdoor range with twelve bottles you can shoot or throw (they shatter, count on the HUD, and respawn on their rail after two seconds) and a porch slot machine that spins for flavor. **TUTORIAL / PRACTICE** on the main menu. Flat mode sits the menu on a random frozen arena; VR boots you onto the porch with the menu floating, and you can already shoot. Pause **Reset Range**. No death, no saved score, no multiplayer.
 - Random time of day: each outdoor load picks one time from dawn through dusk and recolors the sun and sky. Fog distance and shadow fade stay put, and the fog tint follows the sky’s ground color, so Canyon’s distant plain and the Train Rooftop horizon still fade out instead of drawing an edge. Saloon stays lamp-lit. In 1v1 the host picks the time. The debug panel **Time of day** slider scrubs the current arena.
 - Train Rooftop greybox: six passenger cars and a steam engine at the front, with invisible walls that keep you on the roofs and the tender (`assets/models/scenarios/train_rooftop/`). The train stays still; tracks and cacti borrowed from Main Street slide past, and canyon walls and buttes drift slower on the horizon. The belt is long enough that the wrap stays out in the fog.
@@ -18,7 +32,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 - Settings → **Voice Chat**: voice volume (separate from master, so the peer is not tied to gunshot volume), mute mic, push-to-talk, **noise gate**, and — on desktop — audio **input** and **output** device pickers with a live mic level bar, so you can check the right microphone is picked before a match. Device choices persist and fall back to **Default** if the hardware is unplugged. Note that the output device applies to all game audio, not only voice.
 - Debug panel **Voice**: `voice_max_distance`, `voice_unit_size`, `voice_gate_cutoff`, plus a live mic / transmit readout.
 
-- Off-hand props with an equip radial: hold **Tab** (flat) or the **off-hand stick click** (VR) to open the wheel, steer with the mouse or that stick, and release on a wedge to equip — release in the middle to cancel. Wedges are **Empty Hand** and **Cigarette**; the cigarette mesh ships at `assets/models/props/msc_cigarette.glb`. Both `prop_radial` binds are remappable in Settings → Controls.
+- Off-hand props with an equip radial: hold **Tab** (flat) or the **off-hand stick click** (VR) to open the wheel, steer with the mouse or that stick, and release on a wedge to equip — release in the middle to cancel. Wedges are **Empty Hand**, **Cigarette**, **Coin**, **Ace of Spades**, and **Bottle**; the cigarette mesh ships at `assets/models/props/msc_cigarette.glb`. Both `prop_radial` binds are remappable in Settings → Controls.
 - Cigarette boomerang: with the cigarette equipped, hold **G** (flat) or the **off-hand trigger** (VR) to wind up — the longer you hold, the further it goes — then release to flick it out in a straight line along where your hand is pointing. It tumbles end over end the whole flight and snaps back into your hand on the catch. Every throw takes the same time whatever the range — a quick tap just hangs there spinning for longer before it turns around. The gun-hand trigger still fires the revolver, and the cigarette parks at your mouth while you are pulling a round off the belt. Debug panel **Cigarette Boomerang** tunes `cig_speed`, `cig_min_range`, `cig_max_range`, `cig_charge_time`, `cig_flight_time`, `cig_catch_radius`, `cig_curve` (0 for a straight throw, higher for a banking boomerang arc), `cig_spin`, and `cig_spin_axis`.
 - Button remapping in Settings (**Controls**): VR fire / grip / cock / trick shot / gate and flat fire / draw / cock / reload. Persists under `[binds]` in `user://settings.cfg`; conflicts swap; **Reset Controls** restores defaults. Scrollable settings panel for VR.
 - Player-facing Settings on the main menu and in-duel pause (`ui/settings_menu.tscn`): master volume, holster side, VR turn mode, mouse sensitivity, and (flat only) window mode plus resolution with **Apply Display**. Persists to `user://settings.cfg`; other knobs reuse `MovementConfig` / `holster_side`. Debug panel stays F3 (and the VR menu button on the main menu).
@@ -56,6 +70,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Fixed
 
+- First-shot hitch after launch: boot warmup still ran, but the compile draw was scaled to 0.001 and Compatibility culled it, so muzzle smoke / trail / glass shaders compiled on the first trigger again ([BUG-010](docs/BUGS.md)). The draw is now large enough to rasterize and lasts more frames.
 - Cattle-fence rails between posts now collide (`env_cattle_fence_4m` `-convcolonly` on each rail).
 - First shot after launching no longer freezes a frame: combat particles, the bullet trail, the slug mesh, and gunshot audio compile on a boot **Loading** screen before the menu, not on the first trigger pull ([BUG-010](docs/BUGS.md)).
 - Steam multiplayer works after leaving a lobby: **HOST (STEAM)** and **JOIN** keep working for the rest of the session instead of failing until the game is restarted ([BUG-009](docs/BUGS.md)). GodotSteam's peer never releases its Steam P2P port, so each session now takes a fresh one and the host advertises it to joiners. Leaving also drops a lobby Steam hands back late, and a create / join Steam never answers now reports an error after 10s instead of leaving the menu on "Creating Steam lobby...". Being unable to join a lobby mid-duel was not a bug: a 2/2 match is deliberately unjoinable and hidden from the list.

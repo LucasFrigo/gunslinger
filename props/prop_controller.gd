@@ -1,23 +1,30 @@
 class_name PropController
 extends Node3D
-## Miscellaneous off-hand props: the equip radial and the cigarette boomerang.
-## Lives under `Player`. The rigs supply the attach points, the highlight vector
-## and the launch direction, so VR and flat share one code path from here down.
+## Miscellaneous off-hand props: the equip radial and the equipped item
+## (cigarette boomerang, coin toss, ace of spades, longneck). Lives under `Player`.
+## The rigs supply the attach points, the highlight vector and the launch
+## direction, so VR and flat share one code path from here down.
 
 const ITEM_NONE := &"none"
 const ITEM_CIGARETTE := &"cigarette"
+const ITEM_COIN := &"coin"
+const ITEM_ACE := &"ace"
+const ITEM_BOTTLE := &"bottle"
 
 ## Wheel order, clockwise from the top.
 const ITEMS: Array[Dictionary] = [
 	{"id": ITEM_NONE, "label": "Empty Hand"},
 	{"id": ITEM_CIGARETTE, "label": "Cigarette"},
+	{"id": ITEM_COIN, "label": "Coin"},
+	{"id": ITEM_ACE, "label": "Ace of Spades"},
+	{"id": ITEM_BOTTLE, "label": "Bottle"},
 ]
 
 ## Stick / mouse deflection before a wedge highlights. Inside it, release cancels.
 const HIGHLIGHT_DEADZONE := 0.35
 
 var _player: Player
-var _prop: Cigarette
+var _prop: Node3D
 var _equipped: StringName = ITEM_NONE
 var _radial_hand: StringName = &""
 var _radial_index := -1
@@ -56,6 +63,24 @@ func is_prop_flying() -> bool:
 	return has_prop() and _prop.is_flying()
 
 
+func is_prop_in_hand() -> bool:
+	return has_prop() and _prop.is_in_hand()
+
+
+func try_pick_near(point: Vector3, radius: float) -> bool:
+	if not has_prop() or not _prop.is_near(point, radius):
+		return false
+	_prop.hold_at(_prop_attach())
+	return true
+
+
+func try_pick_along_ray(origin: Vector3, direction: Vector3, reach: float, radius: float) -> bool:
+	if not has_prop() or not _prop.is_along_ray(origin, direction, reach, radius):
+		return false
+	_prop.hold_at(_prop_attach())
+	return true
+
+
 ## 0 → 1 windup on the equipped prop, for readouts and tests.
 func charge_ratio() -> float:
 	return _prop.charge_ratio() if has_prop() else 0.0
@@ -63,6 +88,10 @@ func charge_ratio() -> float:
 
 func equipped_item() -> StringName:
 	return _equipped
+
+
+func current_prop() -> Node3D:
+	return _prop
 
 
 ## New duel: drop whatever is in the hand and close any open wheel.
@@ -85,8 +114,8 @@ func on_radial_changed(hand: StringName, pressed: bool) -> void:
 func _open_radial(hand: StringName) -> void:
 	if is_radial_open() or not _can_use_props():
 		return
-	# A live boomerang owns the hand: ignore the wheel until it is caught.
-	if is_prop_flying() or _stowed():
+	# A live boomerang owns the hand; a loose coin/ace/bottle does not.
+	if (has_prop() and _prop.blocks_radial()) or _stowed():
 		return
 	_radial_hand = hand
 	_radial_index = -1
@@ -137,25 +166,39 @@ func _show_vr_wheel(hand: StringName) -> void:
 
 
 func equip_item(id: StringName) -> void:
-	if id == _equipped and (id == ITEM_NONE or has_prop()):
-		return
+	# Reselecting the same wedge despawns the old instance (grounded card, etc.).
 	_clear_prop()
 	_equipped = id
-	if id == ITEM_CIGARETTE:
-		var attach := _prop_attach()
-		if attach == null:
-			_equipped = ITEM_NONE
-			return
-		_prop = Cigarette.spawn_held(attach)
-		GameManager.show_message("Cigarette in the off hand", 1.5)
-	else:
+	if id == ITEM_NONE:
 		GameManager.show_message("Off hand empty", 1.2)
+		return
+	var attach := _prop_attach()
+	if attach == null:
+		_equipped = ITEM_NONE
+		return
+	match id:
+		ITEM_CIGARETTE:
+			_prop = Cigarette.spawn_held(attach)
+			GameManager.show_message("Cigarette in the off hand", 1.5)
+		ITEM_COIN:
+			_prop = Coin.spawn_held(attach)
+			_prop.configure_for_rig(_player != null and _player.use_vr)
+			GameManager.show_message("Coin in the off hand", 1.5)
+		ITEM_ACE:
+			_prop = AceOfSpades.spawn_held(attach)
+			GameManager.show_message("Ace of spades in the off hand", 1.5)
+		ITEM_BOTTLE:
+			_prop = Longneck.spawn_held(attach)
+			GameManager.show_message("Bottle in the off hand", 1.5)
+		_:
+			_equipped = ITEM_NONE
+			GameManager.show_message("Off hand empty", 1.2)
 
 
-# -- Boomerang ----------------------------------------------------------------
+# -- Throw --------------------------------------------------------------------
 
-## Off-hand trigger (VR) or `prop_fire` (flat): hold winds up and charges the
-## range, release throws along the hand's forward at that moment.
+## Off-hand trigger (VR) or `prop_fire` (flat): hold starts the equipped
+## prop's windup, release throws along the hand's forward at that moment.
 func on_fire_changed(pressed: bool) -> void:
 	if not pressed:
 		if not _fire_held:
@@ -166,10 +209,15 @@ func on_fire_changed(pressed: bool) -> void:
 		return
 	if _fire_held or is_radial_open() or not has_prop():
 		return
-	if _prop.is_flying() or _stowed() or not _can_use_props():
+	if _prop.is_flying() or _prop.is_loose() or _stowed() or not _can_use_props():
 		return
 	_fire_held = true
 	_prop.begin_charge()
+	# Coin is a tap-flip; waiting for G release made a tap look like a no-op
+	# when the coin instantly reseated on the same palm.
+	if _prop.flips_on_press():
+		_fire_held = false
+		_prop.release_charge(get_tree().current_scene, _launch_direction())
 
 
 func _launch_direction() -> Vector3:
@@ -197,12 +245,12 @@ func _physics_process(_delta: float) -> void:
 
 
 ## The off hand changes when the revolver swaps hands, and VR reload parks the
-## cig at the mouth while a belt round is in that hand. A flying cig always
+## prop at the mouth while a belt round is in that hand. A flying prop always
 ## homes to the hand, never the mouth.
 func _update_prop_attach() -> void:
 	if not has_prop():
 		return
-	if _prop.is_flying():
+	if _prop.is_flying() or _prop.is_loose():
 		_prop.set_attach(_hand_attach())
 		return
 	_prop.set_attach(_prop_attach())

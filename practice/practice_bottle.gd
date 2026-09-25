@@ -197,7 +197,5 @@ func _restore_model() -> void:
 func _on_body_entered(body: Node) -> void:
 	if state != State.LOOSE or _prev_speed < BREAK_SPEED:
 		return
-	var other := body as PracticeBottle
-	if other != null:
-		other.shatter()
+	PropFlight.shatter_body(body)
 	shatter()

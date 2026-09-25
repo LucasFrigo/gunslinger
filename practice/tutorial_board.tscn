@@ -1,0 +1,43 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://practice/tutorial_board.gd" id="1"]
+
+[sub_resource type="StandardMaterial3D" id="mat_frame"]
+albedo_color = Color(0.3, 0.2, 0.12, 1)
+roughness = 0.92
+
+[sub_resource type="StandardMaterial3D" id="mat_paper"]
+albedo_color = Color(0.88, 0.82, 0.68, 1)
+roughness = 0.95
+
+[sub_resource type="BoxMesh" id="mesh_frame"]
+material = SubResource("mat_frame")
+size = Vector3(1.24, 1.52, 0.05)
+
+[sub_resource type="BoxMesh" id="mesh_paper"]
+material = SubResource("mat_paper")
+size = Vector3(1.12, 1.38, 0.008)
+
+[node name="TutorialBoard" type="Node3D"]
+script = ExtResource("1")
+
+[node name="Frame" type="MeshInstance3D" parent="."]
+mesh = SubResource("mesh_frame")
+
+[node name="Paper" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.028)
+mesh = SubResource("mesh_paper")
+
+[node name="Copy" type="Label3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0.02, -0.036)
+pixel_size = 0.0022
+modulate = Color(0.12, 0.08, 0.05, 1)
+outline_modulate = Color(0.88, 0.82, 0.68, 1)
+outline_size = 4
+double_sided = false
+font_size = 32
+text = "THE PRACTICE RANGE"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+width = 480.0

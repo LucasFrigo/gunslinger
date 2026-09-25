@@ -10,9 +10,15 @@ const REGION_HEAD := &"head"
 const REGION_TORSO := &"torso"
 const REGION_ARM := &"arm"
 const REGION_LEG := &"leg"
-const DRAW_FRAMES := 4
+## Compatibility compiles one pipeline per drawn frame. Seven particle cues
+## plus the trail / slug / flash need more than a couple of ticks.
+const DRAW_FRAMES := 12
 
 var _did_warmup := false
+
+
+func has_warmed_up() -> bool:
+	return _did_warmup
 
 
 func shot_fired(muzzle_global: Transform3D, shooting_hand: StringName = &"right_hand") -> void:
@@ -99,12 +105,13 @@ func warmup() -> void:
 		warmup_progress.emit(1.0, "Ready")
 		return
 	var camera: Node3D = null
-	for _try in 20:
+	for _try in 60:
 		await tree.process_frame
 		camera = _find_camera()
 		if camera != null:
 			break
 	if camera == null:
+		push_warning("ImpactFeedback.warmup: no camera; first shot may hitch")
 		_did_warmup = true
 		warmup_progress.emit(1.0, "Ready")
 		return
@@ -154,9 +161,10 @@ func _spawn_draw_warmup(camera: Node3D) -> Node3D:
 	var host := Node3D.new()
 	host.name = "CombatWarmup"
 	camera.add_child(host)
-	# In front of the lens, scaled down so the compile draw is not visible.
-	host.position = Vector3(0.0, 0.0, -0.4)
-	host.scale = Vector3.ONE * 0.001
+	# In front of the lens. Must actually rasterize (Compatibility culls a
+	# 0.001-scale burst), but stay small so the loading cover hides it.
+	host.position = Vector3(0.0, 0.0, -0.32)
+	host.scale = Vector3.ONE * 0.12
 
 	VfxCatalog.spawn_for_compile(host)
 
@@ -180,17 +188,36 @@ func _spawn_draw_warmup(camera: Node3D) -> Node3D:
 
 	var light := OmniLight3D.new()
 	light.light_color = Color(1.0, 0.8, 0.4)
-	light.light_energy = 0.01
-	light.omni_range = 0.02
+	light.light_energy = 3.0
+	light.omni_range = 3.0
 	host.add_child(light)
 
-	var gunshot := AudioStreamPlayer3D.new()
-	gunshot.stream = AudioCatalog.get_stream(&"gunshot")
-	gunshot.volume_db = -80.0
-	gunshot.max_distance = 1.0
-	gunshot.autoplay = true
-	host.add_child(gunshot)
+	for cue in [&"gunshot", &"impact_world", &"glass_break"]:
+		var player := AudioStreamPlayer3D.new()
+		player.stream = AudioCatalog.get_stream(cue)
+		player.volume_db = -80.0
+		player.max_distance = 1.0
+		player.autoplay = true
+		host.add_child(player)
+
+	_mark_compile_draw(host)
 	return host
+
+
+func _mark_compile_draw(node: Node) -> void:
+	if node is GeometryInstance3D:
+		var gi := node as GeometryInstance3D
+		gi.extra_cull_margin = 32.0
+		gi.ignore_occlusion_culling = true
+		gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if node is GPUParticles3D:
+		var particles := node as GPUParticles3D
+		particles.visibility_aabb = AABB(Vector3(-2.0, -2.0, -2.0), Vector3(4.0, 4.0, 4.0))
+		particles.fixed_fps = 0
+		particles.restart()
+		particles.emitting = true
+	for child in node.get_children():
+		_mark_compile_draw(child)
 
 
 func _find_camera() -> Node3D:

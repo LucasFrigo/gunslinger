@@ -120,6 +120,20 @@ var tuning := {
 	## near enough rotationally symmetric that it is the only spin that reads).
 	## 0 = roll around the paper tube.
 	"cig_spin_axis": 1,
+	## Coin toss: forward speed (m/s) of a tap. Hold length does not change it.
+	"coin_speed": 4.0,
+	## Extra upward kick (m/s) so the toss arcs instead of flying flat.
+	"coin_up": 3.5,
+	## Diameter spin (rad/s) so both faces flip in flight.
+	"coin_spin": 18.0,
+	## Palm-up dot vs world up. Below this the coin slides off.
+	"coin_palm_dot": 0.75,
+	## Hand speed (m/s) that still counts as steady enough to rest / catch.
+	"coin_hand_speed": 0.8,
+	## Disc above the palm (m) that reseats a flying coin.
+	"coin_catch_radius": 0.2,
+	## Gravity (m/s²) on a tossed coin or a falling ace.
+	"coin_gravity": 9.8,
 	## Proximity voice: metres past which the peer is inaudible. The duel lane is
 	## 16 m, so the default keeps a standoff conversation clear and fades anyone
 	## who wanders off.

@@ -64,7 +64,7 @@ Flesh vs world is the only material split today. Head/torso/arm/leg share `impac
 
 | Done | Cue | File | Plays when |
 |---|---|---|---|
-| [ ] | `glass_break` | `glass_break.ogg` | Bottle shatters from a bullet or a hard throw (`ImpactFeedback.glass_shatter`, `practice/practice_bottle.gd`) |
+| [ ] | `glass_break` | `glass_break.ogg` | Bottle shatters from a bullet or a hard throw (`ImpactFeedback.glass_shatter`, `practice/practice_bottle.gd`, `props/bottle.gd`) |
 | [ ] | `slot_pull` | `slot_pull.ogg` | Slot lever pulled (`practice/slot_machine.gd` `pull`) |
 | [ ] | `slot_stop` | `slot_stop.ogg` | Each reel lands, −4 dB (`slot_machine.gd`) |
 | [ ] | `slot_win` | `slot_win.ogg` | Three of a kind, with the coin burst (`ImpactFeedback.slot_win`) |
@@ -97,7 +97,7 @@ Do not produce files until the feature exists. Tracked in [`FEATURES.md`](FEATUR
 | Scenario wind bed (loop) | Roadmap **Wind bed + gusts**. Slot is `ScenarioResource.ambience` (`scenario_base.gd`); no `.tres` assigns a stream. Mix per outdoor arena: still Main Street, drier Canyon, more air on Train Rooftop. Saloon is interior — do not use the outdoor bed |
 | `wind_gust` | Same item. One-shot that plays **only** when a visual gust spawns (`VfxCatalog`). Not a second loop |
 | Menu / standoff music | No music player |
-| Extra props | Radial is cigarette-only |
+| Extra props | Radial has cigarette, coin, ace, and bottle; bottle reuses `glass_break`, no new cue |
 
 ## Household Foley
 

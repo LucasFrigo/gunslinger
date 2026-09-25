@@ -2,8 +2,9 @@ class_name PracticeHub
 extends ScenarioBase
 ## Practice lot (`dev/build_practice_hub_blender.py`). A scenario with no
 ## EnemySpawn and no duel: spawns a PracticeBottle on every `BottleSpot*` empty
-## and the slot machine on `SlotSpot`, and counts every shatter for the HUD and
-## the scoreboard on the berm. Not in `GameManager.SCENARIOS`.
+## and the slot machine on `SlotSpot`, counts every shatter for the HUD and the
+## scoreboard on the berm, and hosts a news board on the porch wall. Not in
+## `GameManager.SCENARIOS`.
 
 signal broken_changed(count: int)
 
@@ -12,6 +13,7 @@ const SLOT_SCENE := preload("res://practice/slot_machine.tscn")
 
 var broken := 0
 var slot_machine: SlotMachine
+@onready var tutorial_board: TutorialBoard = $TutorialBoard
 
 var _bottles: Array[PracticeBottle] = []
 
@@ -21,6 +23,7 @@ var _bottles: Array[PracticeBottle] = []
 
 func _ready() -> void:
 	super._ready()
+	_align_ground_collision()
 	for spot in _model.find_children("BottleSpot*", "", true, false):
 		var bottle: PracticeBottle = BOTTLE_SCENE.instantiate()
 		add_child(bottle)
@@ -94,6 +97,46 @@ func bottle_along_ray(origin: Vector3, direction: Vector3, reach: float, radius:
 		if not hit.is_empty():
 			return null
 	return best
+
+
+## Imported `Ground-convcolonly` is an 80 m pad at lot height. The desert
+## visual sits 12 cm lower, so a thrown card past the fence looks like it
+## floats. The importer may nest the body as `StaticBody3D` under that
+## mesh, so a name match on the collider itself is not enough — disable
+## the whole Ground tree and replace it with a lot pad plus a desert pad
+## (`dev/build_practice_hub_blender.py` Lot / Desert / GROUND_HALF).
+func _align_ground_collision() -> void:
+	for node in _model.find_children("*", "", true, false):
+		if "ground" in node.name.to_lower():
+			_disable_collision_tree(node)
+	_add_ground_pad("LotPad", Vector3(18.0, 0.4, 28.0), Vector3(0.0, -0.2, -6.5))
+	_add_ground_pad("DesertPad", Vector3(400.0, 0.8, 400.0), Vector3(0.0, -0.52, 0.0))
+
+
+func _add_ground_pad(pad_name: String, size: Vector3, at: Vector3) -> void:
+	var pad := StaticBody3D.new()
+	pad.name = pad_name
+	pad.collision_layer = 1
+	pad.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	pad.add_child(shape)
+	add_child(pad)
+	pad.position = at
+
+
+func _disable_collision_tree(node: Node) -> void:
+	var body := node as CollisionObject3D
+	if body != null:
+		body.collision_layer = 0
+		body.collision_mask = 0
+	var shape := node as CollisionShape3D
+	if shape != null:
+		shape.disabled = true
+	for child in node.get_children():
+		_disable_collision_tree(child)
 
 
 func _on_bottle_shattered(_bottle: PracticeBottle) -> void:

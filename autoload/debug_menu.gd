@@ -50,6 +50,7 @@ var _reload_sliders: Dictionary = {}
 var _release_sliders: Dictionary = {}
 var _spin_sliders: Dictionary = {}
 var _cig_sliders: Dictionary = {}
+var _coin_sliders: Dictionary = {}
 var _voice_sliders: Dictionary = {}
 var _voice_gate_widgets: Dictionary = {}
 var _voice_status: Label
@@ -438,6 +439,27 @@ func _build_gunplay_section(root: Control) -> void:
 		GameManager.set_tuning("cig_spin_axis", index))
 	root.add_child(_cig_spin_axis_option)
 
+	_add_header(root, "Coin Toss")
+	const COIN_SLIDERS := {
+		"coin_speed": [1.0, 12.0, 0.25],
+		"coin_up": [0.0, 8.0, 0.25],
+		"coin_spin": [0.0, 60.0, 1.0],
+		"coin_palm_dot": [0.2, 0.98, 0.02],
+		"coin_hand_speed": [0.1, 3.0, 0.05],
+		"coin_catch_radius": [0.04, 0.4, 0.01],
+		"coin_gravity": [2.0, 20.0, 0.5],
+	}
+	for coin_key in COIN_SLIDERS:
+		var coin_range: Array = COIN_SLIDERS[coin_key]
+		var tune_coin: String = coin_key
+		var coin_widgets := _add_slider(root, coin_key, coin_range[0], coin_range[1],
+				coin_range[2], float(GameManager.tuning[tune_coin]),
+				func(value: float) -> void:
+					if _refreshing:
+						return
+					GameManager.set_tuning(tune_coin, value))
+		_coin_sliders[tune_coin] = coin_widgets
+
 	_add_header(root, "Voice")
 	const VOICE_SLIDERS := {
 		"voice_max_distance": [4.0, 80.0, 1.0],
@@ -614,6 +636,11 @@ func _refresh_from_systems() -> void:
 		var cig_value: float = float(GameManager.tuning[key])
 		cig_widgets["slider"].value = cig_value
 		cig_widgets["label"].text = "%.2f" % cig_value
+	for key in _coin_sliders:
+		var coin_widgets: Dictionary = _coin_sliders[key]
+		var coin_value: float = float(GameManager.tuning[key])
+		coin_widgets["slider"].value = coin_value
+		coin_widgets["label"].text = "%.2f" % coin_value
 	for key in _voice_sliders:
 		var voice_widgets: Dictionary = _voice_sliders[key]
 		var voice_value: float = float(GameManager.tuning[key])

@@ -38,7 +38,7 @@ _(none)_
 
 **Root cause:** First trigger pull compiled combat AV that had never been drawn or mixed: `GPUParticles3D` muzzle smoke, the unshaded alpha trail ribbon, the slug mesh, muzzle OmniLight, and procedural gunshot PCM. Later shots reused those pipelines.
 
-**Fix:** `ImpactFeedback.warmup()` runs from `GameManager.setup` on a boot loading screen (`ui/loading_screen.tscn`) before the menu opens. It precaches every `AudioCatalog` cue, builds the shared slug mesh, then parents a tiny compile draw to the live camera (XR swapchain / flat viewport) for a few frames so particle, trail, light, and gunshot shaders/mixers hitch behind "Loading..." instead of the first round. VR covers the HMD with a dark quad. Headless autotest skips the GPU draw.
+**Fix:** `ImpactFeedback.warmup()` runs from `GameManager.setup` on a boot loading screen (`ui/loading_screen.tscn`) before the menu opens. It precaches every `AudioCatalog` cue, builds the shared slug mesh, then parents a compile draw to the live camera (XR swapchain / flat viewport) for several frames so particle, trail, light, and gunshot shaders/mixers hitch behind "Loading..." instead of the first round. The draw has to actually rasterize: a 0.001-scale host is frustum-culled on Compatibility (regressed after more VFX landed). VR covers the HMD with a dark quad. Headless autotest skips the GPU draw.
 
 ---
 

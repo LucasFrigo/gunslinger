@@ -1,7 +1,7 @@
 extends Node
 ## Headless smoke tests, launched via `--autotest=<mode>` after `--`:
 ##   duel     - free duel vs AI; passes when bullets actually resolve the duel
-##   props    - equips the cigarette from the radial and throws/catches it
+##   props    - equips the cigarette / coin / ace / bottle and throws them
 ##   gauntlet - clears two gauntlet rungs by force-killing the AI;
 ##              first rung also checks the pain-jerk toss
 ##   host     - hosts a LAN game, waits for a peer, wins the MP duel
@@ -12,7 +12,8 @@ extends Node
 ##   load     - loads every scene/resource, then bind, prop, version,
 ##              main-menu SP/MP split, and host/leave/re-host (BUG-009) checks
 ##   practice - practice hub: shot / thrown bottles shatter, count, respawn on
-##              the rail, reset, slot machine spin, no wounds, flat backdrop
+##              the rail, reset, slot machine spin, tutorial board remaps,
+##              no wounds, flat backdrop
 ## Prints AUTOTEST PASS / AUTOTEST FAIL and sets the exit code.
 
 var mode := "duel"
@@ -170,6 +171,35 @@ func _test_practice() -> void:
 		return _fail("hub spawned %d bottles, expected 12" % hub.bottles().size())
 	if hub.slot_machine == null:
 		return _fail("hub has no slot machine")
+	if hub.tutorial_board == null:
+		return _fail("hub has no tutorial board")
+	var board_text: String = hub.tutorial_board.copy_text()
+	if not board_text.contains("LMB") or not board_text.contains("RMB"):
+		return _fail("board missing default flat fire/draw labels")
+	if not board_text.contains("Space"):
+		return _fail("board missing default cock bind")
+	var previous_cock := PlayerSettings.get_flat_bind_event(&"cock_hammer")
+	var rebound := InputEventKey.new()
+	rebound.physical_keycode = KEY_K
+	PlayerSettings.set_flat_bind(&"cock_hammer", rebound)
+	board_text = hub.tutorial_board.copy_text()
+	if not board_text.contains("K"):
+		PlayerSettings.set_flat_bind(&"cock_hammer", previous_cock)
+		return _fail("board did not follow a cock rebind")
+	PlayerSettings.set_flat_bind(&"cock_hammer", previous_cock)
+	if not hub.tutorial_board.copy_text().contains("Space"):
+		return _fail("board did not restore the cock bind")
+	if hub.get_node_or_null("LotPad") == null or hub.get_node_or_null("DesertPad") == null:
+		return _fail("hub is missing LotPad / DesertPad")
+	var space := hub.get_world_3d().direct_space_state
+	var lot_hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(
+			Vector3(0.0, 2.0, -10.0), Vector3(0.0, -2.0, -10.0), 1))
+	if lot_hit.is_empty() or absf(lot_hit.position.y) > 0.05:
+		return _fail("lot ground is not at walk height (hit=%s)" % lot_hit)
+	var sand_hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(
+			Vector3(20.0, 2.0, 0.0), Vector3(20.0, -2.0, 0.0), 1))
+	if sand_hit.is_empty() or absf(sand_hit.position.y + 0.12) > 0.05:
+		return _fail("desert ground is not at the sand visual (hit=%s)" % sand_hit)
 
 	var player := GameManager.local_player
 	var hp := player.health
@@ -299,9 +329,41 @@ func _test_props() -> void:
 		return _fail("cigarette never returned to the hand")
 	print("AUTOTEST: charged to %.2f, thrown, and caught" % charge)
 
+	props.equip_item(PropController.ITEM_COIN)
+	var first := props.current_prop()
+	if first == null:
+		return _fail("coin was not equipped")
+	props.on_fire_changed(true)
+	if not first.is_loose():
+		return _fail("G press did not flip the coin")
+	props.on_fire_changed(false)
+	if not first.is_loose():
+		return _fail("G release after a flip should not recatch immediately")
+	props.equip_item(PropController.ITEM_COIN)
+	await get_tree().process_frame
+	var second := props.current_prop()
+	if second == null or second == first:
+		return _fail("reselecting the coin did not spawn a new instance")
+	if is_instance_valid(first):
+		return _fail("reselecting the coin did not despawn the older one")
+
+	props.equip_item(PropController.ITEM_BOTTLE)
+	var first_bottle := props.current_prop()
+	if first_bottle == null:
+		return _fail("bottle was not equipped")
+	props.equip_item(PropController.ITEM_BOTTLE)
+	await get_tree().process_frame
+	var second_bottle := props.current_prop()
+	if second_bottle == null or second_bottle == first_bottle:
+		return _fail("reselecting the bottle did not spawn a new instance")
+	if is_instance_valid(first_bottle):
+		return _fail("reselecting the bottle did not despawn the older one")
+
 	props.equip_item(PropController.ITEM_NONE)
 	if props.has_prop():
 		return _fail("empty-hand wedge did not clear the prop")
+	if not await _bottle_ok():
+		return
 	_pass()
 
 
@@ -317,6 +379,8 @@ func _test_load_all() -> void:
 		"res://ai/duelist.tscn",
 		"res://weapons/revolver/revolver.tscn",
 		"res://props/cigarette.tscn",
+		"res://props/coin.tscn",
+		"res://props/ace.tscn",
 		"res://scenarios/main_street/main_street.tscn",
 		"res://scenarios/saloon/saloon.tscn",
 		"res://scenarios/train_rooftop/train_rooftop.tscn",
@@ -324,6 +388,7 @@ func _test_load_all() -> void:
 		"res://scenarios/practice_hub/practice_hub.tscn",
 		"res://practice/practice_bottle.tscn",
 		"res://practice/slot_machine.tscn",
+		"res://practice/tutorial_board.tscn",
 	]
 	for path in scenes:
 		var instance: Node = (load(path) as PackedScene).instantiate()
@@ -366,6 +431,10 @@ func _test_load_all() -> void:
 		return
 	if not _time_of_day_ok():
 		return
+	if not ImpactFeedback.has_warmed_up():
+		return _fail("boot warmup did not run")
+	if Bullet.ensure_mesh() == null or AudioCatalog.get_stream(&"gunshot") == null:
+		return _fail("warmup missed slug mesh or gunshot")
 	_pass()
 
 
@@ -694,8 +763,11 @@ func _props_ok() -> bool:
 	if PropController.highlight_index(Vector2(0.0, 1.0), count) != 0:
 		_fail("up should highlight the first wedge")
 		return false
-	if PropController.highlight_index(Vector2(0.0, -1.0), count) != count / 2:
-		_fail("down should highlight the opposite wedge")
+	if count != 5:
+		_fail("radial should list Empty Hand, Cigarette, Coin, Ace of Spades, Bottle")
+		return false
+	if PropController.highlight_index(Vector2(0.0, -1.0), count) != 3:
+		_fail("down should highlight wedge 3")
 		return false
 
 	var attach := Node3D.new()
@@ -751,9 +823,342 @@ func _props_ok() -> bool:
 		return false
 	print("AUTOTEST: throw length normalized (tap %.2fs, charged %.2fs)"
 			% [tap_flight, full_flight])
+
+	# A wall on the outbound path skips the hover and comes home early.
+	var wall := _make_prop_wall(Vector3(0.0, 1.2, -0.45))
+	await _sleep(0.05)
+	started = Time.get_ticks_msec()
+	cig.begin_charge()
+	cig.release_charge(self, Vector3.FORWARD)
+	if not await _wait_for(func() -> bool: return not cig.is_flying(), 4.0):
+		_fail("cigarette that hit a wall never came home")
+		return false
+	var wall_flight := float(Time.get_ticks_msec() - started) / 1000.0
+	if wall_flight > 0.8:
+		_fail("wall throw took %.2fs, should have skipped the hover" % wall_flight)
+		return false
+	if cig.get_parent() != attach:
+		_fail("wall throw did not re-seat the cigarette")
+		return false
+	wall.free()
+
+	# A practice bottle on the path shatters, then the cig still homes.
+	var bottle: PracticeBottle = preload("res://practice/practice_bottle.tscn").instantiate()
+	add_child(bottle)
+	bottle.set_home(Transform3D(Basis.IDENTITY, Vector3(0.0, 1.085, -0.5)))
+	_fatten_bottle(bottle)
+	bottle.collision_layer = PracticeBottle.LAYER | 1
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	cig.begin_charge()
+	cig.release_charge(self, Vector3.FORWARD)
+	if not await _wait_for(func() -> bool: return bottle.state == PracticeBottle.State.BROKEN, 3.0):
+		_fail("cigarette did not shatter a practice bottle (state=%s flying=%s)" % [
+			bottle.state, cig.is_flying()])
+		return false
+	if not await _wait_for(func() -> bool: return not cig.is_flying(), 4.0):
+		_fail("cigarette never came home after shattering a bottle")
+		return false
+	bottle.queue_free()
+
+	# Return-path bottle: wait until the cig is at the far end, then plant one
+	# between it and the hand so only the home leg can hit.
+	cig.begin_charge()
+	cig.release_charge(self, Vector3.FORWARD)
+	if not await _wait_for(func() -> bool:
+			return cig.state == Cigarette.State.HOVERING \
+					or cig.state == Cigarette.State.RETURNING, 3.0):
+		_fail("cigarette never reached the far end for a return-path bottle")
+		return false
+	var home_bottle: PracticeBottle = preload("res://practice/practice_bottle.tscn").instantiate()
+	add_child(home_bottle)
+	home_bottle.set_home(Transform3D(Basis.IDENTITY, Vector3(0.0, 1.085, -0.35)))
+	_fatten_bottle(home_bottle)
+	home_bottle.collision_layer = PracticeBottle.LAYER | 1
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	if not await _wait_for(func() -> bool: return home_bottle.state == PracticeBottle.State.BROKEN, 3.0):
+		_fail("returning cigarette did not shatter a bottle (state=%s flying=%s)" % [
+			home_bottle.state, cig.is_flying()])
+		return false
+	if not await _wait_for(func() -> bool: return not cig.is_flying(), 4.0):
+		_fail("cigarette never came home after a return-path shatter")
+		return false
+	home_bottle.queue_free()
 	cig.queue_free()
+	print("AUTOTEST: cigarette wall return + bottle shatter ok")
+
+	if not await _coin_ok():
+		return false
+	if not await _ace_ok():
+		return false
+	if not await _bottle_ok():
+		return false
+
 	attach.queue_free()
-	print("AUTOTEST: prop radial picking + cigarette boomerang ok")
+	print("AUTOTEST: prop radial picking + cigarette / coin / ace / bottle ok")
+	return true
+
+
+func _palm_up_basis() -> Basis:
+	# Coin palm is attach -Z, so -Z must be world up.
+	return Basis(Vector3.RIGHT, Vector3.FORWARD, Vector3.DOWN)
+
+
+func _fatten_bottle(bottle: PracticeBottle) -> void:
+	var extra := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(0.35, 0.35, 0.35)
+	extra.shape = box
+	extra.position = Vector3(0.0, 0.115, 0.0)
+	bottle.add_child(extra)
+
+
+func _make_prop_floor(pos: Vector3) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var col := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(8.0, 0.2, 8.0)
+	col.shape = box
+	body.add_child(col)
+	add_child(body)
+	body.global_position = pos
+	return body
+
+
+func _make_prop_wall(pos: Vector3) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var col := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(2.0, 2.0, 0.16)
+	col.shape = box
+	body.add_child(col)
+	add_child(body)
+	body.global_position = pos
+	return body
+
+
+func _coin_ok() -> bool:
+	var floor := _make_prop_floor(Vector3(2.0, 0.0, 0.0))
+	var attach := Node3D.new()
+	add_child(attach)
+	attach.global_position = Vector3(2.0, 1.2, 0.0)
+	attach.basis = _palm_up_basis()
+	var coin := Coin.spawn_held(attach)
+	coin.balance_drop = false
+	if coin.get_parent() != attach or coin.is_loose():
+		_fail("a fresh coin should rest on its attach")
+		return false
+	await _sleep(0.12)
+	# Flat: looking around / a tilted attach must not dump the coin.
+	attach.basis = Basis.IDENTITY
+	await _sleep(0.2)
+	if coin.is_loose():
+		_fail("flat coin should stay in hand until it is flipped")
+		return false
+	attach.basis = _palm_up_basis()
+
+	# G flip: toss up. It should either land back on the hand or rest on the floor.
+	var world_root := Node3D.new()
+	add_child(world_root)
+	coin.begin_charge()
+	coin.release_charge(world_root, Vector3.UP)
+	if not coin.is_loose():
+		_fail("coin flip did not launch on release")
+		return false
+	if not await _wait_for(func() -> bool:
+			return coin.is_in_hand() or (coin.is_loose() and not coin.is_flying() and coin.global_position.y > 0.0), 4.0):
+		_fail("flipped coin neither landed on the hand nor rested on the floor (y=%s)" % coin.global_position.y)
+		return false
+	if coin.is_loose():
+		coin.hold_at(attach)
+	if not coin.is_in_hand() or coin.get_parent() != attach:
+		_fail("coin did not return to the hand after the flip")
+		return false
+	coin.choose_toss_face(-1.0)
+	coin.begin_charge()
+	coin.release_charge(world_root, Vector3.UP)
+	if not await _wait_for(func() -> bool: return coin.is_in_hand(), 4.0):
+		_fail("forced heads toss did not land back on the hand")
+		return false
+	if not coin.showing_heads():
+		_fail("forced heads toss still showed tails")
+		return false
+	coin.choose_toss_face(1.0)
+	coin.begin_charge()
+	coin.release_charge(world_root, Vector3.UP)
+	if not await _wait_for(func() -> bool: return coin.is_in_hand(), 4.0):
+		_fail("forced tails toss did not land back on the hand")
+		return false
+	if coin.showing_heads():
+		_fail("forced tails toss still showed heads")
+		return false
+
+	# VR balance: a tilted palm drops it as a solid that rests on the floor.
+	coin.balance_drop = true
+	attach.basis = Basis.IDENTITY
+	if not await _wait_for(func() -> bool: return coin.is_loose(), 1.0):
+		_fail("tilting the VR palm did not drop the coin")
+		return false
+	if not await _wait_for(func() -> bool: return not coin.is_flying() and coin.global_position.y > 0.0, 3.0):
+		_fail("dropped coin clipped through the floor (y=%s)" % coin.global_position.y)
+		return false
+	if not coin.can_pick_up():
+		_fail("resting coin should be pickable")
+		return false
+	coin.hold_at(attach)
+	if not coin.is_in_hand():
+		_fail("picked-up coin did not return to the hand")
+		return false
+	world_root.queue_free()
+	floor.queue_free()
+	coin.queue_free()
+	attach.queue_free()
+	print("AUTOTEST: coin flat flip + solid drop + pickup ok")
+	return true
+
+
+func _ace_ok() -> bool:
+	var world_root := Node3D.new()
+	add_child(world_root)
+	var floor := _make_prop_floor(Vector3(4.0, 0.0, 0.0))
+	var attach := Node3D.new()
+	add_child(attach)
+	attach.global_position = Vector3(4.0, 1.2, 0.0)
+	var ace := AceOfSpades.spawn_held(attach)
+	if ace.is_flying() or ace.get_parent() != attach:
+		_fail("a fresh ace should be held on its attach")
+		return false
+	var wall := _make_prop_wall(Vector3(4.0, 1.2, -0.5))
+	await _sleep(0.05)
+	ace.begin_charge()
+	await _sleep(0.2)
+	ace.release_charge(world_root, Vector3.FORWARD)
+	if not ace.is_loose():
+		_fail("ace did not launch on release")
+		return false
+	if not await _wait_for(func() -> bool: return ace.is_loose() and not ace.is_flying(), 4.0):
+		_fail("ace never came to rest as a physics object")
+		return false
+	if ace.get_parent() == attach:
+		_fail("thrown ace should not reparent home")
+		return false
+	if not ace.can_pick_up():
+		_fail("resting ace should be pickable")
+		return false
+	ace.hold_at(attach)
+	if not ace.is_in_hand() or ace.get_parent() != attach:
+		_fail("picked-up ace did not return to the hand")
+		return false
+	wall.free()
+
+	# A bottle in front of a second ace shatters and the card stays in the world.
+	var ace2 := AceOfSpades.spawn_held(attach)
+	var bottle: PracticeBottle = preload("res://practice/practice_bottle.tscn").instantiate()
+	add_child(bottle)
+	bottle.set_home(Transform3D(Basis.IDENTITY, Vector3(4.0, 1.085, -0.5)))
+	_fatten_bottle(bottle)
+	bottle.collision_layer = PracticeBottle.LAYER | 1
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	ace2.begin_charge()
+	ace2.release_charge(world_root, Vector3.FORWARD)
+	if not await _wait_for(func() -> bool: return bottle.state == PracticeBottle.State.BROKEN, 3.0):
+		_fail("ace did not shatter a practice bottle (state=%s flying=%s)" % [
+			bottle.state, ace2.is_flying()])
+		return false
+	if ace2.get_parent() == attach:
+		_fail("ace that hit a bottle should stay in the world")
+		return false
+	bottle.queue_free()
+	ace.queue_free()
+	ace2.queue_free()
+	floor.queue_free()
+	world_root.queue_free()
+	attach.queue_free()
+	print("AUTOTEST: ace physics throw + pickup + bottle shatter ok")
+	return true
+
+
+func _bottle_ok() -> bool:
+	var world_root := Node3D.new()
+	add_child(world_root)
+	var floor := _make_prop_floor(Vector3(8.0, 0.0, 0.0))
+	var attach := Node3D.new()
+	add_child(attach)
+	attach.global_position = Vector3(8.0, 1.2, 0.0)
+	var bottle := Longneck.spawn_held(attach)
+	if bottle.is_flying() or bottle.get_parent() != attach:
+		_fail("a fresh bottle should be held on its attach")
+		return false
+	await _sleep(0.05)
+	bottle.begin_charge()
+	await _sleep(0.2)
+	bottle.release_charge(world_root, Vector3.FORWARD)
+	if not bottle.is_loose():
+		_fail("bottle did not launch on release")
+		return false
+	if bottle.get_parent() == attach:
+		_fail("thrown bottle should not reparent home")
+		return false
+	# A charge throw is faster than BREAK_SPEED, so park it for the pickup check.
+	bottle.global_position = Vector3(8.0, 0.12, 0.0)
+	bottle.linear_velocity = Vector3.ZERO
+	bottle.angular_velocity = Vector3.ZERO
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	if not is_instance_valid(bottle) or not bottle.can_pick_up():
+		_fail("a set-down bottle should stay whole and pickable")
+		return false
+	bottle.hold_at(attach)
+	if not bottle.is_in_hand() or bottle.get_parent() != attach:
+		_fail("picked-up bottle did not return to the hand")
+		return false
+
+	var shot: WeakRef = weakref(bottle)
+	bottle.take_bullet(bottle.center(), Vector3.FORWARD)
+	if not await _wait_freed(shot, 1.0):
+		_fail("a shot bottle should shatter and stay gone")
+		return false
+
+	var bottle2 := Longneck.spawn_held(attach)
+	var rail: PracticeBottle = preload("res://practice/practice_bottle.tscn").instantiate()
+	add_child(rail)
+	rail.set_home(Transform3D(Basis.IDENTITY, Vector3(8.0, 1.085, -0.5)))
+	_fatten_bottle(rail)
+	rail.collision_layer = PracticeBottle.LAYER | 1
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	bottle2.begin_charge()
+	await _sleep(0.2)
+	bottle2.release_charge(world_root, Vector3.FORWARD)
+	var thrown: WeakRef = weakref(bottle2)
+	if not await _wait_for(func() -> bool: return rail.state == PracticeBottle.State.BROKEN, 3.0):
+		_fail("thrown bottle did not shatter a practice bottle (state=%s)" % rail.state)
+		return false
+	if not await _wait_freed(thrown, 1.0):
+		_fail("a fast bottle that hit glass should shatter itself")
+		return false
+	rail.queue_free()
+
+	var bottle3 := Longneck.spawn_held(attach)
+	var hit := {"collider": bottle3, "position": bottle3.center()}
+	var queried: WeakRef = weakref(bottle3)
+	if not PropFlight.shatter_if_bottle(hit):
+		_fail("shatter_if_bottle should accept a longneck")
+		return false
+	if not await _wait_freed(queried, 1.0):
+		_fail("shatter_if_bottle did not free the longneck")
+		return false
+
+	floor.queue_free()
+	world_root.queue_free()
+	attach.queue_free()
+	print("AUTOTEST: bottle charge throw + pickup + shatter ok")
 	return true
 
 
@@ -988,6 +1393,10 @@ func _wait_for(predicate: Callable, timeout: float) -> bool:
 			return true
 		await get_tree().process_frame
 	return false
+
+
+func _wait_freed(ref: WeakRef, timeout: float) -> bool:
+	return await _wait_for(func() -> bool: return ref.get_ref() == null, timeout)
 
 
 ## Returns a shared array that fills with [won, reason] on duel_finished.

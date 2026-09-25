@@ -32,7 +32,7 @@ enum GunHand { NONE, LEFT, RIGHT }
 
 var use_vr := false
 var rig: Node3D
-## Off-hand misc props: equip radial + cigarette boomerang.
+## Off-hand misc props: equip radial + cigarette / coin / ace.
 var props: PropController
 var health := CombatRules.DEFAULT_HEALTH
 var max_health := CombatRules.DEFAULT_HEALTH
@@ -305,6 +305,8 @@ func _on_vr_grip_press(hand: StringName) -> void:
 		return
 	if not revolver.drawn and near_holster:
 		_attach_gun_to_hand(hand)
+		return
+	if _try_pick_prop_vr(hand):
 		return
 	if _try_grab_bottle_vr(hand):
 		return
@@ -623,7 +625,7 @@ func _bottle_attach(hand: StringName) -> Node3D:
 
 ## The off hand only, and only when it is empty (no prop, no belt round).
 func _off_hand_free_for_bottle(hand: StringName) -> bool:
-	return hand == off_hand_name() and not props.has_prop() and not _holding_cartridge() \
+	return hand == off_hand_name() and not props.is_prop_in_hand() and not _holding_cartridge() \
 			and not _holding_bottle()
 
 
@@ -633,6 +635,13 @@ func _grab_bottle(bottle: PracticeBottle, hand: StringName, local: Transform3D) 
 	_held_bottle = bottle
 	_held_bottle_hand = hand
 	return true
+
+
+func _try_pick_prop_vr(hand: StringName) -> bool:
+	if hand != off_hand_name() or _holding_cartridge() or _holding_bottle():
+		return false
+	var radius := maxf(float(GameManager.tuning["gun_catch_radius"]), BOTTLE_GRAB_RADIUS_MIN)
+	return props.try_pick_near(_hand_position(hand), radius)
 
 
 func _try_grab_bottle_vr(hand: StringName) -> bool:
@@ -685,8 +694,10 @@ func _on_interact_pressed() -> void:
 	var origin: Vector3 = rig.get_head_transform().origin
 	var direction: Vector3 = rig.get_aim_override().normalized()
 	var bottle := hub.bottle_along_ray(origin, direction, BOTTLE_FLAT_REACH, BOTTLE_FLAT_RADIUS)
+	if props.try_pick_along_ray(origin, direction, BOTTLE_FLAT_REACH, BOTTLE_FLAT_RADIUS):
+		return
 	if bottle != null:
-		if props.has_prop():
+		if props.is_prop_in_hand():
 			GameManager.show_message("Off hand is full", 1.2)
 			return
 		_grab_bottle(bottle, off_hand_name(), Transform3D.IDENTITY)
