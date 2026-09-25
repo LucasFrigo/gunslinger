@@ -11,10 +11,12 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Fixed
 
+- Open gate rolls the cylinder out to the side and down instead of canting it in place. The swing mirrors when the revolver changes hands.
 - The off-hand bottle stands upright in the hand. `PropAttach` still aims a child's +Y forward for the cigarette; the longneck now counters that seat.
 
 ### Changed
 
+- In-game title is **Duello!** on the loading screen, main menu, and Quest launcher name.
 - Practice-hub ground: the imported 80 m pad no longer sits above the desert visual, so a thrown ace rests on the sand instead of floating past the fence. The card is heavier and snaps back onto a surface if it tunnels. Flat **G** flips the coin on press (it no longer reseats in the same instant). A toss now picks heads or tails instead of always returning the default tails-up face.
 - The cigarette shatters practice bottles on the way home as well as on the way out.
 

@@ -462,7 +462,7 @@ func _roll_jam() -> bool:
 	return randf() < chance
 
 
-## Override in subclasses for gate visuals (cylinder tilt, etc.).
+## Override in subclasses for gate visuals (cylinder swing, etc.).
 func _on_gate_changed() -> void:
 	pass
 

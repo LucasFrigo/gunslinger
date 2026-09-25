@@ -19,10 +19,10 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 
 ## Platform / store
 
-- [ ] Decide Meta Store vs App Lab; Quest certification / featuring. `from:` Quest 3 SKU
-- [ ] Steam store page, depots, OpenXR / SteamVR launch options, age rating, violence descriptors.
+- [ ] Main Quest store is the target (not App Lab). Certification / featuring still open. Store and launcher name **Duello!**. `from:` Quest 3 SKU
+- [ ] Steam store page named **Duello!**, depots, OpenXR / SteamVR and a **flat** launch option, age rating, violence descriptors. Flat ships in this app, not as a second full-price SKU.
 - [ ] **Meta Store / Quest APK stays LAN-only.** Never enable GodotSteam or Steam lobby UI on Android (`NetworkManager.steam_available()`, `export_presets.cfg` `exclude_filter=addons/godotsteam/*`). `from:` 1v1 Steam lobbies
-- [ ] Cross-buy / Quest↔Steam entitlement is undefined — GTM decision, see [`BUSINESS_BRIEF.md`](BUSINESS_BRIEF.md).
+- [ ] Cross-buy / Quest↔Steam entitlement is undefined — GTM decision, see [`BUSINESS_BRIEF.md`](BUSINESS_BRIEF.md). Do not advertise online play between a Quest standalone owner and a Steam flat friend. Same-LAN Quest + flat PC is the cross-platform path that exists. A cheap extra Steam key for Quest owners is optional and only adds PC play.
 
 ## Multiplayer
 
@@ -68,6 +68,6 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 - Two editors on one Steam account will not look like two players; use two accounts (Spacewar 480 is fine for that).
 - Steam Link + Godot editor is **Windows PCVR**, not the Quest APK. Quest LAN must be tested with a sideloaded export (`addons/gunslinger_lan_permissions/`).
 - Host Steam overlay invite is opt-in (pause **Invite friends** or Shift+Tab); it no-ops if overlay is disabled or the GodotSteam method is missing. Do not auto-open it on HOST — that steals the click and can stick the overlay.
-- Flat `--flat` harness is not a store SKU unless positioned later.
+- Flat `--flat` ships inside the Steam app (launch option next to PCVR). It is not a second full-price store page.
 - Confirm the first shot after a fresh launch no longer hitchs (boot loading screen in `ImpactFeedback`; [BUG-010](BUGS.md)). VR and flat; editor and export. The hitch should land on Loading, not the first round.
 - Drop `-alpha` from `VERSION` only when cutting a named release (see `.cursor/rules/version-bump.mdc`).

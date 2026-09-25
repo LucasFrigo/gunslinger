@@ -43,7 +43,7 @@ theme_override_constants/separation = 16
 [node name="Title" type="Label" parent="Center/Column"]
 layout_mode = 2
 label_settings = SubResource("title_settings")
-text = "GUNSLINGER"
+text = "Duello!"
 horizontal_alignment = 1
 
 [node name="Status" type="Label" parent="Center/Column"]
