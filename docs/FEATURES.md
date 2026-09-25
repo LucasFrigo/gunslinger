@@ -48,7 +48,8 @@ Design / lore: [`design/README.md`](design/README.md)
 | Feature | Status | Notes / key paths |
 |---|---|---|
 | Free duel (arena + AI pick) | `done` | `GameManager`, main menu Singleplayer page |
-| Practice hub (aim range + slots) | `planned` | Roadmap (Medium); non-duel area with regenerating bottles and a casino slot machine |
+| Practice hub (aim range + slots) | `planned` | Roadmap (Medium). Hub environment still needs a model. Regenerating bottles and a casino slot machine. Bottle mesh modeled: `../blender-mcp-connection/MSC_Longneck.blend` (not vendored yet). Flat boot: random duel scene paused behind the menu, **Tutorial / Practice** on `ui/main_menu.tscn` loads the hub. VR boot: player already stands in the hub (floating menu) |
+| Tutorial billboard | `planned` | Roadmap (Medium); old-town news board in the practice hub listing mappings and mechanics. Binds follow `PlayerSettings` remaps |
 | Duel vs up to 3 NPCs | `planned` | Roadmap (Medium); local 1–3 AI in one standoff |
 | Gauntlet (6 rungs, 3 lives, session score) | `done` | `gauntlet/gauntlet_controller.gd`, ladder `.tres` |
 | Persistent gauntlet high scores | `planned` | Score is session-only today |
