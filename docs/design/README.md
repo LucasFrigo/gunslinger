@@ -20,6 +20,7 @@ Use the same vocabulary as FEATURES: `done` | `partial` | `planned` | `blocked`.
 
 | Subject | Kind | Status | File |
 |---|---|---|---|
+| The Player | character | `partial` | [`characters/player.md`](characters/player.md) |
 | The Drunk | character | `partial` | [`characters/drunk.md`](characters/drunk.md) |
 | The Sheriff | character | `partial` | [`characters/sheriff.md`](characters/sheriff.md) |
 | The Ghost | character | `partial` | [`characters/ghost.md`](characters/ghost.md) |
