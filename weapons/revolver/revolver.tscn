@@ -1,20 +1,22 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene format=3 uid="uid://dqf08q2q8tboc"]
 
-[ext_resource type="Script" path="res://weapons/revolver/revolver.gd" id="1"]
-[ext_resource type="PackedScene" path="res://assets/models/weapons/wpn_psx_blaster.glb" id="2"]
-[ext_resource type="Texture2D" path="res://assets/models/weapons/wpn_psx_blaster_PSX_Blaster_Atlas.png" id="3"]
+[ext_resource type="Script" uid="uid://ckn2axsnnawmu" path="res://weapons/revolver/revolver.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://d1wyitw8e8syj" path="res://assets/models/weapons/wpn_psx_blaster.glb" id="2"]
+
+[sub_resource type="PhysicsMaterial" id="phys_gun"]
+friction = 0.8
+bounce = 0.2
+
+[sub_resource type="BoxShape3D" id="shape_body"]
+size = Vector3(0.056, 0.14, 0.26)
+
+[sub_resource type="BoxMesh" id="mesh_barrel"]
+size = Vector3(0.03, 0.045, 0.22)
 
 [sub_resource type="StandardMaterial3D" id="mat_metal"]
 albedo_color = Color(0.25, 0.26, 0.29, 1)
 metallic = 0.8
 roughness = 0.35
-
-[sub_resource type="StandardMaterial3D" id="mat_wood"]
-albedo_color = Color(0.35, 0.2, 0.1, 1)
-roughness = 0.8
-
-[sub_resource type="BoxMesh" id="mesh_barrel"]
-size = Vector3(0.03, 0.045, 0.22)
 
 [sub_resource type="BoxMesh" id="mesh_grip"]
 size = Vector3(0.03, 0.09, 0.04)
@@ -25,86 +27,63 @@ radius = 0.14
 [sub_resource type="SphereShape3D" id="shape_bump"]
 radius = 0.14
 
-[sub_resource type="PhysicsMaterial" id="phys_gun"]
-friction = 0.8
-bounce = 0.2
+[sub_resource type="StandardMaterial3D" id="mat_wood"]
+albedo_color = Color(0.35, 0.2, 0.1, 1)
+roughness = 0.8
 
-[sub_resource type="BoxShape3D" id="shape_body"]
-size = Vector3(0.056, 0.14, 0.26)
-
-[sub_resource type="StandardMaterial3D" id="mat_blaster"]
-shading_mode = 1
-specular_mode = 2
-vertex_color_use_as_albedo = true
-albedo_texture = ExtResource("3")
-texture_filter = 0
-
-[node name="Revolver" type="RigidBody3D"]
-mass = 1.1
-physics_material_override = SubResource("phys_gun")
-gravity_scale = 1.0
-continuous_cd = false
-can_sleep = true
-freeze = true
-freeze_mode = 1
+[node name="Revolver" type="RigidBody3D" unique_id=2128495628]
 collision_layer = 0
 collision_mask = 0
+mass = 1.1
+physics_material_override = SubResource("phys_gun")
+freeze = true
+freeze_mode = 1
 script = ExtResource("1")
 
-[node name="Model" parent="." instance=ExtResource("2")]
+[node name="Model" parent="." unique_id=1955111370 instance=ExtResource("2")]
 
-[node name="WPN_PSX_Blaster" parent="Model" index="0"]
-surface_material_override/0 = SubResource("mat_blaster")
-
-[node name="Cylinder" parent="Model/WPN_PSX_Blaster/CylinderPivot" index="0"]
-surface_material_override/0 = SubResource("mat_blaster")
-
-[node name="BodyCollision" type="CollisionShape3D" parent="."]
+[node name="BodyCollision" type="CollisionShape3D" parent="." unique_id=1741856676]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0045, -0.023, -0.086)
 shape = SubResource("shape_body")
 
-[node name="Barrel" type="MeshInstance3D" parent="."]
-visible = false
+[node name="Barrel" type="MeshInstance3D" parent="." unique_id=302654093]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, -0.09)
+visible = false
 mesh = SubResource("mesh_barrel")
 surface_material_override/0 = SubResource("mat_metal")
 
-[node name="Cylinder" type="MeshInstance3D" parent="."]
+[node name="Cylinder" type="MeshInstance3D" parent="." unique_id=789808366]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0.01, 0)
 visible = false
-transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0.01, 0.0)
 mesh = SubResource("mesh_grip")
 surface_material_override/0 = SubResource("mat_metal")
 
-[node name="Chamber" type="Marker3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.022, 0.0, -0.04)
+[node name="Chamber" type="Marker3D" parent="." unique_id=2053125723]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.022, 0, -0.04)
 
-[node name="ChamberArea" type="Area3D" parent="Chamber" groups=["reload_volume"]]
+[node name="ChamberArea" type="Area3D" parent="Chamber" unique_id=1434487887 groups=["reload_volume"]]
 collision_layer = 16
 collision_mask = 16
-monitoring = true
-monitorable = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Chamber/ChamberArea"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Chamber/ChamberArea" unique_id=1991303209]
 shape = SubResource("shape_chamber")
 
-[node name="BumpArea" type="Area3D" parent="." groups=["reload_volume"]]
+[node name="BumpArea" type="Area3D" parent="." unique_id=1718585967 groups=["reload_volume"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.01, 0)
 collision_layer = 16
 collision_mask = 16
-monitoring = true
-monitorable = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="BumpArea"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="BumpArea" unique_id=166718309]
 shape = SubResource("shape_bump")
 
-[node name="Grip" type="MeshInstance3D" parent="."]
-visible = false
+[node name="Grip" type="MeshInstance3D" parent="." unique_id=336220798]
 transform = Transform3D(0.96, 0, -0.28, 0, 1, 0, 0.28, 0, 0.96, 0, -0.045, 0.045)
+visible = false
 mesh = SubResource("mesh_grip")
 surface_material_override/0 = SubResource("mat_wood")
 
-[node name="SpinPivot" type="Marker3D" parent="."]
+[node name="SpinPivot" type="Marker3D" parent="." unique_id=757976259]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.015, -0.02)
 
-[node name="Muzzle" type="Marker3D" parent="."]
+[node name="Muzzle" type="Marker3D" parent="." unique_id=129287370]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, -0.21)

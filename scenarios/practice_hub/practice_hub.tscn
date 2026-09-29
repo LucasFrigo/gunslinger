@@ -1,6 +1,6 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene format=3 uid="uid://ck40jqrbee5p"]
 
-[ext_resource type="Script" path="res://scenarios/practice_hub/practice_hub.gd" id="1"]
+[ext_resource type="Script" uid="uid://2x060ntjghtb" path="res://scenarios/practice_hub/practice_hub.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://cw1k51fgxlnce" path="res://assets/models/scenarios/practice_hub/practice_hub.glb" id="2"]
 [ext_resource type="PackedScene" path="res://practice/tutorial_board.tscn" id="3"]
 
@@ -28,13 +28,13 @@ fog_density = 0.0015
 fog_aerial_perspective = 0.4
 fog_sky_affect = 0.45
 
-[node name="PracticeHub" type="Node3D"]
+[node name="PracticeHub" type="Node3D" unique_id=1415280227]
 script = ExtResource("1")
 
-[node name="PlayerSpawn" type="Marker3D" parent="."]
+[node name="PlayerSpawn" type="Marker3D" parent="." unique_id=988802999]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 4)
 
-[node name="Sun" type="DirectionalLight3D" parent="."]
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=386258214]
 transform = Transform3D(0.766044, -0.430109, 0.477684, 0, 0.743145, 0.669131, -0.642788, -0.512584, 0.569282, 0, 18, 0)
 light_color = Color(1, 0.94, 0.82, 1)
 light_energy = 1.25
@@ -47,19 +47,19 @@ directional_shadow_blend_splits = true
 directional_shadow_fade_start = 0.35
 directional_shadow_max_distance = 360.0
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1278500095]
 environment = SubResource("env")
 
-[node name="Model" parent="." instance=ExtResource("2")]
+[node name="Model" parent="." unique_id=715514111 instance=ExtResource("2")]
 
-[node name="Scoreboard" type="Label3D" parent="."]
+[node name="Scoreboard" type="Label3D" parent="." unique_id=982957346]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, -13.72)
 pixel_size = 0.003
 modulate = Color(0.98, 0.9, 0.7, 1)
 outline_modulate = Color(0.12, 0.07, 0.04, 1)
-outline_size = 24
-font_size = 200
 text = "BOTTLES 0"
+font_size = 200
+outline_size = 24
 
-[node name="TutorialBoard" parent="." instance=ExtResource("3")]
+[node name="TutorialBoard" parent="." unique_id=325323732 instance=ExtResource("3")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.58, 5.478)

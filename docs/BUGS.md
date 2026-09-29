@@ -11,7 +11,68 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
-_(none)_
+### BUG-013 — VR height and hitboxes wrong after booting seated
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `major` |
+| Filed | 2026-09-29 |
+| Platforms | Quest 3 (playtest). Any OpenXR session that starts seated is the same case. |
+| Areas | `player/player.gd` `_follow_body`, `player/vr_rig.gd`, `addons/godot-xr-tools/xr/start_xr.gd` |
+
+**What:** Booting the Quest 3 while sitting, then standing up to play, leaves height wrong. Hitboxes are the part that breaks: the head follows the headset, and the torso, legs, shoulders, and holster stay at a fixed offset from the player root.
+
+**Repro:**
+1. Put on the Quest 3 and start the game while seated.
+2. Stand up and play.
+3. The head sits off the body capsules. Shots that should hit the torso miss, or land on the wrong region.
+
+**Why the runtime does not save it:** The session asks for a floor space (`local-floor` / `bounded-floor` in `start_xr.gd`), and there is no in-game height. `_follow_body` pins the torso at `global_position.y + 1.1`, the legs at `+ 0.4`, and the holster at `+ 1.0`. A floor estimate taken while seated does not move those when you stand. Intended fix is the Settings height calibration on the roadmap.
+
+### BUG-012 — VR menu button does not open the menu
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `major` |
+| Filed | 2026-09-26 |
+| Platforms | VR (Quest / OpenXR). Flat Esc path is separate. |
+| Areas | `openxr_action_map.tres` `menu_button`, `player/vr_rig.gd` `_on_left_button` / `_on_right_button`, `player/player.gd` `_on_menu_button` |
+
+**What:** The in-game menu does not open in VR. Reported 2026-09-26.
+
+**Checked against hand / holster:** This is a mapping issue. Holster side and which hand holds the gun do not gate or move the button.
+
+- **Holster side** (`GameManager.tuning["holster_side"]`, Settings **Holster Side**) only mirrors the hip marker in `player.gd`. The menu handlers never read it. Left hip does not disable the menu or move it to the other controller.
+- **Gun hand without a holster change** does not either. A grab can put the revolver in the left hand, and the default draw still goes to the right (`_draw_gun`). `vr_rig.gd` handles `menu_button` before combat binds and does not look at the held hand.
+- **Mapping:** `menu_button` is bound only to `/user/hand/left/input/menu/click`. Both controllers would honor that action name, but the right controller never emits it. The right system / Meta click is bound to `select_button` (`/user/hand/right/input/system/click`), and the rig does not listen for `select_button`. Pause (practice / duel) and the debug panel (main menu) therefore open only from the left controller menu button. Swapping holster side, or holding the gun in the other hand, does not retarget that bind — so the button on the controller that is not the left hand does nothing.
+
+**Repro:**
+1. Boot in VR (practice hub, menu in front of the player) or enter practice / a duel.
+2. Press the menu / system button on the right controller, including after setting Holster Side to Left or after catching the gun in the left hand.
+3. Pause (or the debug panel, while still on the main menu) does not open.
+
+Not reproduced on a headset in this pass; the bind and dispatch above are what the code does.
+
+### BUG-011 — Revolver falls through the practice porch deck
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `minor` |
+| Filed | 2026-09-26 |
+| Platforms | VR and flat, practice hub |
+| Areas | `dev/build_practice_hub_blender.py` `PorchDeck`, `scenarios/practice_hub/practice_hub.gd` `_align_ground_collision` |
+
+**What:** On the practice porch, a dropped revolver ends up under the deck. Reported 2026-09-26.
+
+**Repro:**
+1. Tutorial / Practice (VR boots here already).
+2. Stand on the porch and drop or toss the revolver onto the deck.
+3. The gun rests under the planks instead of on top of them.
+
+**Likely cause:** `PorchDeck` is visual only (`put`, no collision proxy). `_align_ground_collision` replaces the imported ground with `LotPad`, whose top is y = 0. The deck mesh sits on that plane (about 6 cm thick, center y = 0.03), so a loose rigid body lands on the pad and clips through the planks.
 
 ---
 

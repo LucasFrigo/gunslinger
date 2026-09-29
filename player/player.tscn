@@ -1,7 +1,7 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene format=3 uid="uid://bm425fphap8u0"]
 
-[ext_resource type="Script" path="res://player/player.gd" id="1"]
-[ext_resource type="Script" path="res://player/hitbox.gd" id="2"]
+[ext_resource type="Script" uid="uid://lc4ufofljgoh" path="res://player/player.gd" id="1"]
+[ext_resource type="Script" uid="uid://di3jh0m0qdfy4" path="res://player/hitbox.gd" id="2"]
 [ext_resource type="PackedScene" path="res://weapons/revolver/revolver.tscn" id="3"]
 
 [sub_resource type="SphereShape3D" id="shape_head"]
@@ -17,6 +17,9 @@ height = 1.0
 [sub_resource type="BoxShape3D" id="shape_leg"]
 size = Vector3(0.35, 0.7, 0.22)
 
+[sub_resource type="BoxShape3D" id="shape_belt"]
+size = Vector3(0.9, 0.7, 0.55)
+
 [sub_resource type="TorusMesh" id="mesh_belt"]
 inner_radius = 0.28
 outer_radius = 0.38
@@ -24,77 +27,70 @@ rings = 12
 ring_segments = 16
 
 [sub_resource type="StandardMaterial3D" id="mat_belt"]
-albedo_color = Color(0.35, 0.28, 0.18, 0.55)
 transparency = 1
+albedo_color = Color(0.35, 0.28, 0.18, 0.55)
 roughness = 0.9
 
-[sub_resource type="BoxShape3D" id="shape_belt"]
-size = Vector3(0.9, 0.7, 0.55)
-
-[node name="Player" type="Node3D"]
+[node name="Player" type="Node3D" unique_id=270068604]
 script = ExtResource("1")
 
-[node name="RigHolder" type="Node3D" parent="."]
+[node name="RigHolder" type="Node3D" parent="." unique_id=178322637]
 
-[node name="Holster" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 1.0, 0)
+[node name="Holster" type="Node3D" parent="." unique_id=848137720]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 1, 0)
 
-[node name="Revolver" parent="Holster" instance=ExtResource("3")]
+[node name="Revolver" parent="Holster" unique_id=1656044538 instance=ExtResource("3")]
 
-[node name="HeadHitbox" type="Area3D" parent="."]
+[node name="HeadHitbox" type="Area3D" parent="." unique_id=408854719]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.7, 0)
 script = ExtResource("2")
 damage_mult = 2.0
 region = &"head"
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="HeadHitbox"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="HeadHitbox" unique_id=490492010]
 shape = SubResource("shape_head")
 
-[node name="TorsoHitbox" type="Area3D" parent="."]
+[node name="TorsoHitbox" type="Area3D" parent="." unique_id=580081220]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
 script = ExtResource("2")
-damage_mult = 1.0
-region = &"torso"
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="TorsoHitbox"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="TorsoHitbox" unique_id=890436633]
 shape = SubResource("shape_torso")
 
-[node name="ArmHitboxL" type="Area3D" parent="."]
+[node name="ArmHitboxL" type="Area3D" parent="." unique_id=810488409]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.32, 1.32, 0)
 script = ExtResource("2")
 region = &"arm"
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="ArmHitboxL"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ArmHitboxL" unique_id=839698145]
 shape = SubResource("shape_arm")
 
-[node name="ArmHitboxR" type="Area3D" parent="."]
+[node name="ArmHitboxR" type="Area3D" parent="." unique_id=797992227]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.32, 1.32, 0)
 script = ExtResource("2")
 region = &"arm"
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="ArmHitboxR"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ArmHitboxR" unique_id=1864873481]
 shape = SubResource("shape_arm")
 
-[node name="LegHitbox" type="Area3D" parent="."]
+[node name="LegHitbox" type="Area3D" parent="." unique_id=864601599]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
 script = ExtResource("2")
 region = &"leg"
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="LegHitbox"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="LegHitbox" unique_id=2032488719]
 shape = SubResource("shape_leg")
 
-[node name="AmmoBelt" type="Area3D" parent="." groups=["reload_volume"]]
+[node name="AmmoBelt" type="Area3D" parent="." unique_id=1797739221 groups=["reload_volume"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
 collision_layer = 16
 collision_mask = 16
-monitoring = true
-monitorable = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="AmmoBelt"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="AmmoBelt" unique_id=1756676742]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.075, 0)
 shape = SubResource("shape_belt")
 
-[node name="BeltVisual" type="MeshInstance3D" parent="AmmoBelt"]
+[node name="BeltVisual" type="MeshInstance3D" parent="AmmoBelt" unique_id=2038771320]
 transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0)
 mesh = SubResource("mesh_belt")
 surface_material_override/0 = SubResource("mat_belt")
