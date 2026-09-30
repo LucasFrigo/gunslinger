@@ -151,6 +151,9 @@ def build_porch(root, mats):
     cy = (PORCH_Y0 + PORCH_Y1) * 0.5
     depth = PORCH_Y1 - PORCH_Y0
     width = PORCH_HALF_X * 2.0
+    # Visual only. A `-convcolonly` slab would overlap the spawn pad (ankles
+    # start at z = 0.05; plank top is z = 0.06). `PracticeHub._align_ground_collision`
+    # adds the `PorchDeck` body so a dropped gun rests on the planks.
     put("PorchDeck", (0.0, cy, 0.03), (width + 0.3, depth + 0.2, 0.06), root, mats["plank"])
     # Back wall with a false front above the roof.
     solid("PorchWall", (0.0, PORCH_Y0 - 0.12, 1.9), (width + 1.4, 0.24, 3.8), root, mats["wood_dark"])

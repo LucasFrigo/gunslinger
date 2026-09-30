@@ -71,9 +71,11 @@ func _vr_copy() -> String:
 	var cock := _vr(&"cock")
 	var gate := _vr(&"gate")
 	var wheel := _vr(&"prop_radial")
+	var pause := _vr(&"pause")
 	return "\n".join([
 		"THE PRACTICE RANGE",
 		"",
+		"MENU — gun-hand %s" % pause,
 		"DRAW — %s, hold" % grip,
 		"FIRE — %s" % fire,
 		"COCK — %s" % cock,

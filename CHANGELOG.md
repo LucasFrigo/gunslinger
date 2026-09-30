@@ -11,6 +11,8 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Fixed
 
+- Practice porch: a dropped revolver stays on the deck planks instead of falling through onto the lot underneath.
+- VR pause no longer depends on the Meta or Steam menu buttons. The draw-hand stick click opens pause (the debug panel on the main menu). The off-hand click still opens the prop wheel. **Pause** can be rebound in Settings. Holster Side Left uses the left hand as that draw hand, including flat RMB.
 - Open gate rolls the cylinder out to the side and down instead of canting it in place. The swing mirrors when the revolver changes hands.
 - The off-hand bottle stands upright in the hand. `PropAttach` still aims a child's +Y forward for the cigarette; the longneck now counters that seat.
 

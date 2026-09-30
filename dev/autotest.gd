@@ -13,7 +13,7 @@ extends Node
 ##              main-menu SP/MP split, and host/leave/re-host (BUG-009) checks
 ##   practice - practice hub: shot / thrown bottles shatter, count, respawn on
 ##              the rail, reset, slot machine spin, tutorial board remaps,
-##              no wounds, flat backdrop
+##              porch deck holds a dropped revolver, no wounds, flat backdrop
 ## Prints AUTOTEST PASS / AUTOTEST FAIL and sets the exit code.
 
 var mode := "duel"
@@ -191,6 +191,8 @@ func _test_practice() -> void:
 		return _fail("board did not restore the cock bind")
 	if hub.get_node_or_null("LotPad") == null or hub.get_node_or_null("DesertPad") == null:
 		return _fail("hub is missing LotPad / DesertPad")
+	if hub.get_node_or_null("PorchDeck") == null:
+		return _fail("hub is missing PorchDeck")
 	var space := hub.get_world_3d().direct_space_state
 	var lot_hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(
 			Vector3(0.0, 2.0, -10.0), Vector3(0.0, -2.0, -10.0), 1))
@@ -200,8 +202,35 @@ func _test_practice() -> void:
 			Vector3(20.0, 2.0, 0.0), Vector3(20.0, -2.0, 0.0), 1))
 	if sand_hit.is_empty() or absf(sand_hit.position.y + 0.12) > 0.05:
 		return _fail("desert ground is not at the sand visual (hit=%s)" % sand_hit)
+	var porch_hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(
+			Vector3(1.2, 2.0, 3.6), Vector3(1.2, -1.0, 3.6), 1))
+	if porch_hit.is_empty() or absf(porch_hit.position.y - 0.06) > 0.015:
+		return _fail("porch deck is not at plank height (hit=%s)" % porch_hit)
 
 	var player := GameManager.local_player
+	# Dropped revolver must rest on the planks, not the lot under them (BUG-011).
+	var gun := player.revolver
+	gun.axis_lock_angular_x = true
+	gun.axis_lock_angular_y = true
+	gun.axis_lock_angular_z = true
+	gun.release_into_world(hub, Vector3.ZERO, Vector3.ZERO)
+	gun.global_transform = Transform3D(Basis.IDENTITY, Vector3(1.2, 0.45, 3.6))
+	gun.linear_velocity = Vector3.ZERO
+	gun.angular_velocity = Vector3.ZERO
+	if not await _wait_for(func() -> bool:
+		return gun.linear_velocity.length() < 0.05 and _body_bottom_y(gun) < 0.2, 3.0):
+		gun.axis_lock_angular_x = false
+		gun.axis_lock_angular_y = false
+		gun.axis_lock_angular_z = false
+		gun.holster_to(player.get_node("Holster") as Node3D)
+		return _fail("revolver did not settle on the porch (bottom y=%s)" % _body_bottom_y(gun))
+	var deck_bottom := _body_bottom_y(gun)
+	gun.axis_lock_angular_x = false
+	gun.axis_lock_angular_y = false
+	gun.axis_lock_angular_z = false
+	gun.holster_to(player.get_node("Holster") as Node3D)
+	if deck_bottom < 0.045:
+		return _fail("revolver sank through the porch deck (bottom y=%s)" % deck_bottom)
 	var hp := player.health
 	player.take_bullet_hit(99.0, PackedVector3Array(), CombatRules.REGION_HEAD)
 	if not player.alive or player.health != hp:
@@ -1232,6 +1261,20 @@ func _binds_ok() -> bool:
 	if PlayerSettings.get_vr_bind(&"prop_radial") != "primary_click":
 		_fail("default VR prop_radial should be primary_click")
 		return false
+	if PlayerSettings.get_vr_bind(&"pause") != "primary_click":
+		_fail("default VR pause should share stick click")
+		return false
+	PlayerSettings.set_vr_bind(&"pause", "ax_button")
+	if PlayerSettings.get_vr_bind(&"pause") != "ax_button":
+		_fail("VR pause rebind failed")
+		return false
+	if PlayerSettings.get_vr_bind(&"trick_shot") != "primary_click":
+		_fail("pause rebind should move trick shot onto stick click")
+		return false
+	if PlayerSettings.get_vr_bind(&"prop_radial") != "primary_click":
+		_fail("prop radial should stay on stick click when pause leaves it")
+		return false
+	PlayerSettings.reset_binds()
 	if PlayerSettings.flat_event_label(PlayerSettings.get_flat_bind_event(&"cock_hammer")) != "Space":
 		_fail("default flat cock should be Space")
 		return false
@@ -1253,6 +1296,20 @@ func _binds_ok() -> bool:
 		_fail("flat cock InputMap not updated")
 		return false
 	PlayerSettings.reset_binds()
+	var player := GameManager.local_player
+	if player != null:
+		var saved_side := int(GameManager.tuning["holster_side"])
+		GameManager.tuning["holster_side"] = 0
+		if player.dominant_hand_name() != &"right_hand" or player.draw_hand_name() != &"right_hand":
+			GameManager.tuning["holster_side"] = saved_side
+			_fail("right holster should draw with the right hand")
+			return false
+		GameManager.tuning["holster_side"] = 1
+		if player.dominant_hand_name() != &"left_hand" or player.off_hand_name() != &"right_hand":
+			GameManager.tuning["holster_side"] = saved_side
+			_fail("left holster should draw with the left hand")
+			return false
+		GameManager.tuning["holster_side"] = saved_side
 	print("AUTOTEST: bind table swap/reset ok")
 	return true
 
@@ -1416,6 +1473,20 @@ func _wait_duel_finished(timeout: float) -> Array:
 	var result := _arm_duel_listener()
 	await _await_result(result, timeout)
 	return result
+
+
+## Lowest world Y of a rigid body's `BodyCollision` box corners.
+func _body_bottom_y(body: Node3D) -> float:
+	var shape_node := body.get_node("BodyCollision") as CollisionShape3D
+	var box := shape_node.shape as BoxShape3D
+	var xf := shape_node.global_transform
+	var h := box.size * 0.5
+	var min_y := INF
+	for sx in [-1.0, 1.0]:
+		for sy in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				min_y = minf(min_y, (xf * Vector3(h.x * sx, h.y * sy, h.z * sz)).y)
+	return min_y
 
 
 func _sleep(seconds: float) -> void:

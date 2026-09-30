@@ -335,12 +335,12 @@ func _on_vr_grip_release(hand: StringName) -> void:
 func _toggle_gun() -> void:
 	if revolver.drawn and not revolver.held:
 		if _flat_looking_at_loose_gun():
-			_attach_gun_to_hand(HAND_RIGHT)
+			_attach_gun_to_hand(dominant_hand_name())
 		return
 	if revolver.drawn:
 		_holster_gun()
 	else:
-		_attach_gun_to_hand(HAND_RIGHT)
+		_attach_gun_to_hand(dominant_hand_name())
 
 
 func _attach_gun_to_hand(hand: StringName) -> void:
@@ -394,9 +394,24 @@ func _on_trick_shot_changed(hand: StringName, pressed: bool) -> void:
 		revolver.end_spin(false)
 
 
-## The hand that is not on the gun. Defaults to left while holstered.
+## Hip side from Settings. Right unless Holster Side is Left.
+func dominant_hand_name() -> StringName:
+	if int(GameManager.tuning.get("holster_side", 0)) != 0:
+		return HAND_LEFT
+	return HAND_RIGHT
+
+
+## Hand that owns gun-hand binds. The holding hand once drawn, otherwise the
+## holster side (right stick while the hip is on the right).
+func draw_hand_name() -> StringName:
+	if revolver != null and revolver.held and _holding_hand != GunHand.NONE:
+		return _holding_hand_name()
+	return dominant_hand_name()
+
+
+## The hand that is not on the gun. Opposite the holster side while holstered.
 func off_hand_name() -> StringName:
-	return HAND_RIGHT if _holding_hand == GunHand.LEFT else HAND_LEFT
+	return HAND_LEFT if draw_hand_name() == HAND_RIGHT else HAND_RIGHT
 
 
 func _hand_position(hand: StringName) -> Vector3:
@@ -523,7 +538,7 @@ func _refresh_health_hud() -> void:
 
 
 func _draw_gun() -> void:
-	_attach_gun_to_hand(HAND_RIGHT)
+	_attach_gun_to_hand(dominant_hand_name())
 
 
 func _holster_gun() -> void:
@@ -899,9 +914,7 @@ func _reload_probe() -> Area3D:
 	if not (rig is VRRig):
 		return null
 	var vr := rig as VRRig
-	if revolver.held:
-		return vr.get_reload_probe(off_hand_name())
-	return vr.get_reload_probe(HAND_LEFT)
+	return vr.get_reload_probe(off_hand_name())
 
 
 func _probe_overlaps(area: Area3D) -> bool:
@@ -995,7 +1008,7 @@ func _reload_viz_color(shape_node: CollisionShape3D) -> Color:
 
 func _cartridge_attach() -> Node3D:
 	if rig is VRRig:
-		var hand := off_hand_name() if revolver.held else HAND_LEFT
+		var hand := off_hand_name()
 		return (rig as VRRig).get_cartridge_attach(hand)
 	if rig.has_method("get_wrist_attach"):
 		return rig.get_wrist_attach()
@@ -1009,7 +1022,7 @@ func _drop_held_cartridge() -> void:
 	var vel := Vector3.ZERO
 	if rig is VRRig:
 		var vr := rig as VRRig
-		var off := off_hand_name() if revolver.held else HAND_LEFT
+		var off := off_hand_name()
 		vel = vr.hand_velocity(off) * 0.25
 	_held_cartridge.drop_into_world(get_tree().current_scene, pos, vel)
 	_held_cartridge = null

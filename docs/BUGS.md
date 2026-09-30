@@ -30,38 +30,18 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 **Why the runtime does not save it:** The session asks for a floor space (`local-floor` / `bounded-floor` in `start_xr.gd`), and there is no in-game height. `_follow_body` pins the torso at `global_position.y + 1.1`, the legs at `+ 0.4`, and the holster at `+ 1.0`. A floor estimate taken while seated does not move those when you stand. Intended fix is the Settings height calibration on the roadmap.
 
-### BUG-012 — VR menu button does not open the menu
+---
 
-| | |
-|---|---|
-| Status | `open` |
-| Severity | `major` |
-| Filed | 2026-09-26 |
-| Platforms | VR (Quest / OpenXR). Flat Esc path is separate. |
-| Areas | `openxr_action_map.tres` `menu_button`, `player/vr_rig.gd` `_on_left_button` / `_on_right_button`, `player/player.gd` `_on_menu_button` |
-
-**What:** The in-game menu does not open in VR. Reported 2026-09-26.
-
-**Checked against hand / holster:** This is a mapping issue. Holster side and which hand holds the gun do not gate or move the button.
-
-- **Holster side** (`GameManager.tuning["holster_side"]`, Settings **Holster Side**) only mirrors the hip marker in `player.gd`. The menu handlers never read it. Left hip does not disable the menu or move it to the other controller.
-- **Gun hand without a holster change** does not either. A grab can put the revolver in the left hand, and the default draw still goes to the right (`_draw_gun`). `vr_rig.gd` handles `menu_button` before combat binds and does not look at the held hand.
-- **Mapping:** `menu_button` is bound only to `/user/hand/left/input/menu/click`. Both controllers would honor that action name, but the right controller never emits it. The right system / Meta click is bound to `select_button` (`/user/hand/right/input/system/click`), and the rig does not listen for `select_button`. Pause (practice / duel) and the debug panel (main menu) therefore open only from the left controller menu button. Swapping holster side, or holding the gun in the other hand, does not retarget that bind — so the button on the controller that is not the left hand does nothing.
-
-**Repro:**
-1. Boot in VR (practice hub, menu in front of the player) or enter practice / a duel.
-2. Press the menu / system button on the right controller, including after setting Holster Side to Left or after catching the gun in the left hand.
-3. Pause (or the debug panel, while still on the main menu) does not open.
-
-Not reproduced on a headset in this pass; the bind and dispatch above are what the code does.
+## Fixed
 
 ### BUG-011 — Revolver falls through the practice porch deck
 
 | | |
 |---|---|
-| Status | `open` |
+| Status | `fixed` |
 | Severity | `minor` |
 | Filed | 2026-09-26 |
+| Fixed | 2026-09-30 |
 | Platforms | VR and flat, practice hub |
 | Areas | `dev/build_practice_hub_blender.py` `PorchDeck`, `scenarios/practice_hub/practice_hub.gd` `_align_ground_collision` |
 
@@ -72,11 +52,24 @@ Not reproduced on a headset in this pass; the bind and dispatch above are what t
 2. Stand on the porch and drop or toss the revolver onto the deck.
 3. The gun rests under the planks instead of on top of them.
 
-**Likely cause:** `PorchDeck` is visual only (`put`, no collision proxy). `_align_ground_collision` replaces the imported ground with `LotPad`, whose top is y = 0. The deck mesh sits on that plane (about 6 cm thick, center y = 0.03), so a loose rigid body lands on the pad and clips through the planks.
+**Root cause:** `PorchDeck` is visual only (`put`, no collision proxy). `_align_ground_collision` replaces the imported ground with `LotPad`, whose top is y = 0. The deck mesh sits on that plane (about 6 cm thick, center y = 0.03), so a loose rigid body lands on the pad and clips through the planks.
 
----
+**Fix:** `_align_ground_collision` adds a `PorchDeck` static pad matching the plank slab (top y = 0.06, same as `PlayerSpawn`). A dropped revolver rests on the boards. The mesh stays visual in the Blender build: a matching `-convcolonly` proxy would overlap the spawn-pad check (ankles start at z = 0.05). Autotest `practice` raycasts the deck and drops the revolver.
 
-## Fixed
+### BUG-012 — VR menu buttons open Meta and Steam, not the game
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `major` |
+| Filed | 2026-09-26 |
+| Fixed | 2026-09-30 |
+| Platforms | Quest through SteamVR. Flat Esc path is separate. |
+| Areas | `player/vr_rig.gd` `_action_for_hand`, `player/player.gd` `draw_hand_name`, `autoload/player_settings.gd` |
+
+**What:** The in-game menu did not open in VR. The Meta button opens the Meta system menu and the hamburger opens the Steam menu, so the game never received those presses.
+
+**Fix:** Pause (and the debug panel on the main menu) opens from the draw-hand stick click. That is the right stick while holstered on the right hip, the left stick when Holster Side is Left, and whichever hand is holding the gun once it is drawn. The off-hand click stays the prop wheel. **Pause** is a Controls row and can be rebound; moving it off the stick click swaps the previous action onto that click, and the prop wheel stays on the off hand. Flat pause stays Esc. A hamburger press still toggles the menu when the runtime actually delivers it.
 
 ### BUG-010 — First shot hitch (short freeze / FPS drop)
 

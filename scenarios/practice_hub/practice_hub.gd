@@ -105,12 +105,18 @@ func bottle_along_ray(origin: Vector3, direction: Vector3, reach: float, radius:
 ## mesh, so a name match on the collider itself is not enough — disable
 ## the whole Ground tree and replace it with a lot pad plus a desert pad
 ## (`dev/build_practice_hub_blender.py` Lot / Desert / GROUND_HALF).
+## `PorchDeck` in that file is visual only. Its slab is Blender
+## (0, -4, 0.03) size (4.3, 3.2, 0.06), which is Godot center
+## (0, 0.03, 4) and size (4.3, 0.06, 3.2). Top is y = 0.06, the same
+## height as `PlayerSpawn`. Without a pad there, a loose rigid body
+## lands on `LotPad` (top y = 0) and sits inside the planks.
 func _align_ground_collision() -> void:
 	for node in _model.find_children("*", "", true, false):
 		if "ground" in node.name.to_lower():
 			_disable_collision_tree(node)
 	_add_ground_pad("LotPad", Vector3(18.0, 0.4, 28.0), Vector3(0.0, -0.2, -6.5))
 	_add_ground_pad("DesertPad", Vector3(400.0, 0.8, 400.0), Vector3(0.0, -0.52, 0.0))
+	_add_ground_pad("PorchDeck", Vector3(4.3, 0.06, 3.2), Vector3(0.0, 0.03, 4.0))
 
 
 func _add_ground_pad(pad_name: String, size: Vector3, at: Vector3) -> void:

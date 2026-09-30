@@ -379,13 +379,46 @@ func _dispatch_button(hand: StringName, button: String, pressed: bool) -> void:
 		return
 	if PlayerSettings.is_listening():
 		return
-	var action := PlayerSettings.vr_action_for_source(button)
+	var action := _action_for_hand(hand, button)
 	if action == &"":
 		# Unbound source: left B still opens debug when not a combat bind.
 		if pressed and hand == HAND_LEFT and button == "by_button":
 			gate_pressed.emit(HAND_LEFT)
 		return
+	if action == &"pause":
+		if pressed:
+			menu_button_pressed.emit()
+		return
 	_emit_action(hand, action, pressed)
+
+
+## Stick click defaults to pause on the draw hand and the prop wheel on the off
+## hand. A rebind keeps that split: the draw hand gets the non-radial action.
+func _action_for_hand(hand: StringName, button: String) -> StringName:
+	var actions := PlayerSettings.vr_actions_for_source(button)
+	if actions.is_empty():
+		return &""
+	var draw_hand := _pause_hand()
+	if hand == draw_hand:
+		if &"pause" in actions:
+			return &"pause"
+		for action in actions:
+			if action != &"prop_radial":
+				return action
+		return &""
+	if &"prop_radial" in actions:
+		return &"prop_radial"
+	for action in actions:
+		if action != &"pause":
+			return action
+	return &""
+
+
+func _pause_hand() -> StringName:
+	var player := GameManager.local_player
+	if player != null and player.has_method("draw_hand_name"):
+		return player.draw_hand_name()
+	return HAND_RIGHT
 
 
 func _emit_action(hand: StringName, action: StringName, pressed: bool) -> void:

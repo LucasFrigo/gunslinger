@@ -24,15 +24,16 @@ const RESOLUTION_PRESETS: Array[Vector2i] = [
 	Vector2i(3840, 2160),
 ]
 
-## Logical VR combat actions → OpenXR / synthetic source strings.
+## Logical VR actions → OpenXR / synthetic source strings.
+## `pause` and `prop_radial` both default to stick click and are split by hand
+## (draw hand vs off hand), so they are allowed to share that one source.
 const VR_ACTIONS: Array[StringName] = [
-	&"fire", &"grip", &"cock", &"trick_shot", &"gate", &"prop_radial",
+	&"fire", &"grip", &"cock", &"trick_shot", &"gate", &"prop_radial", &"pause",
 ]
 
 ## Flat InputMap actions that players may remap. Voice lives here too: on flat
 ## there are spare keys, so mute and push-to-talk are ordinary rebindable rows.
-## VR has no spare source (all six are combat), so VR voice stays on the
-## Settings toggles and always-on transmission.
+## VR voice stays on the Settings toggles and always-on transmission.
 const FLAT_ACTIONS: Array[StringName] = [
 	&"fire", &"draw_toggle", &"cock_hammer", &"reload", &"prop_radial", &"prop_fire",
 	&"voice_mute", &"voice_ptt",
@@ -56,8 +57,10 @@ const DEFAULT_VR_BINDS := {
 	"cock": "stick_down",
 	"trick_shot": "ax_button",
 	"gate": "by_button",
-	## Only honored on the off hand; the gun-hand stick click does nothing.
+	## Off hand only. Shares stick click with pause (draw hand).
 	"prop_radial": "primary_click",
+	## Draw hand only. Right stick while holstered on the right hip.
+	"pause": "primary_click",
 }
 
 const VR_SOURCE_LABELS := {
@@ -87,6 +90,7 @@ const VR_ACTION_LABELS := {
 	"trick_shot": "Trick Shot",
 	"gate": "Gate",
 	"prop_radial": "Prop Radial",
+	"pause": "Pause",
 }
 
 var master_volume := 1.0
@@ -364,6 +368,14 @@ func vr_action_for_source(source: String) -> StringName:
 	return &""
 
 
+func vr_actions_for_source(source: String) -> Array[StringName]:
+	var found: Array[StringName] = []
+	for action in VR_ACTIONS:
+		if get_vr_bind(action) == source:
+			found.append(action)
+	return found
+
+
 func begin_listen(action: StringName, is_vr: bool) -> void:
 	listen_action = action
 	listen_is_vr = is_vr
@@ -417,10 +429,16 @@ func set_vr_bind(action: StringName, source: String) -> void:
 		_save_config()
 		binds_changed.emit()
 		return
-	var conflict := vr_action_for_source(source)
 	vr_binds[key] = source
-	if conflict != &"" and conflict != action:
-		vr_binds[String(conflict)] = previous
+	# Prop radial joins whatever is already on the button (hand-split at dispatch).
+	# Any other action evicts the non-radial occupant so two combat binds never share.
+	if action != &"prop_radial":
+		for other in VR_ACTIONS:
+			if other == action or other == &"prop_radial":
+				continue
+			if get_vr_bind(other) == source:
+				vr_binds[String(other)] = previous
+				break
 	apply_binds()
 	_save_config()
 	binds_changed.emit()
@@ -630,12 +648,15 @@ func _load_config() -> void:
 
 
 func _ensure_unique_vr_binds() -> void:
+	# One combat action per source. Prop radial may sit on the same source
+	# (off hand vs draw hand). Pause defaults to that shared stick click.
 	var used := {}
 	for action in VR_ACTIONS:
+		if action == &"prop_radial":
+			continue
 		var source := get_vr_bind(action)
 		if used.has(source) or source not in VR_SOURCES:
 			source = str(DEFAULT_VR_BINDS[String(action)])
-			# If default also taken, pick first free source.
 			if used.has(source):
 				for candidate in VR_SOURCES:
 					if not used.has(candidate):
@@ -643,6 +664,9 @@ func _ensure_unique_vr_binds() -> void:
 						break
 			vr_binds[String(action)] = source
 		used[source] = true
+	var radial := get_vr_bind(&"prop_radial")
+	if radial not in VR_SOURCES:
+		vr_binds["prop_radial"] = str(DEFAULT_VR_BINDS["prop_radial"])
 
 
 func _ensure_unique_flat_binds() -> void:
