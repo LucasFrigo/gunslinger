@@ -24,6 +24,7 @@ var _spawn_position := Vector3.ZERO
 var _strafe_phase := 0.0
 var _disarm_remaining := 0.0
 var _leg_remaining := 0.0
+var _death_tween: Tween
 
 @onready var arm: Node3D = $Arm
 @onready var revolver: Revolver = $Arm/Revolver
@@ -81,6 +82,8 @@ func on_duel_over(_player_won: bool) -> void:
 
 func _process(delta: float) -> void:
 	if state == AIState.DEAD or _target == null:
+		return
+	if DeathCam.blocks_combat():
 		return
 	_face_target()
 	_strafe(delta)
@@ -195,12 +198,43 @@ func _apply_accuracy_cone(direction: Vector3) -> Vector3:
 
 
 func _on_fired(origin: Vector3, direction: Vector3) -> void:
+	ReplayBuffer.record_shot(origin, direction, ReplayBuffer.ACTOR_OTHER)
 	Bullet.spawn(get_tree().current_scene, origin, direction,
 			archetype.bullet_speed, true, hitbox_rids(), false)
 
 
+func capture_replay_pose() -> Dictionary:
+	var flags := 0
+	if revolver.drawn:
+		flags |= NetworkManager.POSE_FLAG_GUN_DRAWN
+	if not revolver.held:
+		flags |= NetworkManager.POSE_FLAG_GUN_FREE
+	return {
+		"root": global_transform,
+		"head": ($Head as Node3D).global_transform,
+		"left": global_transform,
+		"right": arm.global_transform,
+		"gun": revolver.global_transform,
+		"flags": flags,
+	}
+
+
+func apply_replay_pose(pose: Dictionary) -> void:
+	if _death_tween != null and _death_tween.is_valid():
+		_death_tween.kill()
+	global_transform = pose["root"]
+	arm.global_transform = pose["right"]
+	revolver.follow_parent = false
+	revolver.global_transform = pose["gun"]
+
+
+func clear_replay_pose() -> void:
+	revolver.follow_parent = true
+
+
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
-		region: StringName = CombatRules.REGION_TORSO, _self_inflicted := false) -> void:
+		region: StringName = CombatRules.REGION_TORSO, _self_inflicted := false,
+		_shooter_is_local := false) -> void:
 	if state == AIState.DEAD:
 		return
 	var result := CombatRules.resolve(region, health, damage_mult)
@@ -268,8 +302,9 @@ func _die(trail_points: PackedVector3Array) -> void:
 	torso_hitbox.set_deferred("monitorable", false)
 	arm_hitbox.set_deferred("monitorable", false)
 	leg_hitbox.set_deferred("monitorable", false)
-	var tween := create_tween()
-	tween.tween_property(self, "rotation:x", -PI / 2.0, 0.6) \
+	_death_tween = create_tween()
+	_death_tween.set_ignore_time_scale(true)
+	_death_tween.tween_property(self, "rotation:x", -PI / 2.0, 0.6) \
 			.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 	died.emit(trail_points)
 

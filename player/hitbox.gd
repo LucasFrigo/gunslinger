@@ -55,8 +55,9 @@ func place_along_limb(from: Vector3, to: Vector3, wrist_inset: float, radius_sca
 		from.lerp(end, 0.5))
 
 
-func receive_hit(trail_points: PackedVector3Array, self_inflicted := false) -> void:
+func receive_hit(trail_points: PackedVector3Array, self_inflicted := false,
+		shooter_is_local := false) -> void:
 	if GameManager == null or GameManager.duel == null or not GameManager.duel.accepts_hits():
 		return
 	if owner_entity != null and owner_entity.has_method("take_bullet_hit"):
-		owner_entity.take_bullet_hit(damage_mult, trail_points, region, self_inflicted)
+		owner_entity.take_bullet_hit(damage_mult, trail_points, region, self_inflicted, shooter_is_local)

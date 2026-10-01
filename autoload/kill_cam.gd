@@ -185,7 +185,22 @@ func _sample_trail(t: float) -> Vector3:
 
 
 func _end() -> void:
-	_teardown()
+	if DeathCam.wants_camera():
+		DeathCam.take_camera(_camera, _restore_camera, _spectator, _spectator_cam,
+				_restore_origin, _restore_xr_camera, _hmd_ref, _hmd_ref_valid)
+		_camera = null
+		_restore_camera = null
+		_spectator = null
+		_spectator_cam = null
+		_restore_origin = null
+		_restore_xr_camera = null
+		_hmd_ref_valid = false
+		set_process(false)
+		_set_kill_cam_fade(0.0)
+		_trail = PackedVector3Array()
+		is_playing = false
+	else:
+		_teardown()
 	finished.emit()
 
 

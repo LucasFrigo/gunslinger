@@ -7,7 +7,7 @@
 | In code | None yet — not an `AIArchetype`; roster today is Drunk / Sheriff / Ghost (`ai/archetypes/*.tres`) |
 | Design | [`../README.md`](../README.md) |
 
-Candidate for **More enemy NPCs** ([`Roadmap.md`](../../../Roadmap.md)).
+Candidate for **More enemy NPCs** in the Ideas section of [`Roadmap.md`](../../../Roadmap.md).
 
 ## Look
 

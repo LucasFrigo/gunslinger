@@ -11,15 +11,22 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
+None.
+
+---
+
+## Fixed
+
 ### BUG-013 — VR height and hitboxes wrong after booting seated
 
 | | |
 |---|---|
-| Status | `open` |
+| Status | `fixed` |
 | Severity | `major` |
 | Filed | 2026-09-29 |
+| Fixed | 2026-09-30 |
 | Platforms | Quest 3 (playtest). Any OpenXR session that starts seated is the same case. |
-| Areas | `player/player.gd` `_follow_body`, `player/vr_rig.gd`, `addons/godot-xr-tools/xr/start_xr.gd` |
+| Areas | `player/player.gd` `_follow_body`, `player/vr_rig.gd`, `ui/settings_menu.gd` |
 
 **What:** Booting the Quest 3 while sitting, then standing up to play, leaves height wrong. Hitboxes are the part that breaks: the head follows the headset, and the torso, legs, shoulders, and holster stay at a fixed offset from the player root.
 
@@ -28,11 +35,9 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 2. Stand up and play.
 3. The head sits off the body capsules. Shots that should hit the torso miss, or land on the wrong region.
 
-**Why the runtime does not save it:** The session asks for a floor space (`local-floor` / `bounded-floor` in `start_xr.gd`), and there is no in-game height. `_follow_body` pins the torso at `global_position.y + 1.1`, the legs at `+ 0.4`, and the holster at `+ 1.0`. A floor estimate taken while seated does not move those when you stand. Intended fix is the Settings height calibration on the roadmap.
+**Why the runtime does not save it:** The session asks for a floor space (`local-floor` / `bounded-floor` in `start_xr.gd`). `_follow_body` pins the torso at `global_position.y + 1.1`, the legs at `+ 0.4`, and the holster at `+ 1.0`. A floor estimate taken while seated does not move those when you stand.
 
----
-
-## Fixed
+**Fix:** Settings **Standing height** stores headset height above the player root (cm, or feet and inches). **Calibrate** samples the headset while you stand. **Reset view height**, the next VR launch, and each duel spawn set `XROrigin3D` Y so the headset matches that height. Torso, legs, and holster stay on those floor offsets. Until a height is saved, the runtime floor is left alone.
 
 ### BUG-011 — Revolver falls through the practice porch deck
 

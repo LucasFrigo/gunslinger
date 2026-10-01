@@ -69,6 +69,8 @@ var _leg_remaining := 0.0
 var _jam_clear_accum := 0.0
 var _held_bottle: PracticeBottle
 var _held_bottle_hand: StringName = &""
+var _replay_latched := false
+var _replay_latch: Dictionary = {}
 
 
 func _ready() -> void:
@@ -136,6 +138,8 @@ func _follow_body() -> void:
 	var yaw := Basis(Vector3.UP, head.basis.get_euler().y)
 
 	head_hitbox.global_transform = Transform3D(yaw, head.origin)
+	# Floor offsets. VR standing height moves the XR origin so the headset
+	# lines up with these; the capsules do not follow the live head Y.
 	var torso_pos := Vector3(head.origin.x, global_position.y + 1.1, head.origin.z)
 	torso_hitbox.global_transform = Transform3D(yaw, torso_pos)
 
@@ -171,6 +175,21 @@ func _follow_body() -> void:
 
 func get_head_position() -> Vector3:
 	return rig.get_head_transform().origin
+
+
+func headset_height_ready() -> bool:
+	return use_vr and rig is VRRig and (rig as VRRig).headset_height_ready()
+
+
+func measured_eye_height_m() -> float:
+	if not use_vr or not rig is VRRig:
+		return 0.0
+	return (rig as VRRig).measured_eye_height_m()
+
+
+func apply_saved_eye_height() -> void:
+	if use_vr and rig is VRRig:
+		(rig as VRRig).apply_saved_eye_height()
 
 
 func is_gun_drawn() -> bool:
@@ -211,6 +230,7 @@ func reset_for_duel(spawn: Transform3D) -> void:
 	health = max_health
 	alive = true
 	killed_by_self = false
+	_replay_latched = false
 	move_speed_mult = 1.0
 	_leg_remaining = 0.0
 	_clear_held_cartridge(true)
@@ -237,13 +257,14 @@ func reset_for_duel(spawn: Transform3D) -> void:
 
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
-		region: StringName = CombatRules.REGION_TORSO, self_inflicted := false) -> void:
+		region: StringName = CombatRules.REGION_TORSO, self_inflicted := false,
+		shooter_is_local := false) -> void:
 	if not alive or GameManager.in_practice():
 		return
 	if NetworkManager.is_active():
 		# MP: host resolves HP/status; application arrives via _mp_wound / _mp_finish.
 		if NetworkManager.is_host():
-			GameManager.duel.mp_report_hit(true, trail_points, region, damage_mult)
+			GameManager.duel.mp_report_hit(true, trail_points, region, damage_mult, shooter_is_local)
 		return
 	var result := CombatRules.resolve(region, health, damage_mult)
 	health = result["health"]
@@ -345,6 +366,7 @@ func _toggle_gun() -> void:
 
 func _attach_gun_to_hand(hand: StringName) -> void:
 	var was_holstered := not revolver.drawn
+	revolver.use_aim_steady = use_vr
 	revolver.attach_to(_gun_attach_node(hand), hand)
 	_holding_hand = GunHand.LEFT if hand == HAND_LEFT else GunHand.RIGHT
 	_dump_armed = true
@@ -380,6 +402,8 @@ func _holding_hand_name() -> StringName:
 
 
 func _on_trick_shot_changed(hand: StringName, pressed: bool) -> void:
+	if DeathCam.blocks_combat():
+		return
 	if not use_vr:
 		return
 	if not revolver.held or _holding_hand == GunHand.NONE:
@@ -573,10 +597,15 @@ func _on_menu_button() -> void:
 
 func _combat_blocked() -> bool:
 	return GameManager.is_pause_open() or GameManager.mode == GameManager.GameMode.BOOT \
-			or GameManager.is_menu_backdrop()
+			or GameManager.is_menu_backdrop() or DeathCam.blocks_combat()
 
 
 func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
+	if pressed and DeathCam.can_skip():
+		DeathCam.request_skip()
+		return
+	if DeathCam.blocks_combat():
+		return
 	# VR: the off-hand trigger throws the equipped prop instead of firing.
 	if use_vr and hand == off_hand_name() and props.has_prop():
 		props.on_fire_changed(pressed)
@@ -588,10 +617,14 @@ func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
 		return
 	if use_vr and (not revolver.held or hand != _holding_hand_name()):
 		return
+	if use_vr:
+		revolver.hold_steady_aim()
 	revolver.try_fire(GameManager.tuning["auto_cock"], rig.get_aim_override())
 
 
 func _on_prop_radial_changed(hand: StringName, pressed: bool) -> void:
+	if DeathCam.blocks_combat():
+		return
 	# VR: only the off-hand stick click opens the wheel. Releases carry the real
 	# hand so a gun swap mid-wheel cannot strand it open.
 	if use_vr:
@@ -603,6 +636,8 @@ func _on_prop_radial_changed(hand: StringName, pressed: bool) -> void:
 
 
 func _on_prop_fire_changed(_hand: StringName, pressed: bool) -> void:
+	if DeathCam.blocks_combat():
+		return
 	props.on_fire_changed(pressed)
 
 
@@ -799,6 +834,10 @@ func _on_revolver_state_changed() -> void:
 
 
 func _on_revolver_fired(origin: Vector3, direction: Vector3) -> void:
+	var shooter := ReplayBuffer.ACTOR_HOST
+	if NetworkManager.is_active() and not NetworkManager.is_host():
+		shooter = ReplayBuffer.ACTOR_OTHER
+	ReplayBuffer.record_shot(origin, direction, shooter)
 	var authoritative := not NetworkManager.is_active() or NetworkManager.is_host()
 	Bullet.spawn(get_tree().current_scene, origin, direction,
 			GameManager.tuning["bullet_speed"], authoritative, hitbox_rids(), true,
@@ -1130,13 +1169,7 @@ func _update_vr_reload_label(text: String) -> void:
 
 # -- Multiplayer pose broadcast ------------------------------------------------------
 
-func _broadcast_pose(delta: float) -> void:
-	if not NetworkManager.is_active():
-		return
-	_pose_accum += delta / maxf(Engine.time_scale, 0.001)
-	if _pose_accum < 1.0 / POSE_SEND_HZ:
-		return
-	_pose_accum = 0.0
+func pose_flags() -> int:
 	var flags := 0
 	if revolver.drawn:
 		flags |= NetworkManager.POSE_FLAG_GUN_DRAWN
@@ -1152,8 +1185,80 @@ func _broadcast_pose(delta: float) -> void:
 		flags |= NetworkManager.POSE_FLAG_HOLSTER_LEFT
 	if PlayerSettings.voice_muted:
 		flags |= NetworkManager.POSE_FLAG_VOICE_MUTED
+	var steadied := revolver.use_aim_steady and revolver.held and not revolver.is_spin_active() \
+			and PlayerSettings.aim_steady > 0.0
+	if steadied:
+		flags |= NetworkManager.POSE_FLAG_GUN_STEADIED
+	return flags
+
+
+## Death-cam latch: the dead body stays still in the clip. The winner keeps
+## sending live poses once the fly-along is over.
+func capture_replay_pose() -> Dictionary:
+	if not DeathCam.locks_recorded_body():
+		_replay_latched = false
+		_replay_latch = {}
+		return _live_replay_pose()
+	if _replay_latched:
+		return _replay_latch.duplicate(true)
+	var pose := _live_replay_pose()
+	_replay_latch = pose.duplicate(true)
+	_replay_latched = true
+	return pose
+
+
+func capture_live_replay_pose() -> Dictionary:
+	return _live_replay_pose()
+
+
+func apply_replay_pose(pose: Dictionary) -> void:
+	var head: Transform3D = pose["head"]
+	if rig is FlatRig:
+		var euler := head.basis.get_euler()
+		var flat := rig as FlatRig
+		flat.global_position = Vector3(head.origin.x, head.origin.y - FlatRig.EYE_HEIGHT, head.origin.z)
+		flat.set_replay_look(euler.y, euler.x)
+	revolver.follow_parent = false
+	revolver.reset_spin()
+	revolver.global_transform = pose["gun"]
+
+
+func clear_replay_pose() -> void:
+	_replay_latched = false
+	_replay_latch = {}
+	revolver.follow_parent = revolver.held or not revolver.drawn
+
+
+func _live_replay_pose() -> Dictionary:
+	var head := global_transform
+	var left := global_transform
+	var right := global_transform
+	if rig != null:
+		head = rig.get_head_transform()
+		left = rig.get_left_hand_transform()
+		right = rig.get_right_hand_transform()
+	return {
+		"root": global_transform,
+		"head": head,
+		"left": left,
+		"right": right,
+		"gun": revolver.global_transform,
+		"flags": pose_flags(),
+	}
+
+
+func _broadcast_pose(delta: float) -> void:
+	if not NetworkManager.is_active():
+		return
+	_pose_accum += delta / maxf(Engine.time_scale, 0.001)
+	if _pose_accum < 1.0 / POSE_SEND_HZ:
+		return
+	_pose_accum = 0.0
+	var flags := pose_flags()
 	var gun_xf := Transform3D.IDENTITY
-	if revolver.drawn and (not revolver.held or revolver.is_spin_active()):
+	var steadied := revolver.use_aim_steady and revolver.held and not revolver.is_spin_active() \
+			and PlayerSettings.aim_steady > 0.0
+	if revolver.drawn and (not revolver.held or revolver.is_spin_active() or steadied):
 		gun_xf = revolver.global_transform
 	NetworkManager.send_pose(
 		rig.get_head_transform(),

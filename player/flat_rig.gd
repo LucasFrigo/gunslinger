@@ -108,6 +108,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			menu_button_pressed.emit()
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		if DeathCam.blocks_look():
+			return
+		if DeathCam.consumes_look():
+			DeathCam.add_look((event as InputEventMouseMotion).relative)
+			return
 		if _prop_radial_active:
 			_prop_radial_vector = radial_vector_from_motion(
 					_prop_radial_vector, (event as InputEventMouseMotion).relative)
@@ -150,6 +155,10 @@ func _pointer_over_ui() -> bool:
 
 func _process(_delta: float) -> void:
 	# Look + lean only — walk lives in _physics_process so move_and_slide sees world.
+	if DeathCam.blocks_combat():
+		rotation.y = _yaw
+		camera.rotation.x = _pitch
+		return
 	rotation.y = _yaw
 	camera.rotation.x = _pitch
 	var lean_target := Input.get_action_strength("lean_right") - Input.get_action_strength("lean_left")
@@ -159,6 +168,9 @@ func _process(_delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if DeathCam.blocks_combat():
+		velocity = Vector3.ZERO
+		return
 	# Walk in world XZ from look yaw (not local basis + local position). The
 	# joiner's Player root is yawed 180° with EnemySpawn; mixing a world-facing
 	# camera with parent-local motion inverted A/D (BUG-006).
@@ -185,6 +197,13 @@ func _physics_process(delta: float) -> void:
 	if real_delta > 0.0:
 		var horizontal := Vector3(velocity.x, 0.0, velocity.z).length()
 		TimeManager.report_player_motion(horizontal)
+
+
+## Playback drives yaw/pitch from a recorded head instead of the mouse.
+func set_replay_look(world_yaw: float, pitch: float) -> void:
+	face_yaw(world_yaw)
+	_pitch = clampf(pitch, -1.4, 1.4)
+	camera.rotation.x = _pitch
 
 
 ## Face a world-space yaw (radians). The Player root already carries the spawn

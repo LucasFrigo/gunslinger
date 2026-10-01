@@ -139,7 +139,7 @@ func _on_impact(hit: Dictionary) -> void:
 		ImpactFeedback.body_impact(pos, normal, hitbox.region)
 		if authoritative and is_instance_valid(_trail):
 			var self_inflicted := from_local_player and hitbox.owner_entity == GameManager.local_player
-			hitbox.receive_hit(_trail.points.duplicate(), self_inflicted)
+			hitbox.receive_hit(_trail.points.duplicate(), self_inflicted, from_local_player)
 	elif collider != null and collider.has_method("take_bullet"):
 		collider.take_bullet(pos, direction)
 	else:

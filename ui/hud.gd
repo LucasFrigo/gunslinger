@@ -8,6 +8,7 @@ extends CanvasLayer
 @onready var health_status: Label = $HealthStatus
 @onready var practice_status: Label = $PracticeStatus
 @onready var version_tag: Label = $VersionTag
+@onready var replay_tag: Label = $ReplayTag
 @onready var red_flash: ColorRect = $RedFlash
 @onready var prop_radial: PropRadialOverlay = $PropRadial
 @onready var menu_holder: Control = $MenuHolder
@@ -23,6 +24,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_menu = $MenuHolder/MainMenu
 	pause_menu = $PauseHolder/PauseMenu
+	replay_tag.visible = false
 	message_label.visible = false
 	reload_status.visible = false
 	health_status.visible = false
@@ -111,6 +113,11 @@ func show_message(text: String, duration := 2.5) -> void:
 	timer.timeout.connect(func() -> void:
 		if _message_timer == timer:
 			message_label.visible = false)
+
+
+## Corner badge while the duel clip is playing.
+func set_replay_tag(on: bool) -> void:
+	replay_tag.visible = on
 
 
 ## Persistent reload / ammo readout. Empty string hides it.

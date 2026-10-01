@@ -145,6 +145,16 @@ var tuning := {
 	## still counts. Arm capsules also inset from the wrist so a normal forward
 	## shot clears the forearm.
 	"self_hit_grace": 0.28,
+	## Seconds of corpse orbit between the kill-cam fly-along and the replay.
+	"death_cam_hold": 2.0,
+	## Seconds of duel kept before the lethal hit.
+	"replay_pre_death": 5.0,
+	## Seconds of duel kept after the lethal hit.
+	"replay_post_death": 2.0,
+	## Tail of the clip that plays back in slow motion.
+	"replay_slow_seconds": 2.0,
+	## Playback rate during that tail (1 = normal speed).
+	"replay_slow_factor": 0.35,
 }
 
 var mode: int = GameMode.BOOT
@@ -443,6 +453,8 @@ func _despawn_avatar() -> void:
 
 func _on_pose_received(_peer_id: int, head: Transform3D, left: Transform3D,
 		right: Transform3D, flags: int, gun: Transform3D) -> void:
+	if DeathCam.blocks_remote_pose():
+		return
 	if is_instance_valid(remote_avatar):
 		remote_avatar.apply_pose(head, left, right, flags, gun)
 
@@ -455,6 +467,7 @@ func _on_shot_received(_peer_id: int, origin: Vector3, direction: Vector3) -> vo
 	if is_instance_valid(remote_avatar):
 		exclude = remote_avatar.hitbox_rids()
 		grace = remote_avatar.gun_hand_hitbox_rids()
+	ReplayBuffer.record_shot(origin, direction, ReplayBuffer.ACTOR_OTHER)
 	Bullet.spawn(main_root, origin, direction, tuning["bullet_speed"],
 			NetworkManager.is_host(), exclude, false,
 			float(tuning.get("self_hit_grace", 0.28)), grace)
@@ -482,7 +495,20 @@ func _on_duel_finished(local_player_won: bool, reason: String) -> void:
 			GameMode.MULTIPLAYER:
 				if NetworkManager.is_host():
 					_after_delay(5.0, _mp_rematch)
-	if KillCam.is_playing:
+	if DeathCam.is_active():
+		DeathCam.trailing_started.connect(schedule_next, CONNECT_ONE_SHOT)
+		if delay_vr_banner:
+			var banner_shown := [false]
+			var show_banner := func() -> void:
+				if banner_shown[0] or _action_generation != generation_at_finish:
+					return
+				banner_shown[0] = true
+				if is_instance_valid(local_player):
+					local_player.show_vr_message(message, 3.0)
+			if KillCam.is_playing:
+				KillCam.finished.connect(show_banner, CONNECT_ONE_SHOT)
+			DeathCam.skipped.connect(show_banner, CONNECT_ONE_SHOT)
+	elif KillCam.is_playing:
 		if delay_vr_banner:
 			KillCam.finished.connect(func() -> void:
 				if _action_generation != generation_at_finish:
@@ -545,6 +571,8 @@ func _place_local_player(spawn: Transform3D) -> void:
 
 
 func _clear_combatants() -> void:
+	DeathCam.stop()
+	ReplayBuffer.abort()
 	if is_instance_valid(current_ai):
 		current_ai.queue_free()
 	current_ai = null

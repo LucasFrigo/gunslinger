@@ -19,6 +19,14 @@ const SLOWMO_SLIDERS := {
 	"ramp_speed": [0.5, 20.0, 0.5],
 }
 
+const REPLAY_SLIDERS := {
+	"death_cam_hold": [0.0, 6.0, 0.1],
+	"replay_pre_death": [1.0, 12.0, 0.1],
+	"replay_post_death": [0.0, 6.0, 0.1],
+	"replay_slow_seconds": [0.0, 8.0, 0.1],
+	"replay_slow_factor": [0.05, 1.0, 0.01],
+}
+
 const MOVEMENT_SLIDERS := {
 	"walk_speed": [0.5, 6.0, 0.1],
 	"mouse_sensitivity": [0.0005, 0.01, 0.0001],
@@ -41,6 +49,7 @@ var _refreshing := false
 
 var _mode_option: OptionButton
 var _slowmo_sliders: Dictionary = {}
+var _replay_sliders: Dictionary = {}
 var _bullet_slider: HSlider
 var _bullet_value: Label
 var _ai_slider: HSlider
@@ -181,6 +190,7 @@ func _build_panel() -> void:
 
 	_build_presets_section(root)
 	_build_slowmo_section(root)
+	_build_replay_section(root)
 	_build_gunplay_section(root)
 	_build_movement_section(root)
 	_build_session_section(root)
@@ -249,6 +259,23 @@ func _build_slowmo_section(root: Control) -> void:
 	reset_button.text = "Reset time to 1.0"
 	reset_button.pressed.connect(TimeManager.reset)
 	root.add_child(reset_button)
+
+
+func _build_replay_section(root: Control) -> void:
+	_add_header(root, "Death cam / replay")
+	for property in REPLAY_SLIDERS:
+		var range_def: Array = REPLAY_SLIDERS[property]
+		var key := String(property)
+		var widgets := _add_slider(root, key, range_def[0], range_def[1], range_def[2],
+				float(GameManager.tuning[key]), _replay_slider_changed(key))
+		_replay_sliders[property] = widgets
+
+
+func _replay_slider_changed(key: String) -> Callable:
+	return func(value: float) -> void:
+		if _refreshing:
+			return
+		GameManager.set_tuning(key, value)
 
 
 func _build_gunplay_section(root: Control) -> void:
@@ -604,6 +631,11 @@ func _refresh_from_systems() -> void:
 		var value: float = TimeManager.get(property)
 		widgets["slider"].value = value
 		widgets["label"].text = "%.2f" % value
+	for property in _replay_sliders:
+		var replay_widgets: Dictionary = _replay_sliders[property]
+		var replay_value: float = float(GameManager.tuning[property])
+		replay_widgets["slider"].value = replay_value
+		replay_widgets["label"].text = "%.2f" % replay_value
 	if _bullet_slider != null:
 		_bullet_slider.value = GameManager.tuning["bullet_speed"]
 		_bullet_value.text = "%.2f" % GameManager.tuning["bullet_speed"]

@@ -16,6 +16,11 @@ const COLLISION_LAYER_WORLD := 1
 const COLLISION_LAYER_WEAPON := 32  # physics layer 6
 ## Local COM for hang gravity (barrel/cylinder), not the trigger pivot.
 const SPIN_COM_LOCAL := Vector3(0.0, 0.02, -0.09)
+## Slow-hand aim steady. Full damping at or below the slow rate, raw at or above
+## the fast rate. Tau is the slow-band time constant at strength 1.
+const AIM_STEADY_SLOW_DEG := 25.0
+const AIM_STEADY_FAST_DEG := 150.0
+const AIM_STEADY_MAX_TAU := 0.12
 
 @export var max_rounds := 6
 ## Single-action: must cock the hammer before each shot.
@@ -33,6 +38,8 @@ var gate_open := false
 var shooting_hand: StringName = &"right_hand"
 ## Frozen bodies do not inherit parent motion; copy parent pose while attached.
 var follow_parent := true
+## Local VR player only. AI and flat leave this false. Strength is PlayerSettings.aim_steady.
+var use_aim_steady := false
 ## Flat-only rapid-fire jam. VR / AI leave this false.
 var jam_enabled := false
 var jammed := false
@@ -50,6 +57,13 @@ var _spin_motion_init := false
 var _prev_parent_basis := Basis.IDENTITY
 var _prev_pivot_world := Vector3.ZERO
 var _prev_pivot_vel := Vector3.ZERO
+var _steady_ready := false
+var _steady_basis := Basis.IDENTITY
+var _steady_basis_prev := Basis.IDENTITY
+var _steady_raw_basis := Basis.IDENTITY
+var _steady_drop_frame := false
+var _steady_last_usec := 0
+var _steady_integrate_frame := -1
 
 @onready var _shot_audio: AudioStreamPlayer3D = _make_audio()
 
@@ -259,9 +273,38 @@ func reset_spin() -> void:
 	_relock_elapsed = 0.0
 	_spin_motion_init = false
 	_prev_pivot_vel = Vector3.ZERO
+	_reset_aim_steady()
 
 
-func _sync_follow_parent() -> void:
+func hold_steady_aim() -> void:
+	if not _should_steady_aim():
+		return
+	var p := get_parent() as Node3D
+	if p == null or not _steady_ready:
+		_steady_drop_frame = true
+		return
+	# Physics already folded this frame's wrist into the bore: roll that back.
+	# Otherwise latch so the upcoming integrate skips the click twitch.
+	if _steady_integrate_frame == Engine.get_physics_frames():
+		_steady_basis = _steady_basis_prev
+		_steady_raw_basis = p.global_transform.basis.orthonormalized()
+		_steady_last_usec = Time.get_ticks_usec()
+	else:
+		_steady_drop_frame = true
+	global_transform = Transform3D(_steady_basis, p.global_position)
+
+
+func _reset_aim_steady() -> void:
+	_steady_ready = false
+	_steady_drop_frame = false
+	_steady_integrate_frame = -1
+
+
+func _should_steady_aim() -> bool:
+	return use_aim_steady and held and PlayerSettings.aim_steady > 0.0
+
+
+func _sync_follow_parent(integrate := true) -> void:
 	if not follow_parent or not freeze:
 		return
 	var p := get_parent() as Node3D
@@ -269,17 +312,66 @@ func _sync_follow_parent() -> void:
 		return
 	if spinning or relocking:
 		_apply_hinge_pose(p)
-	else:
+		_steady_ready = false
+		return
+	if not _should_steady_aim():
 		global_transform = p.global_transform
+		_steady_ready = false
+		return
+	_apply_steady_pose(p, integrate)
+
+
+func _apply_steady_pose(p: Node3D, integrate: bool) -> void:
+	var raw := p.global_transform.basis.orthonormalized()
+	var origin := p.global_position
+	if not _steady_ready:
+		if not integrate:
+			global_transform = p.global_transform
+			return
+		_steady_basis = raw
+		_steady_basis_prev = raw
+		_steady_raw_basis = raw
+		_steady_ready = true
+		_steady_last_usec = Time.get_ticks_usec()
+		_steady_drop_frame = false
+		_steady_integrate_frame = Engine.get_physics_frames()
+		global_transform = Transform3D(_steady_basis, origin)
+		return
+	if not integrate:
+		global_transform = Transform3D(_steady_basis, origin)
+		return
+	var now := Time.get_ticks_usec()
+	var real_dt := float(now - _steady_last_usec) * 1.0e-6
+	if _steady_drop_frame or real_dt < 0.0001:
+		if _steady_drop_frame:
+			_steady_drop_frame = false
+			_steady_raw_basis = raw
+			_steady_last_usec = now
+		global_transform = Transform3D(_steady_basis, origin)
+		return
+	_steady_last_usec = now
+	var omega := _basis_angular_velocity(_steady_raw_basis, raw, real_dt).length()
+	_steady_raw_basis = raw
+	var slow_weight := 1.0 - smoothstep(
+			deg_to_rad(AIM_STEADY_SLOW_DEG), deg_to_rad(AIM_STEADY_FAST_DEG), omega)
+	var tau := AIM_STEADY_MAX_TAU * clampf(PlayerSettings.aim_steady, 0.0, 1.0) * slow_weight
+	_steady_basis_prev = _steady_basis
+	if tau <= 0.0001:
+		_steady_basis = raw
+	else:
+		var alpha := 1.0 - exp(-real_dt / tau)
+		_steady_basis = _steady_basis.slerp(raw, alpha).orthonormalized()
+	_steady_integrate_frame = Engine.get_physics_frames()
+	global_transform = Transform3D(_steady_basis, origin)
 
 
 func _process(_delta: float) -> void:
-	_sync_follow_parent()
+	_sync_follow_parent(false)
 
 
 func _physics_process(delta: float) -> void:
 	_integrate_spin(delta)
-	_sync_follow_parent()
+	_sync_follow_parent(true)
 
 
 func _pivot_local() -> Vector3:

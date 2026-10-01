@@ -11,6 +11,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Fixed
 
+- A VR session that started seated can be lined up after you stand: Settings **Reset view height** puts the headset at the saved standing height so the torso and holster meet the head. [BUG-013]
 - Practice porch: a dropped revolver stays on the deck planks instead of falling through onto the lot underneath.
 - VR pause no longer depends on the Meta or Steam menu buttons. The draw-hand stick click opens pause (the debug panel on the main menu). The off-hand click still opens the prop wheel. **Pause** can be rebound in Settings. Holster Side Left uses the left hand as that draw hand, including flat RMB.
 - Open gate rolls the cylinder out to the side and down instead of canting it in place. The swing mirrors when the revolver changes hands.
@@ -24,6 +25,10 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Added
 
+- Death cam and duel replay. After a killing shot the bullet fly-along still plays, then the dead player orbits the corpse while the winner keeps control. A couple of seconds later both watch the last moments from the killer's eyes until the shot lands, then the same orbit through the slow-motion tail. The end-duel guitar plays again when the replay reaches the killing shot. A REPLAY tag sits in the corner while the clip plays. After the clip the dead player stays on that orbit until the usual menu, next gauntlet fight, or rematch, and the winner is back on their character. Fire or the trigger skips the clip onto that orbit. Same sequence in single-player and 1v1. Fouls are unchanged.
+
+- VR **Aim Steady** in Settings (Quest and PCVR): a slow wrist damps the held revolver’s aim, a fast draw stays raw, and the trigger pull does not kick the shot. The slider goes down to raw. The other player sees that steadied gun. Flat aim is unchanged.
+- VR standing height in Settings (Quest and PCVR): set it in centimeters or feet and inches, or stand up straight and press **Calibrate**. **Reset view height** lines the headset up with that height in the current session, so a match that started seated can be fixed after you stand. The saved height also applies the next time you launch. Flat mode is unchanged.
 - Bottle off-hand prop: equip **Bottle** from the radial. Hold-to-charge throw matches the ace; a bullet or a hard impact shatters it with the same glass burst as a practice-hub rail bottle, and it does not come back. A still-whole loose bottle picks up with F / off-hand grip. Reselecting the wedge vends a fresh one. Rail bottles stay range targets.
 - Cigarette flight collision: a thrown cigarette that hits a wall or other solid turns around immediately instead of hanging at the far end; a practice bottle in its path shatters the same way a bullet or a hard throw would.
 - Coin toss off-hand prop: equip **Coin** from the radial. Flat **G** flips it straight up so it can land heads or tails back on the hand, or miss and fall; a miss is a real physics object that rests on the floor (F / off-hand grip picks it up). VR still drops it if the palm tilts. Debug panel **Coin Toss**.

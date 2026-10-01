@@ -1,6 +1,7 @@
 extends Node
 ## Autoload. Player-facing settings persisted to user://settings.cfg.
 ## Movement knobs stay on MovementConfig; holster side stays in GameManager.tuning.
+## VR standing eye height lives here; the rig applies it.
 
 const CONFIG_PATH := "user://settings.cfg"
 
@@ -11,6 +12,7 @@ signal listen_cancelled
 signal vr_source_captured(source: String)
 signal voice_changed
 signal audio_devices_changed
+signal eye_height_changed
 
 ## Name AudioServer uses for "follow the OS default".
 const DEFAULT_DEVICE := "Default"
@@ -109,6 +111,18 @@ var window_mode: int = WindowModeSetting.WINDOWED
 var window_width := 1280
 var window_height := 720
 
+## Headset height above the player root, in centimeters. Not stature.
+## `eye_height_set` stays false until Calibrate or an edit, so a fresh install
+## still trusts the OpenXR floor. The settings field previews PREVIEW until then.
+const EYE_HEIGHT_CM_MIN := 120
+const EYE_HEIGHT_CM_MAX := 220
+const EYE_HEIGHT_CM_PREVIEW := 170
+var eye_height_cm := EYE_HEIGHT_CM_PREVIEW
+var eye_height_set := false
+var eye_height_imperial := false
+## 0 is raw wrist tracking. 1 is full slow-hand damping. Same default on Quest and PCVR.
+var aim_steady := 0.5
+
 ## action StringName → source string (VR) or encoded event string (flat).
 var vr_binds: Dictionary = {}
 var flat_binds: Dictionary = {}
@@ -125,6 +139,49 @@ func _ready() -> void:
 	if apply_devices():
 		_save_config()  # a saved device is gone; do not ask for it again
 	apply_binds()
+
+
+func has_eye_height() -> bool:
+	return eye_height_set
+
+
+func eye_height_meters() -> float:
+	return float(eye_height_cm) / 100.0
+
+
+## What the settings field shows. Preview until the player commits a value.
+func display_eye_height_cm() -> int:
+	return eye_height_cm if eye_height_set else EYE_HEIGHT_CM_PREVIEW
+
+
+func cm_to_feet_inches(cm: int) -> Vector2i:
+	var total_in := int(round(float(cm) / 2.54))
+	return Vector2i(int(total_in / 12.0), total_in % 12)
+
+
+func feet_inches_to_cm(feet: int, inches: int) -> int:
+	return int(round(float(feet * 12 + inches) * 2.54))
+
+
+## Persists immediately. Does not move the XR origin; Reset / session start do.
+func set_eye_height_cm(cm: int) -> void:
+	eye_height_cm = clampi(cm, EYE_HEIGHT_CM_MIN, EYE_HEIGHT_CM_MAX)
+	eye_height_set = true
+	_save_config()
+	eye_height_changed.emit()
+
+
+func set_eye_height_imperial(enabled: bool) -> void:
+	if eye_height_imperial == enabled:
+		return
+	eye_height_imperial = enabled
+	_save_config()
+	eye_height_changed.emit()
+
+
+func set_aim_steady(value: float) -> void:
+	aim_steady = clampf(value, 0.0, 1.0)
+	_save_config()
 
 
 func set_master_volume(value: float) -> void:
@@ -611,6 +668,10 @@ func _save_config() -> void:
 	cfg.set_value("video", "window_mode", window_mode)
 	cfg.set_value("video", "window_width", window_width)
 	cfg.set_value("video", "window_height", window_height)
+	cfg.set_value("vr", "eye_height_cm", eye_height_cm)
+	cfg.set_value("vr", "eye_height_set", eye_height_set)
+	cfg.set_value("vr", "eye_height_imperial", eye_height_imperial)
+	cfg.set_value("vr", "aim_steady", aim_steady)
 	for action in VR_ACTIONS:
 		cfg.set_value("binds", "vr_%s" % String(action), get_vr_bind(action))
 	for action in FLAT_ACTIONS:
@@ -633,6 +694,12 @@ func _load_config() -> void:
 	window_mode = clampi(int(cfg.get_value("video", "window_mode", window_mode)), 0, WindowModeSetting.EXCLUSIVE)
 	window_width = maxi(int(cfg.get_value("video", "window_width", window_width)), 640)
 	window_height = maxi(int(cfg.get_value("video", "window_height", window_height)), 360)
+	eye_height_set = bool(cfg.get_value("vr", "eye_height_set", false))
+	eye_height_imperial = bool(cfg.get_value("vr", "eye_height_imperial", false))
+	if eye_height_set:
+		eye_height_cm = clampi(int(cfg.get_value("vr", "eye_height_cm", eye_height_cm)),
+				EYE_HEIGHT_CM_MIN, EYE_HEIGHT_CM_MAX)
+	aim_steady = clampf(float(cfg.get_value("vr", "aim_steady", aim_steady)), 0.0, 1.0)
 	for action in VR_ACTIONS:
 		var loaded := str(cfg.get_value("binds", "vr_%s" % String(action), get_vr_bind(action)))
 		if loaded in VR_SOURCES:

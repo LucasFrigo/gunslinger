@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://ui/hud.gd" id="1"]
 [ext_resource type="PackedScene" path="res://ui/main_menu.tscn" id="2"]
@@ -14,6 +14,12 @@ outline_color = Color(0, 0, 0, 1)
 [sub_resource type="LabelSettings" id="reload_settings"]
 font_size = 22
 outline_size = 6
+outline_color = Color(0, 0, 0, 1)
+
+[sub_resource type="LabelSettings" id="replay_settings"]
+font_size = 28
+font_color = Color(0.95, 0.88, 0.72, 1)
+outline_size = 8
 outline_color = Color(0, 0, 0, 1)
 
 [sub_resource type="LabelSettings" id="version_settings"]
@@ -72,6 +78,20 @@ offset_bottom = 52.0
 label_settings = SubResource("reload_settings")
 text = "Bottles 0"
 visible = false
+
+[node name="ReplayTag" type="Label" parent="."]
+visible = false
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -220.0
+offset_top = 16.0
+offset_right = -24.0
+offset_bottom = 56.0
+mouse_filter = 2
+label_settings = SubResource("replay_settings")
+text = "REPLAY"
+horizontal_alignment = 2
 
 [node name="VersionTag" type="Label" parent="."]
 anchors_preset = 3

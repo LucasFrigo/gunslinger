@@ -34,8 +34,10 @@ var _has_pose := false
 var _gun_drawn := false
 var _gun_free := false
 var _gun_spinning := false
+var _gun_steadied := false
 var _gun_held_left := false
 var _holster_left := false
+var replay_locked := false
 
 
 func _ready() -> void:
@@ -55,6 +57,43 @@ func _ready() -> void:
 	right_hand.global_transform = _target_right
 
 
+func capture_replay_pose() -> Dictionary:
+	var flags := 0
+	if _gun_drawn:
+		flags |= NetworkManager.POSE_FLAG_GUN_DRAWN
+	if _gun_free:
+		flags |= NetworkManager.POSE_FLAG_GUN_FREE
+	if _gun_spinning:
+		flags |= NetworkManager.POSE_FLAG_GUN_SPINNING
+	if _gun_steadied:
+		flags |= NetworkManager.POSE_FLAG_GUN_STEADIED
+	if _gun_held_left:
+		flags |= NetworkManager.POSE_FLAG_GUN_HELD_LEFT
+	if _holster_left:
+		flags |= NetworkManager.POSE_FLAG_HOLSTER_LEFT
+	return {
+		"root": global_transform,
+		"head": head.global_transform,
+		"left": left_hand.global_transform,
+		"right": right_hand.global_transform,
+		"gun": gun.global_transform,
+		"flags": flags,
+	}
+
+
+func apply_replay_pose(pose: Dictionary) -> void:
+	replay_locked = true
+	apply_pose(pose["head"], pose["left"], pose["right"], int(pose["flags"]), pose["gun"])
+	head.global_transform = pose["head"]
+	left_hand.global_transform = pose["left"]
+	right_hand.global_transform = pose["right"]
+	gun.global_transform = pose["gun"]
+
+
+func clear_replay_pose() -> void:
+	replay_locked = false
+
+
 func apply_pose(head_t: Transform3D, left_t: Transform3D, right_t: Transform3D, flags: int,
 		gun_t := Transform3D.IDENTITY) -> void:
 	_target_head = head_t
@@ -63,6 +102,7 @@ func apply_pose(head_t: Transform3D, left_t: Transform3D, right_t: Transform3D, 
 	_target_gun = gun_t
 	_gun_free = flags & NetworkManager.POSE_FLAG_GUN_FREE != 0
 	_gun_spinning = flags & NetworkManager.POSE_FLAG_GUN_SPINNING != 0
+	_gun_steadied = flags & NetworkManager.POSE_FLAG_GUN_STEADIED != 0
 	_gun_held_left = flags & NetworkManager.POSE_FLAG_GUN_HELD_LEFT != 0
 	_holster_left = flags & NetworkManager.POSE_FLAG_HOLSTER_LEFT != 0
 	set_voice_muted(flags & NetworkManager.POSE_FLAG_VOICE_MUTED != 0)
@@ -99,7 +139,7 @@ func _apply_gun_parent(drawn: bool) -> void:
 	var attach: Node3D = holster
 	if drawn:
 		attach = left_hand if _gun_held_left else right_hand
-	if _gun_spinning:
+	if _gun_spinning or _gun_steadied:
 		if gun is WeaponBase:
 			(gun as WeaponBase).follow_parent = false
 		if gun.get_parent() != attach:
@@ -115,7 +155,7 @@ func _apply_gun_parent(drawn: bool) -> void:
 
 
 func _process(delta: float) -> void:
-	var weight := clampf(LERP_SPEED * delta / maxf(Engine.time_scale, 0.001), 0.0, 1.0)
+	var weight := 1.0 if replay_locked else clampf(LERP_SPEED * delta / maxf(Engine.time_scale, 0.001), 0.0, 1.0)
 	head.global_transform = head.global_transform.interpolate_with(_target_head, weight)
 	left_hand.global_transform = left_hand.global_transform.interpolate_with(_target_left, weight)
 	right_hand.global_transform = right_hand.global_transform.interpolate_with(_target_right, weight)
@@ -143,7 +183,7 @@ func _process(delta: float) -> void:
 	arm_hitbox_r.place_along_limb(right_shoulder, right_hand.global_position,
 			Hitbox.ARM_GUN_HAND_WRIST_INSET if gun_right else Hitbox.ARM_WRIST_INSET,
 			Hitbox.ARM_GUN_HAND_RADIUS_SCALE if gun_right else Hitbox.ARM_RADIUS_SCALE)
-	if _gun_free or _gun_spinning:
+	if _gun_free or _gun_spinning or _gun_steadied:
 		gun.global_transform = gun.global_transform.interpolate_with(_target_gun, weight)
 
 
@@ -162,9 +202,10 @@ func _place_limb(node: Node3D, from: Vector3, to: Vector3) -> void:
 
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
-		region: StringName = CombatRules.REGION_TORSO, _self_inflicted := false) -> void:
+		region: StringName = CombatRules.REGION_TORSO, _self_inflicted := false,
+		shooter_is_local := false) -> void:
 	if NetworkManager.is_host():
-		GameManager.duel.mp_report_hit(false, trail_points, region, damage_mult)
+		GameManager.duel.mp_report_hit(false, trail_points, region, damage_mult, shooter_is_local)
 
 
 func hitbox_rids() -> Array[RID]:

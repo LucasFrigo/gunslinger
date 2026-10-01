@@ -1,7 +1,7 @@
 class_name SettingsMenu
 extends VBoxContainer
-## Player-facing knobs: volume, holster, VR turn, mouse sensitivity, flat video,
-## and combat button remapping. Not the F3 debug panel.
+## Player-facing knobs: volume, holster, VR height, VR aim steady, VR turn,
+## mouse sensitivity, flat video, and combat button remapping. Not the F3 debug panel.
 ## Persist immediately via PlayerSettings / MovementConfig / tuning.
 
 signal back_pressed
@@ -42,11 +42,19 @@ func _ready() -> void:
 	%TurnModeOption.item_selected.connect(_on_turn_mode_selected)
 	%SmoothTurnSlider.value_changed.connect(_on_smooth_turn_changed)
 	%SnapTurnSlider.value_changed.connect(_on_snap_turn_changed)
+	%AimSteadySlider.value_changed.connect(_on_aim_steady_changed)
 	%MouseSlider.value_changed.connect(_on_mouse_changed)
 	%WindowModeOption.item_selected.connect(_on_video_choice_changed)
 	%ResolutionOption.item_selected.connect(_on_video_choice_changed)
 	%ApplyVideoButton.pressed.connect(_on_apply_video)
 	%ResetBindsButton.pressed.connect(_on_reset_binds)
+	%HeightCmSpin.value_changed.connect(_on_height_cm_changed)
+	%HeightFeetSpin.value_changed.connect(_on_height_imperial_changed)
+	%HeightInchesSpin.value_changed.connect(_on_height_imperial_changed)
+	%HeightUnitButton.pressed.connect(_on_height_unit_pressed)
+	%CalibrateButton.pressed.connect(_on_calibrate_height)
+	%ResetHeightButton.pressed.connect(_on_reset_view_height)
+	PlayerSettings.eye_height_changed.connect(_refresh_height_rows)
 	PlayerSettings.binds_changed.connect(_refresh_bind_labels)
 	PlayerSettings.listen_cancelled.connect(_refresh_bind_labels)
 	visibility_changed.connect(_on_visibility_changed)
@@ -115,11 +123,14 @@ func refresh() -> void:
 	%SmoothTurnValue.text = "%d°/s" % int(round(MovementConfig.smooth_turn_speed))
 	%SnapTurnSlider.value = MovementConfig.snap_turn_angle
 	%SnapTurnValue.text = "%d°" % int(round(MovementConfig.snap_turn_angle))
+	%AimSteadySlider.value = PlayerSettings.aim_steady * 100.0
+	%AimSteadyValue.text = _aim_steady_text(%AimSteadySlider.value)
 	var mouse_t := inverse_lerp(MOUSE_MIN, MOUSE_MAX, MovementConfig.mouse_sensitivity)
 	%MouseSlider.value = clampf(mouse_t, 0.0, 1.0) * 100.0
 	%MouseValue.text = "%d" % int(round(%MouseSlider.value))
 	%WindowModeOption.selected = PlayerSettings.window_mode
 	_fill_resolution_options()
+	_refresh_height_rows()
 	_apply_platform_rows()
 	_refresh_bind_labels()
 	_refreshing = false
@@ -266,6 +277,8 @@ func _apply_platform_rows() -> void:
 	%OutputDeviceRow.visible = pick_devices
 	%DeviceHint.visible = pick_devices
 	%MicLevelRow.visible = VoiceChat.is_available()
+	%HeightBlock.visible = vr
+	%AimSteadyRow.visible = vr
 	%TurnRow.visible = vr
 	%SmoothTurnRow.visible = vr and MovementConfig.turn_mode == MovementConfig.TurnMode.SMOOTH
 	%SnapTurnRow.visible = vr and MovementConfig.turn_mode == MovementConfig.TurnMode.SNAP
@@ -324,6 +337,62 @@ func _on_output_device_selected(index: int) -> void:
 	PlayerSettings.set_output_device(str(%OutputDeviceOption.get_item_metadata(index)))
 
 
+func _refresh_height_rows() -> void:
+	var was_refreshing := _refreshing
+	_refreshing = true
+	var imperial := PlayerSettings.eye_height_imperial
+	var cm := PlayerSettings.display_eye_height_cm()
+	%HeightCmSpin.visible = not imperial
+	%HeightFeetSpin.visible = imperial
+	%HeightFeetLabel.visible = imperial
+	%HeightInchesSpin.visible = imperial
+	%HeightInchesLabel.visible = imperial
+	%HeightUnitButton.text = "cm" if imperial else "ft"
+	%HeightUnitButton.tooltip_text = "Show centimeters" if imperial else "Show feet and inches"
+	%HeightCmSpin.value = cm
+	var feet_in := PlayerSettings.cm_to_feet_inches(cm)
+	%HeightFeetSpin.value = feet_in.x
+	%HeightInchesSpin.value = feet_in.y
+	%ResetHeightButton.disabled = not PlayerSettings.has_eye_height()
+	_refreshing = was_refreshing
+
+
+func _on_height_cm_changed(value: float) -> void:
+	if _refreshing:
+		return
+	PlayerSettings.set_eye_height_cm(int(round(value)))
+
+
+func _on_height_imperial_changed(_value: float) -> void:
+	if _refreshing:
+		return
+	var cm := PlayerSettings.feet_inches_to_cm(
+			int(round(%HeightFeetSpin.value)), int(round(%HeightInchesSpin.value)))
+	PlayerSettings.set_eye_height_cm(cm)
+
+
+func _on_height_unit_pressed() -> void:
+	if _refreshing:
+		return
+	PlayerSettings.set_eye_height_imperial(not PlayerSettings.eye_height_imperial)
+
+
+func _on_calibrate_height() -> void:
+	var player := GameManager.local_player
+	if player == null or not player.headset_height_ready():
+		return
+	var cm := int(round(player.measured_eye_height_m() * 100.0))
+	PlayerSettings.set_eye_height_cm(cm)
+
+
+func _on_reset_view_height() -> void:
+	if not PlayerSettings.has_eye_height():
+		return
+	var player := GameManager.local_player
+	if player != null:
+		player.apply_saved_eye_height()
+
+
 func _on_holster_selected(index: int) -> void:
 	if _refreshing:
 		return
@@ -349,6 +418,19 @@ func _on_snap_turn_changed(value: float) -> void:
 	if _refreshing:
 		return
 	MovementConfig.set_value("snap_turn_angle", value)
+
+
+func _on_aim_steady_changed(value: float) -> void:
+	%AimSteadyValue.text = _aim_steady_text(value)
+	if _refreshing:
+		return
+	PlayerSettings.set_aim_steady(value / 100.0)
+
+
+func _aim_steady_text(value: float) -> String:
+	if value <= 0.0:
+		return "Raw"
+	return "%d%%" % int(round(value))
 
 
 func _on_mouse_changed(value: float) -> void:

@@ -2,8 +2,9 @@
 
 Briefing for business / pricing / go-to-market refinement.  
 **Audience:** planning agents or humans. **Source of truth for features:** [`FEATURES.md`](FEATURES.md), [`../Roadmap.md`](../Roadmap.md), [`../README.md`](../README.md). **Ship checklist:** [`RELEASE_TODOS.md`](RELEASE_TODOS.md).  
-**As of:** 2026-09-25 · **Code version:** `0.6.0-alpha` (see [`../VERSION`](../VERSION))  
-**$5.99 cash scenario:** 2026-09-25 · §6.1
+**As of:** 2026-10-01 · **Code version:** `0.6.0-alpha` snapshot (see [`../VERSION`](../VERSION); file is now `0.7.0-alpha`)  
+**$5.99 cash scenario:** 2026-09-25 · §6.1  
+**US sales forecast, 30% US withholding, Remessa Online:** 2026-10-01 · §6.2
 
 ---
 
@@ -89,9 +90,10 @@ Status vocabulary: `done` | `partial` | `planned`. Full detail: [`FEATURES.md`](
 | Priority band | Items |
 |---|---|
 | Polish | Shorter bullet trails, real SFX, barrel smoke, wind |
-| Medium | Airborne trick shots; more props and NPCs (first design: Half-head); duel vs up to 3 NPCs; death cam; ragdoll and dismemberment; train that crosses the lane; oil-field train; horseback duel |
-| Hard | Horde; duel replay; Mexican standoff (3 humans); 4-player MP; ranking / leaderboards (Steam only) |
+| Medium | Duel title cards; duel vs up to 3 NPCs; ragdoll and dismemberment |
+| Hard | Horde |
 | Very hard | Campaign; mod support |
+| Ideas (not ready) | Airborne trick shots; more props and NPCs; train that crosses the lane; oil-field train; horseback duel; Mexican standoff (3 humans); 4-player MP; ranking / leaderboards (Steam only) |
 
 ### Content depth implication for pricing
 
@@ -144,25 +146,25 @@ Developer is in Brazil; players need fair **BRL** (and other PPP regions). Prefe
 
 Brazil is price-sensitive and large on Steam — slight underpricing in BRL usually beats lost volume. Mirror PPP feel on Meta localization too.
 
-At $9.99 the §6.1 discovery story (main Quest store, organic Shorts and Reels, no ads, 2–3 years) still applies. Each copy pays about **US$4** to the developer instead of ~US$2.50, about 1.7× the $5.99 receipt. Expect a modest dip in units, not a collapse: $9.99 is still an impulse price. Planning take-home after the same 27,5% salary tax is about **R$19.000–51.000** over those three years (year 1 about **R$11.000–31.000**), versus **R$15.000–38.000** at $5.99. §6.1 keeps the worked $5.99 tables.
+At $9.99 the §6.1 discovery story (main Quest store, organic Shorts and Reels, no ads, 2–3 years) still applies. Each copy pays about **US$4** to the developer instead of ~US$2.50, about 1.6× the $5.99 receipt, before income tax and the transfer. Expect a modest dip in units, not a collapse: $9.99 is still an impulse price. Planning case is about **1.300–3.400** copies, of which about **600–1.500** are US sales (§6.2). Take-home after the 30% US withholding, Remessa Online, and IRPF is about **R$19.000–49.000** over those three years (year 1 about **R$11.000–29.000**), versus **R$14.500–36.000** at $5.99.
 
 ---
 
 ## 6. Revenue expectations (lifetime, rough)
 
-Assumptions: premium paid; ~30% store cut; after tax/refunds/regional mix, developer often keeps **~55–65% of gross** before personal/corporate income tax in Brazil.
+Assumptions: premium paid; ~30% store cut; after tax/refunds/regional mix, developer often keeps **~55–65% of gross** before personal income tax, the 30% US withholding, and the Remessa spread. About **45% of copies** are US sales (§6.2).
 
-Niche VR western duel (not a franchise hit):
+Niche VR western duel (not a franchise hit). “Dev net” here is after the store cut only. US withholding, IRPF, and Remessa are not in that column; the cash you can spend is §6.2.
 
-| Scenario | Copies (Quest + Steam, lifetime) | Gross USD | Dev net (ballpark) |
-|---|---|---|---|
-| Weak | 500–2,500 | $8k–$40k | ~$5k–$25k |
-| **Base (most likely if polished)** | 4,000–15,000 | $70k–$250k | **~$40k–$150k** |
-| Strong | 20,000–50,000+ | $350k–$900k+ | ~$200k–$550k+ |
+| Scenario | Copies (Quest + Steam, lifetime) | of which US (~45%) | Gross USD | Dev net before US tax, IRPF, Remessa |
+|---|---|---|---|---|
+| Weak | 500–2,500 | 200–1.100 | $8k–$40k | ~$5k–$25k |
+| **Base (most likely if polished)** | 4,000–15,000 | 1.800–6.800 | $70k–$250k | **~$40k–$150k** |
+| Strong | 20,000–50,000+ | 9.000–23.000+ | $350k–$900k+ | ~$200k–$550k+ |
 
-**Plan around:** the **$9.99** line in §5 (about **R$19.000–51.000** kept over 2–3 years under the §6.1 discovery assumptions). The table below is the upside **if** the game later supports a $15–20 price. Quest carries volume; Steam is the smaller slice and the only online lobby.  
+**Plan around:** the **$9.99** line in §5 (about **R$19.000–49.000** kept over 2–3 years under the §6.1 discovery assumptions and the §6.2 tax path). The table above is the upside **if** the game later supports a $15–20 price. Quest carries volume; Steam is the smaller slice and the only online lobby.  
 **Do not budget on** $1M+ Quest gross — rare (~100 apps cleared $1M gross on Quest in 2025 per Meta/public reporting).  
-**Worked cheap model:** $5.99 copy counts, year split, and tax math are §6.1. That price is a sale floor, not the list.
+**Worked cheap model:** $5.99 copy counts, year split, and the same tax math are §6.1. That price is a sale floor, not the list. The US forecast is §6.2.
 
 ### Levers that move outcomes
 
@@ -182,28 +184,80 @@ Modeled 2026-09-25. This is the outcome if the game ships at **US$5.99** instead
 - Cash outlay **~R$800**: Steam Direct fee (US$100) plus art. No ad spend.
 - Store page shows a finished indie look, not greybox. Discovery is organic YouTube Shorts and Reels posted around launch.
 - Planning and upside rows assume the **main Quest store**, not App Lab only. Quest is about two-thirds of units; SteamVR is the rest.
-- Developer keeps about **US$2.50 per copy** after the 30% store cut, regional prices, tax inside the shelf price, and ~10–12% refunds. FX used here: **~R$5.15 per USD** (Sep 2026).
+- Developer keeps about **US$2.50 per copy** after the 30% store cut, regional prices, tax inside the shelf price, and ~10–12% refunds. That figure is before US withholding, Remessa, and IRPF. FX used here: **~R$5.15 per USD** (Sep 2026).
 - Selling life is **about 2–3 years**. Roughly 60% of copies fall in year 1 (mostly the first 3 months, following the clips), ~25% in year 2 (seasonal sales and the Quest catalog), ~15% in year 3. After year 3 the tail is too small to plan on. A clip that hits late moves that year’s share with it.
-- About **60 net copies** cover the R$800. Valve credits the Steam Direct fee back after **US$1,000** adjusted gross revenue.
-- Take-home uses the developer’s salary of **~R$6.300/month net** (~R$8.400 gross). That already sits in the 27,5% IRPF bracket, past the 2026 zero-tax line (R$5.000/month and R$60.000/year), so game payouts are taxed at **27,5%** on top of salary. Brazil and the US have no income-tax treaty: Steam withholds 30% of the US-sourced slice only (often ~10–15% of the whole payout); Meta can do the same. That US tax is credited against the 27,5%, so it does not stack. About **R$72–73 of every R$100** the stores owe stays with the developer. Brazil’s share is settled on the annual return, not taken from the deposit — set aside ~15% of what hits the bank.
+- About **60 net copies** cover the R$800 at the store receipt, before the taxes in §6.2. Valve credits the Steam Direct fee back after **US$1,000** adjusted gross revenue.
+- Take-home uses the developer’s salary of **~R$6.300/month net** (~R$8.400 gross). That already sits in the 27,5% IRPF bracket, past the 2026 zero-tax line (R$5.000/month and R$60.000/year), so game payouts are taxed at **27,5%** on top of salary. About **45% of copies are US sales**, and those are about **65% of this receipt**. The US withholds **30%** of that US slice (no treaty). Remessa Online then takes about **2%** of what is wired (§6.2). The US tax is credited against the 27,5% on the annual return, so Brazil does not tax the US slice again. About **R$69 of every R$100** the stores owe stays with the developer. Set aside ~12% of what hits the bank for the Brazilian tax on the non-US slice.
 
-**Copies and take-home, full 2–3 year life** (Quest + Steam combined). “Stores owe” is the developer receipt after the store cut, before income tax.
+**Copies and take-home, full 2–3 year life** (Quest + Steam combined). “Stores owe” is the developer receipt after the store cut, before US withholding, Remessa, and IRPF. “You keep” uses the §6.2 path.
 
-| Outcome | Copies | Stores owe | You keep |
-|---|---|---|---|
-| Clips stay small, no Quest featuring | 400–1,000 | R$5.000–13.000 | **R$3.500–9.500** |
-| **Planning** | **1,500–4,000** | **R$21.000–52.000** | **R$15.000–38.000** |
-| One short travels, or Quest shows the page for a week | 5,000–12,000 | R$62.000–155.000 | **R$45.000–112.000** |
+| Outcome | Copies | of which US (~45%) | Stores owe | You keep |
+|---|---|---|---|---|
+| Clips stay small, no Quest featuring | 400–1,000 | 180–450 | R$5.000–13.000 | **R$3.500–9.000** |
+| **Planning** | **1,500–4,000** | **700–1.800** | **R$21.000–52.000** | **R$14.500–36.000** |
+| One short travels, or Quest shows the page for a week | 5,000–12,000 | 2.300–5.400 | R$62.000–155.000 | **R$43.000–107.000** |
 
-**Planning case over time** (1,500–4,000 copies). Shares are a typical shape, not a month-by-month forecast.
+**Planning case over time** (1,500–4,000 copies, about 700–1.800 of them US). Shares are a typical shape, not a month-by-month forecast.
 
 | When | Share of copies | You keep |
 |---|---|---|
-| Year 1, mostly the first 3 months | ~60% | **R$9.000–23.000** |
-| Year 2 | ~25% | **R$4.000–10.000** |
-| Year 3 | ~15% | **R$2.000–6.000** |
+| Year 1, mostly the first 3 months | ~60% | **R$9.000–22.000** |
+| Year 2 | ~25% | **R$3.500–9.000** |
+| Year 3 | ~15% | **R$2.000–5.500** |
 
 A normal year inside the planning case is a few thousand to the low twenties of thousands of reais, not the whole lifecycle at once. The salary already fills the top bracket every year, so spreading the payouts across three years does not lower the rate.
+
+### 6.2 US sales forecast and the path into Brazil
+
+Modeled 2026-10-01. This is the planning forecast for **where copies sell**, and what is left after the US tax and the transfer. The list price in the tables is **$9.99**. The $5.99 rows in §6.1 use the same rates.
+
+**Where the copies are assumed to sell**
+
+English store page, Quest about two-thirds of units. No measured store data yet.
+
+- About **45% of copies** are bought in the United States. The rest is Europe, the UK, Canada, Australia, Brazil, and a long tail.
+- US buyers pay the full USD list. PPP regions pay less, and VAT sits inside many non-US shelf prices. So the US is about **65% of what the stores owe**, not 45%.
+- Quest and Steam each apply their own 30% cut before this split. The 30% below is a second cut, taken only on the US slice, because the developer lives in Brazil.
+
+**One US copy, expected value** (store cut already out, ~11% refunds). Brazil adds no further income tax on this copy when the credit below is claimed.
+
+| List | Stores owe | US withholds 30% | Wired | After Remessa ~2% | In the bank |
+|---|---|---|---|---|---|
+| **$9.99** | ~US$6.20 | ~US$1.90 | ~US$4.35 | ~US$4.25 | **~R$22** |
+| $5.99 | ~US$3.75 | ~US$1.10 | ~US$2.60 | ~US$2.55 | **~R$13** |
+
+**$9.99 forecast, Quest + Steam, 2–3 years.** Copy counts are the §6.1 discovery case with the modest dip already in §5 (about 15% fewer copies than $5.99). US columns use 45% of copies and 65% of the receipt.
+
+| Outcome | Copies | US copies | Stores owe | US slice | US tax 30% | You keep |
+|---|---|---|---|---|---|---|
+| Clips stay small | 350–850 | 150–400 | R$7.000–18.000 | R$5.000–12.000 | R$1.500–3.500 | **R$5.000–12.000** |
+| **Planning** | **1.300–3.400** | **600–1.500** | **R$27.000–70.000** | **R$18.000–46.000** | **R$5.000–14.000** | **R$19.000–49.000** |
+| One short travels, or Quest features the page | 4.300–10.200 | 1.900–4.600 | R$88.000–210.000 | R$57.000–137.000 | R$17.000–41.000 | **R$61.000–146.000** |
+
+**Planning case over time** at $9.99 (1.300–3.400 copies, 600–1.500 of them US).
+
+| When | Share of copies | You keep |
+|---|---|---|
+| Year 1, mostly the first 3 months | ~60% | **R$11.000–29.000** |
+| Year 2 | ~25% | **R$5.000–12.000** |
+| Year 3 | ~15% | **R$3.000–7.000** |
+
+**Of every R$100 the stores owe** (both regions together):
+
+| Step | Leaves | Still there |
+|---|---|---|
+| US withholds 30% of the US slice (65% of the receipt) | R$19,50 | R$80,50 wired |
+| Remessa Online ~2% of the wire | R$1,60 | R$78,90 in the bank |
+| Brazil IRPF 27,5% on the non-US slice only (35%) | R$9,60 | **R$69 kept** |
+
+The US tax is credited against IRPF on the annual return, up to the Brazilian tax on that same income. 30% is more than 27,5%, so the credit uses up the Brazilian tax on US sales and the extra 2,5 points are not refunded. If that credit is not claimed, the same planning case keeps about **R$14.000–36.000** instead of **R$19.000–49.000**.
+
+**Remessa Online** (rates on their site, 2026-10-01). The developer is pessoa física, same as the salary in §6.1. Payout destination is Remessa’s USD details, then a rescue into the Brazilian account.
+
+- **IOF 0,38%** on money coming into Brazil. This is the tax. Source: Remessa help, “Taxas”.
+- **Their fee is a spread, not a tax.** Pessoa física example on the For Creators page: **1,64% + R$39,90** on a US$100 receipt. The same page says the cost starts at **0,7%** as the amount grows.
+- Tables use **~2%** of the wired amount (1,64% + 0,38% IOF) and leave out the R$39,90. That holds when each rescue is a few thousand reais. A US$100 rescue is closer to **10%** all-in, because R$39,90 dominates. Batch the rescues.
+- A company would use the lower PJ “recebimento de serviços” schedule (from 0,99% down to 0,60%, plus R$16,90 on small USD receipts). That path is not in these numbers.
 
 ---
 
@@ -218,7 +272,7 @@ Use these as questions to resolve; do not invent answers as shipped fact.
 - [ ] Whether campaign / horde / 3P ship in v1 or post-launch roadmap for DLC vs free updates.  
 - [ ] Publisher vs self-publish; funding / runway assumptions.  
 - [ ] Age rating, content descriptors (violence), localization of UI/text beyond EN.  
-- [ ] Tax / company setup for BR developer receiving USD from Steam + Meta.  
+- [ ] Tax / company setup. Working path is pessoa física + Remessa Online, with the 30% US withholding credited on the annual return (§6.2). A CNPJ would change the Remessa spread and the Brazilian tax. Not decided.  
 - [ ] Competitive teardown of current Quest western + duel titles (live prices, ratings, review counts).
 
 ---
@@ -239,11 +293,14 @@ STATUS (v0.6.0-alpha): Duel, reload, gauntlet, practice hub, props, LAN + Steam 
       the duel-end sting. Campaign/horde/3P/4P/leaderboards planned.
 PRICE REC: $9.99 list on Quest and Steam (~R$23–28 PPP). $14.99–$19.99 only if
       content and art grow. $5.99 is a sale price; worked model in §6.1.
-BRAZIL: Developer salaried ~R$6.3k/month net. $9.99 list ~R$23–28 PPP; sale floor ~R$19.
-      $15–20 shelf (~R$37–60) only if content grows.
-REVENUE: Plan the $9.99 list: about R$19k–51k kept over 2–3 years after IRPF,
-      same discovery as §6.1 (main Quest store, organic clips, no ads).
-      $5.99 sale case is ~R$15k–38k. The $70k–$250k gross band is only if priced at $15–20.
+BRAZIL: Developer salaried ~R$6.3k/month net, pessoa física. Payouts via Remessa
+      Online (~2% on a batched rescue: ~1.64% spread + 0.38% IOF). A US$100
+      rescue is ~10% because of a R$39.90 tariff. $9.99 list ~R$23–28 PPP.
+REVENUE: Plan $9.99: about R$19k–49k kept over 2–3 years. ~45% of copies are US
+      (~600–1,500 in the planning case) and ~65% of the receipt; the US withholds
+      30% of that slice before the wire. Credit it against IRPF so it does not
+      stack. $5.99 sale case is ~R$14.5k–36k. The $70k–$250k gross band is only
+      if priced at $15–20, and that column is before this tax path.
 COMPS: SUPERHOT VR ~$25 aspirational; Quest westerns mostly $8–$20. Duello! sits at $9.99.
 ASK: Lock $9.99 or not; Early Access vs 1.0; cross-buy; age rating.
 ```

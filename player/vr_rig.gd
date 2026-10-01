@@ -18,6 +18,8 @@ signal menu_button_pressed
 const HAND_LEFT := &"left_hand"
 const HAND_RIGHT := &"right_hand"
 const POINTER_LENGTH := 6.0
+## Below this, camera Y is still the identity pose and must not shift the origin.
+const MIN_TRACKED_HEAD_Y := 0.05
 const DIGITAL_SOURCES: Array[String] = [
 	"trigger_click",
 	"grip_click",
@@ -56,6 +58,8 @@ var _stick_down_latched := {HAND_LEFT: false, HAND_RIGHT: false}
 var _stick_trick_active := {HAND_LEFT: false, HAND_RIGHT: false}
 ## Hand whose stick is driving the prop radial, or empty when it is closed.
 var _prop_radial_hand: StringName = &""
+## True until a saved eye height has been written onto origin Y.
+var _eye_height_pending := false
 
 
 func _ready() -> void:
@@ -64,10 +68,40 @@ func _ready() -> void:
 	left_hand.button_released.connect(_on_left_button_released.bind())
 	right_hand.button_pressed.connect(_on_right_button.bind())
 	right_hand.button_released.connect(_on_right_button_released.bind())
+	if PlayerSettings.has_eye_height():
+		_eye_height_pending = true
 
 
 func get_head_transform() -> Transform3D:
 	return camera.global_transform
+
+
+## Headset is publishing a floor-relative pose, not the identity pose from boot.
+func headset_height_ready() -> bool:
+	return camera.has_tracking_data and camera.position.y > MIN_TRACKED_HEAD_Y
+
+
+## Eye height above the player root, including any origin Y already applied.
+func measured_eye_height_m() -> float:
+	var floor_y := 0.0
+	var body := get_parent() as Node3D
+	if body != null:
+		floor_y = body.global_position.y
+	return camera.global_position.y - floor_y
+
+
+## One shot. Crouch and stand still move the headset after this.
+## Returns false and stays pending when tracking has not arrived.
+func apply_saved_eye_height() -> bool:
+	if not PlayerSettings.has_eye_height():
+		_eye_height_pending = false
+		return false
+	if not headset_height_ready():
+		_eye_height_pending = true
+		return false
+	position.y = PlayerSettings.eye_height_meters() - camera.position.y
+	_eye_height_pending = false
+	return true
 
 
 func get_left_hand_transform() -> Transform3D:
@@ -180,9 +214,13 @@ func reset_locomotion() -> void:
 	var desired_yaw := global_transform.basis.get_euler().y
 	var head_yaw := camera.global_transform.basis.get_euler().y
 	_rotate_around_head(wrapf(desired_yaw - head_yaw, -PI, PI))
+	# position = 0 above cleared any standing-height correction.
+	apply_saved_eye_height()
 
 
 func _process(delta: float) -> void:
+	if _eye_height_pending:
+		apply_saved_eye_height()
 	if GameManager.is_pause_open() or get_tree().paused:
 		_update_pointer()
 		# Still poll stick-down while settings listen (pause / menu).
@@ -202,7 +240,9 @@ func get_stick(hand: StringName) -> Vector2:
 
 
 func _apply_locomotion(delta: float) -> float:
-	if KillCam.is_playing:
+	if KillCam.is_playing or DeathCam.blocks_combat():
+		if DeathCam.consumes_look():
+			DeathCam.add_stick(right_hand.get_vector2("primary"), delta)
 		return 0.0
 	var move_input := _deadzone(left_hand.get_vector2("primary"), MovementConfig.stick_deadzone)
 	var gun_hand := _held_gun_hand()

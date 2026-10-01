@@ -60,6 +60,8 @@ func stop() -> void:
 	state = State.IDLE
 	_ai = null
 	_peer_holstered = false
+	ReplayBuffer.abort()
+	DeathCam.stop()
 
 
 ## Hits only count during DRAW. Blocks post-foul / pre-bell damage (BUG-007).
@@ -70,7 +72,8 @@ func accepts_hits() -> bool:
 ## Host-side bullets report authoritative hits here during MP duels.
 ## `victim_is_local` is true when the HOST player was hit.
 func mp_report_hit(victim_is_local: bool, trail_points: PackedVector3Array,
-		region: StringName = CombatRules.REGION_TORSO, damage: float = 1.0) -> void:
+		region: StringName = CombatRules.REGION_TORSO, damage: float = 1.0,
+		shooter_is_local := false) -> void:
 	if not is_mp or not accepts_hits() or not NetworkManager.is_host():
 		return
 	var victim_is_host := victim_is_local
@@ -78,21 +81,23 @@ func mp_report_hit(victim_is_local: bool, trail_points: PackedVector3Array,
 		var result := CombatRules.resolve(region, _mp_health_host, damage)
 		_mp_health_host = result["health"]
 		if result["died"]:
-			_mp_finish.rpc(false, "Clean kill", trail_points)
+			_mp_finish.rpc(false, "Clean kill", trail_points, shooter_is_local, true)
 			return
 		_mp_wound.rpc(true, String(region), _mp_health_host)
 	else:
 		var peer_result := CombatRules.resolve(region, _mp_health_peer, damage)
 		_mp_health_peer = peer_result["health"]
 		if peer_result["died"]:
-			_mp_finish.rpc(true, "Clean kill", trail_points)
+			_mp_finish.rpc(true, "Clean kill", trail_points, shooter_is_local, false)
 			return
 		_mp_wound.rpc(false, String(region), _mp_health_peer)
 
 
-func notify_kill_shot(trail_points: PackedVector3Array) -> void:
+## `killer_id` / `victim_id` are ReplayBuffer actor ids (0 host or SP player, 1 AI or joiner).
+func notify_kill_shot(trail_points: PackedVector3Array, killer_id: int, victim_id: int) -> void:
 	_play_duel_end()
 	kill_cam_requested.emit(trail_points)
+	ReplayBuffer.mark_death(killer_id, victim_id)
 
 
 func _play_duel_end() -> void:
@@ -148,6 +153,7 @@ func _apply_state() -> void:
 	state_changed.emit(state)
 	match state:
 		State.STANDOFF:
+			ReplayBuffer.begin()
 			GameManager.show_message("Holster your weapon", 2.0)
 		State.WAIT_SIGNAL:
 			GameManager.show_message("Wait for the bell...", 2.0)
@@ -189,7 +195,7 @@ func _host_saw_foul() -> bool:
 		return false
 	var player := GameManager.local_player
 	if is_instance_valid(player) and player.is_gun_drawn():
-		_mp_finish.rpc(false, "Foul: host drew early", PackedVector3Array())
+		_mp_finish.rpc(false, "Foul: host drew early", PackedVector3Array(), false, false)
 		return true
 	return false
 
@@ -209,18 +215,19 @@ func _bind_player() -> void:
 func _on_enemy_died(trail_points: PackedVector3Array) -> void:
 	if not accepts_hits() or is_mp:
 		return
-	notify_kill_shot(trail_points)
+	notify_kill_shot(trail_points, ReplayBuffer.ACTOR_HOST, ReplayBuffer.ACTOR_OTHER)
 	_finish_sp(true, "Clean kill")
 
 
 func _on_player_died(trail_points: PackedVector3Array) -> void:
 	if not accepts_hits() or is_mp:
 		return  # host bullet code reports MP hits via mp_report_hit
-	notify_kill_shot(trail_points)
-	var reason := "Shot down"
+	var killer := ReplayBuffer.ACTOR_OTHER
 	var player := GameManager.local_player
 	if is_instance_valid(player) and player.killed_by_self:
-		reason = "You shot yourself"
+		killer = ReplayBuffer.ACTOR_HOST
+	notify_kill_shot(trail_points, killer, ReplayBuffer.ACTOR_HOST)
+	var reason := "You shot yourself" if is_instance_valid(player) and player.killed_by_self else "Shot down"
 	_finish_sp(false, reason)
 
 
@@ -237,6 +244,8 @@ func _finish_sp(local_won: bool, reason: String) -> void:
 
 @rpc("authority", "call_local", "reliable")
 func _mp_begin(scenario_index: int, time_of_day: float) -> void:
+	DeathCam.stop()
+	ReplayBuffer.abort()
 	is_mp = true
 	_peer_holstered = false
 	_mp_health_host = CombatRules.player_max_health()
@@ -259,7 +268,7 @@ func _mp_set_state(new_state: int) -> void:
 @rpc("any_peer", "call_remote", "reliable")
 func _mp_report_foul() -> void:
 	if NetworkManager.is_host() and state == State.WAIT_SIGNAL:
-		_mp_finish.rpc(true, "Foul: opponent drew early", PackedVector3Array())
+		_mp_finish.rpc(true, "Foul: opponent drew early", PackedVector3Array(), false, false)
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -282,13 +291,16 @@ func _mp_wound(victim_is_host: bool, region_str: String, new_health: float) -> v
 
 
 @rpc("authority", "call_local", "reliable")
-func _mp_finish(winner_is_host: bool, reason: String, trail_points: PackedVector3Array) -> void:
+func _mp_finish(winner_is_host: bool, reason: String, trail_points: PackedVector3Array,
+		killer_is_host: bool, victim_is_host: bool) -> void:
 	if state == State.RESOLUTION:
 		return
 	state = State.RESOLUTION
 	var local_won := winner_is_host == NetworkManager.is_host()
 	if not trail_points.is_empty():
-		notify_kill_shot(trail_points)
+		var killer := ReplayBuffer.ACTOR_HOST if killer_is_host else ReplayBuffer.ACTOR_OTHER
+		var victim := ReplayBuffer.ACTOR_HOST if victim_is_host else ReplayBuffer.ACTOR_OTHER
+		notify_kill_shot(trail_points, killer, victim)
 	if not local_won and is_instance_valid(GameManager.local_player):
 		GameManager.local_player.play_death_feedback()
 	duel_finished.emit(local_won, reason)
