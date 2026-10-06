@@ -5,7 +5,7 @@
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status  | `partial`                                                                                                                                                                           |
 | Kind    | Player                                                                                                                                                                              |
-| In code | Controller `player/player.tscn`. Look mesh `assets/models/characters/gunslinger.glb` (+ `gunslinger.blend`) exists and is not instanced on the player, AI, or the remote avatar yet |
+| In code | Controller `player/player.tscn`. Visible stand-in is the rigged mannequin `assets/models/characters/dummy.glb` (local player, AI, and remote avatar). The local head is hidden in first person until the corpse orbit. Legs step in place while the body moves. In VR the rest of the local body is hidden for now, so only the other player sees that step; the headset shows only the hands. Designed outfit `gunslinger.glb` (+ `gunslinger.blend`) is still not instanced |
 | Design  | `[../README.md](../README.md)`                                                                                                                                                      |
 
 

@@ -10,7 +10,7 @@ signal peer_left(peer_id: int)
 signal lan_hosts_updated(hosts: Array)
 signal steam_lobbies_updated(lobbies: Array)
 signal network_error(message: String)
-signal pose_received(peer_id: int, head: Transform3D, left: Transform3D, right: Transform3D, flags: int, gun: Transform3D)
+signal pose_received(peer_id: int, head: Transform3D, left: Transform3D, right: Transform3D, flags: int, gun: Transform3D, hands: int, objects: int, prop: Transform3D, round_xf: Transform3D)
 signal shot_received(peer_id: int, origin: Vector3, direction: Vector3)
 
 const POSE_FLAG_GUN_DRAWN := 1
@@ -21,6 +21,9 @@ const POSE_FLAG_GUN_HELD_LEFT := 16
 const POSE_FLAG_GUN_SPINNING := 32
 const POSE_FLAG_VOICE_MUTED := 64
 const POSE_FLAG_GUN_STEADIED := 128
+const POSE_FLAG_GATE_OPEN := 256
+## Chamber 0–5 lives in the next three bits. Bit 16 is the replay present flag.
+const POSE_FLAG_CHAMBER_SHIFT := 9
 const STEAM_REFRESH_SEC := 4.0
 const VERSION_HANDSHAKE_TIMEOUT := 3.0
 
@@ -439,15 +442,16 @@ func _version_reject(host_version: String) -> void:
 # -- Fast-path relays --------------------------------------------------------
 
 func send_pose(head: Transform3D, left: Transform3D, right: Transform3D, flags: int,
-		gun := Transform3D.IDENTITY) -> void:
+		gun := Transform3D.IDENTITY, hands := 0, objects := 0,
+		prop := Transform3D.IDENTITY, round_xf := Transform3D.IDENTITY) -> void:
 	if session_active and peer_count() > 0:
-		_pose.rpc(head, left, right, flags, gun)
+		_pose.rpc(head, left, right, flags, gun, hands, objects, prop, round_xf)
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
 func _pose(head: Transform3D, left: Transform3D, right: Transform3D, flags: int,
-		gun: Transform3D) -> void:
-	pose_received.emit(multiplayer.get_remote_sender_id(), head, left, right, flags, gun)
+		gun: Transform3D, hands: int, objects: int, prop: Transform3D, round_xf: Transform3D) -> void:
+	pose_received.emit(multiplayer.get_remote_sender_id(), head, left, right, flags, gun, hands, objects, prop, round_xf)
 
 
 func send_shot(origin: Vector3, direction: Vector3) -> void:

@@ -30,6 +30,8 @@ var _radial_hand: StringName = &""
 var _radial_index := -1
 var _vr_wheel: PropRadial
 var _fire_held := false
+var _replay_suspended := false
+var _replay_process_mode := Node.PROCESS_MODE_INHERIT
 
 
 ## Wedge under `vector` (x right, y up), or -1 for the cancel deadzone.
@@ -94,8 +96,29 @@ func current_prop() -> Node3D:
 	return _prop
 
 
+## Hide the live prop while a replay ghost follows the clip.
+func set_replay_suspended(suspended: bool) -> void:
+	if suspended == _replay_suspended:
+		return
+	_replay_suspended = suspended
+	if not has_prop():
+		return
+	if suspended:
+		_replay_process_mode = _prop.process_mode
+		_prop.process_mode = Node.PROCESS_MODE_DISABLED
+		_prop.visible = false
+		if _prop is RigidBody3D:
+			(_prop as RigidBody3D).freeze = true
+		return
+	_prop.process_mode = _replay_process_mode
+	_prop.visible = true
+	if _prop is RigidBody3D and _prop.is_loose():
+		(_prop as RigidBody3D).freeze = false
+
+
 ## New duel: drop whatever is in the hand and close any open wheel.
 func reset_for_duel() -> void:
+	_replay_suspended = false
 	_close_radial(false)
 	_fire_held = false
 	_clear_prop()

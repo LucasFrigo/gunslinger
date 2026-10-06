@@ -87,3 +87,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.015, -0.02)
 
 [node name="Muzzle" type="Marker3D" parent="." unique_id=129287370]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, -0.21)
+
+[node name="GripAnchor" type="Marker3D" parent="." unique_id=1187198542]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.035083443, -0.045, -0.0646835)

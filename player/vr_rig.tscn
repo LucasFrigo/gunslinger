@@ -33,6 +33,7 @@ tracker = &"left_hand"
 pose = &"aim"
 
 [node name="HandMesh" type="MeshInstance3D" parent="LeftHand" unique_id=1024353300]
+visible = false
 mesh = SubResource("mesh_hand")
 surface_material_override/0 = SubResource("mat_hand")
 
@@ -62,6 +63,7 @@ tracker = &"right_hand"
 pose = &"aim"
 
 [node name="HandMesh" type="MeshInstance3D" parent="RightHand" unique_id=1204979042]
+visible = false
 mesh = SubResource("mesh_hand")
 surface_material_override/0 = SubResource("mat_hand")
 

@@ -11,10 +11,25 @@ const ACTOR_OTHER := 1
 const ACTORS := 2
 const PRESENT := 1 << 16
 const XFORM_FLOATS := 7
-const ACTOR_FLOATS := 1 + XFORM_FLOATS * 5
+## flags + five body transforms, then an object word and the prop and round poses.
+const OBJECT_FLOATS := 1 + XFORM_FLOATS * 2
+const ACTOR_FLOATS := 1 + XFORM_FLOATS * 5 + OBJECT_FLOATS
 const SAMPLE_FLOATS := 1 + ACTOR_FLOATS * ACTORS
 const SAMPLES_PER_CHUNK := 8
 const _XFORM_KEYS: PackedStringArray = ["root", "head", "left", "right", "gun"]
+## Off-hand prop packed into the object word. 0 is an empty hand.
+const PROP_ID_MASK := 7
+const PROP_PLACE_SHIFT := 3
+const PROP_PLACE_MASK := 3
+const PROP_PLACE_NONE := 0
+const PROP_PLACE_HAND := 1
+const PROP_PLACE_WORLD := 2
+const ROUND_HELD := 1 << 5
+const PROP_NONE := 0
+const PROP_CIGARETTE := 1
+const PROP_COIN := 2
+const PROP_ACE := 3
+const PROP_BOTTLE := 4
 
 var is_sealed := false
 var death_time := -1.0
@@ -190,6 +205,9 @@ func _blank_pose() -> Dictionary:
 		"right": Transform3D.IDENTITY,
 		"gun": Transform3D.IDENTITY,
 		"flags": 0,
+		"objects": 0,
+		"prop": Transform3D.IDENTITY,
+		"round": Transform3D.IDENTITY,
 	}
 
 
@@ -270,10 +288,15 @@ func _blend_actors(a_actors: Array, b_actors: Array, u: float) -> Array:
 		var b: Dictionary = b_actors[i]
 		var flags_a := int(a.get("flags", 0))
 		var flags_b := int(b.get("flags", 0))
+		var obj_a := int(a.get("objects", 0))
+		var obj_b := int(b.get("objects", 0))
 		var pose := {}
 		for key in _XFORM_KEYS:
 			pose[key] = _lerp_xform(a[key], b[key], u)
 		pose["flags"] = flags_b if u >= 0.5 else flags_a
+		pose["objects"] = obj_b if u >= 0.5 else obj_a
+		pose["prop"] = _lerp_object_xform(a, b, "prop", obj_a, obj_b, u, false)
+		pose["round"] = _lerp_object_xform(a, b, "round", obj_a, obj_b, u, true)
 		blended.append(pose)
 	return blended
 
@@ -284,6 +307,53 @@ func _lerp_xform(a: Transform3D, b: Transform3D, u: float) -> Transform3D:
 	return Transform3D(Basis(qa.slerp(qb, u)), a.origin.lerp(b.origin, u))
 
 
+## A prop or round that is absent on one sample must not slide in from the origin.
+func _lerp_object_xform(a: Dictionary, b: Dictionary, key: String, obj_a: int, obj_b: int, u: float, round_bit: bool) -> Transform3D:
+	var on_a := _object_present(obj_a, round_bit)
+	var on_b := _object_present(obj_b, round_bit)
+	var xf_a := _xform_of(a, key)
+	var xf_b := _xform_of(b, key)
+	if on_a and on_b:
+		return _lerp_xform(xf_a, xf_b, u)
+	if on_b and u >= 0.5:
+		return xf_b
+	if on_a and u < 0.5:
+		return xf_a
+	if on_a:
+		return xf_a
+	if on_b:
+		return xf_b
+	return Transform3D.IDENTITY
+
+
+func _object_present(objects: int, round_bit: bool) -> bool:
+	if round_bit:
+		return objects & ROUND_HELD != 0
+	var place := (objects >> PROP_PLACE_SHIFT) & PROP_PLACE_MASK
+	return place != PROP_PLACE_NONE
+
+
+func _xform_of(pose: Dictionary, key: String) -> Transform3D:
+	return pose[key] if pose.has(key) else Transform3D.IDENTITY
+
+
+func _append_xform(buf: PackedFloat32Array, xf: Transform3D) -> void:
+	var q := xf.basis.orthonormalized().get_rotation_quaternion()
+	buf.append(q.x)
+	buf.append(q.y)
+	buf.append(q.z)
+	buf.append(q.w)
+	buf.append(xf.origin.x)
+	buf.append(xf.origin.y)
+	buf.append(xf.origin.z)
+
+
+func _read_xform(buf: PackedFloat32Array, i: int) -> Transform3D:
+	var q := Quaternion(buf[i], buf[i + 1], buf[i + 2], buf[i + 3])
+	var origin := Vector3(buf[i + 4], buf[i + 5], buf[i + 6])
+	return Transform3D(Basis(q), origin)
+
+
 func _pack_sample(buf: PackedFloat32Array, sample: Dictionary) -> void:
 	buf.append(float(sample["t"]))
 	var actors: Array = sample["actors"]
@@ -291,15 +361,10 @@ func _pack_sample(buf: PackedFloat32Array, sample: Dictionary) -> void:
 		var pose: Dictionary = actors[i] if i < actors.size() else _blank_pose()
 		buf.append(float(pose.get("flags", 0)))
 		for key in _XFORM_KEYS:
-			var xf: Transform3D = pose[key]
-			var q := xf.basis.orthonormalized().get_rotation_quaternion()
-			buf.append(q.x)
-			buf.append(q.y)
-			buf.append(q.z)
-			buf.append(q.w)
-			buf.append(xf.origin.x)
-			buf.append(xf.origin.y)
-			buf.append(xf.origin.z)
+			_append_xform(buf, pose[key])
+		buf.append(float(pose.get("objects", 0)))
+		_append_xform(buf, _xform_of(pose, "prop"))
+		_append_xform(buf, _xform_of(pose, "round"))
 
 
 func _unpack_sample(buf: PackedFloat32Array, offset: int) -> Dictionary:
@@ -312,10 +377,14 @@ func _unpack_sample(buf: PackedFloat32Array, offset: int) -> Dictionary:
 		i += 1
 		var pose := {"flags": flags}
 		for key in _XFORM_KEYS:
-			var q := Quaternion(buf[i], buf[i + 1], buf[i + 2], buf[i + 3])
-			var origin := Vector3(buf[i + 4], buf[i + 5], buf[i + 6])
-			pose[key] = Transform3D(Basis(q), origin)
+			pose[key] = _read_xform(buf, i)
 			i += XFORM_FLOATS
+		pose["objects"] = int(buf[i])
+		i += 1
+		pose["prop"] = _read_xform(buf, i)
+		i += XFORM_FLOATS
+		pose["round"] = _read_xform(buf, i)
+		i += XFORM_FLOATS
 		actors.append(pose)
 	return {"t": t, "actors": actors, "next": i}
 

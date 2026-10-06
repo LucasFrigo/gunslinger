@@ -306,6 +306,8 @@ func _enter_trailing() -> void:
 		_radius = ORBIT_RADIUS
 		_pitch = ORBIT_PITCH
 		_yaw = 0.6
+	# After this frame's IK, so the stashed death pose is the one that sticks.
+	_freeze_replay_bodies()
 	phase = Phase.TRAILING
 	if _local_is_victim():
 		_ensure_camera()
@@ -374,6 +376,13 @@ func _restore_stash() -> void:
 			node.apply_replay_pose(pose)
 	_stashed.clear()
 	_unlock_winner()
+
+
+func _freeze_replay_bodies() -> void:
+	for actor_id in [ReplayBuffer.ACTOR_HOST, ReplayBuffer.ACTOR_OTHER]:
+		var node := ReplayBuffer.actor_node(actor_id)
+		if is_instance_valid(node) and node is Player:
+			(node as Player).freeze_replay_body.call_deferred()
 
 
 func _unlock_winner() -> void:

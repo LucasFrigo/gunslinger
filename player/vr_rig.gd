@@ -1,11 +1,11 @@
 class_name VRRig
 extends XROrigin3D
 ## VR rig: OpenXR camera + controllers, laser pointer for 3D UI panels,
-## continuous thumbstick locomotion (left stick move, right stick turn), and
-## physical + stick motion reporting for the Superhot slow-mo mode.
+## continuous thumbstick locomotion (left stick move, right stick turn;
+## the right stick scrolls instead while the laser is on a scrollable window),
+## and physical + stick motion reporting for the Superhot slow-mo mode.
 ## Combat buttons dispatch through PlayerSettings bind table.
-## Placeholder hand meshes -- swap for real hand models under LeftHand /
-## RightHand without touching this script.
+## Controller box meshes stay hidden. The mannequin hands are the visible hands.
 
 signal trigger_changed(hand: StringName, pressed: bool)
 signal grip_changed(hand: StringName, pressed: bool)
@@ -77,8 +77,10 @@ func get_head_transform() -> Transform3D:
 
 
 ## Headset is publishing a floor-relative pose, not the identity pose from boot.
+## Godot 4.7 XRCamera3D is a Camera3D, not an XRNode3D, so it has no tracking
+## query. The runtime leaves local Y at the scene origin until a pose arrives.
 func headset_height_ready() -> bool:
-	return camera.has_tracking_data and camera.position.y > MIN_TRACKED_HEAD_Y
+	return camera != null and camera.position.y > MIN_TRACKED_HEAD_Y
 
 
 ## Eye height above the player root, including any origin Y already applied.
@@ -163,6 +165,14 @@ func get_hand_node(hand: StringName) -> Node3D:
 	return left_hand if hand == HAND_LEFT else right_hand
 
 
+## Analog trigger squeeze, 0–1. Only valid while fire is bound to the trigger.
+func trigger_amount(hand: StringName) -> float:
+	var ctrl := get_hand_node(hand) as XRController3D
+	if ctrl == null:
+		return 0.0
+	return clampf(ctrl.get_float(&"trigger"), 0.0, 1.0)
+
+
 ## While the prop radial is open, that stick is stolen from locomotion.
 func set_prop_radial_active(active: bool, hand: StringName = &"") -> void:
 	_prop_radial_hand = hand if active else &""
@@ -221,15 +231,15 @@ func reset_locomotion() -> void:
 func _process(delta: float) -> void:
 	if _eye_height_pending:
 		apply_saved_eye_height()
+	_update_pointer()
+	_apply_menu_scroll(delta)
 	if GameManager.is_pause_open() or get_tree().paused:
-		_update_pointer()
 		# Still poll stick-down while settings listen (pause / menu).
 		_update_stick_binds()
 		return
 	var stick_speed := _apply_locomotion(delta)
 	_update_hand_speeds(delta)
 	_report_motion(delta, stick_speed)
-	_update_pointer()
 	_update_stick_binds()
 
 
@@ -245,6 +255,8 @@ func _apply_locomotion(delta: float) -> float:
 			DeathCam.add_stick(right_hand.get_vector2("primary"), delta)
 		return 0.0
 	var move_input := _deadzone(left_hand.get_vector2("primary"), MovementConfig.stick_deadzone)
+	if GameManager.in_mesh_lab() and not MeshLabMotion.walk:
+		move_input = Vector2.ZERO
 	var gun_hand := _held_gun_hand()
 	# Steal gun-hand stick Y when a combat bind uses stick_down (cock or spin).
 	if PlayerSettings.vr_uses_stick_down() and gun_hand == HAND_LEFT:
@@ -261,7 +273,7 @@ func _apply_locomotion(delta: float) -> float:
 	global_position += motion
 
 	var turn_input := right_hand.get_vector2("primary")
-	if _prop_radial_hand == HAND_RIGHT:
+	if _prop_radial_hand == HAND_RIGHT or _menu_scroll_focused():
 		turn_input = Vector2.ZERO
 	_apply_turn(delta, turn_input)
 
@@ -421,9 +433,6 @@ func _dispatch_button(hand: StringName, button: String, pressed: bool) -> void:
 		return
 	var action := _action_for_hand(hand, button)
 	if action == &"":
-		# Unbound source: left B still opens debug when not a combat bind.
-		if pressed and hand == HAND_LEFT and button == "by_button":
-			gate_pressed.emit(HAND_LEFT)
 		return
 	if action == &"pause":
 		if pressed:
@@ -479,8 +488,6 @@ func _emit_action(hand: StringName, action: StringName, pressed: bool) -> void:
 			prop_radial_changed.emit(hand, pressed)
 		_:
 			pass
-	# Left B opens debug when that press is not consumed as gun-hand gate —
-	# handled in player._on_gate_pressed when gate_pressed fires on left.
 
 
 func _update_stick_binds() -> void:
@@ -488,6 +495,8 @@ func _update_stick_binds() -> void:
 	var gun_hand := _held_gun_hand()
 	for hand in [HAND_LEFT, HAND_RIGHT]:
 		var stick := get_stick(hand)
+		if hand == HAND_RIGHT and _menu_scroll_focused():
+			stick = Vector2.ZERO
 		var down := stick.y <= -thresh
 		var up := stick.y >= thresh
 		var latched: bool = _stick_down_latched[hand]
@@ -555,6 +564,8 @@ func _update_pointer() -> void:
 					panel = candidate
 					hit_point = pointer_ray.get_collision_point()
 					break
+	if _pointer_panel != panel and _pointer_panel != null and _trigger_down:
+		_pointer_panel.pointer_cancel()
 	_pointer_panel = panel
 	if panel != null:
 		panel.pointer_move(hit_point)
@@ -564,6 +575,24 @@ func _update_pointer() -> void:
 		laser.position.z = -distance / 2.0
 	else:
 		laser.visible = false
+
+
+## Laser is on a window that should take the turn stick.
+func _menu_scroll_focused() -> bool:
+	if _pointer_panel == null or not _pointer_panel.has_scroll_target():
+		return false
+	if _prop_radial_hand == HAND_RIGHT:
+		return false
+	if KillCam.is_playing or DeathCam.consumes_look():
+		return false
+	return true
+
+
+func _apply_menu_scroll(delta: float) -> void:
+	if not _menu_scroll_focused():
+		return
+	var stick := _deadzone(get_stick(HAND_RIGHT), MovementConfig.stick_deadzone)
+	_pointer_panel.apply_stick_scroll(stick.y, delta)
 
 
 func _move_speed_mult() -> float:

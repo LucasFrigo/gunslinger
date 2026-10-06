@@ -16,6 +16,9 @@ func setup(labels: PackedStringArray) -> void:
 	_hint = _make_label("", Vector3.ZERO, 20)
 	for i in labels.size():
 		var angle := TAU * float(i) / float(labels.size())
+		# Clockwise from the top, same order as `PropController.highlight_index`
+		# and the flat overlay. `use_model_front` below puts local +X on the
+		# viewer's right, so +sin walks that way.
 		var offset := Vector3(sin(angle) * RADIUS, cos(angle) * RADIUS, 0.0)
 		_wedges.append(_make_label(labels[i], offset, 26))
 	set_highlight(-1)
@@ -41,7 +44,9 @@ func _process(_delta: float) -> void:
 		return
 	if absf(to_camera.normalized().dot(Vector3.UP)) > 0.99:
 		return
-	global_basis = Basis.looking_at(to_camera, Vector3.UP)
+	# Label3D draws on +Z. Model-front aims that face at the HMD; the default
+	# -Z aim shows the double-sided glyphs from behind, so the words read backwards.
+	global_basis = Basis.looking_at(to_camera, Vector3.UP, true)
 
 
 func _make_label(text: String, offset: Vector3, font_size: int) -> Label3D:

@@ -71,6 +71,28 @@ var _held_bottle: PracticeBottle
 var _held_bottle_hand: StringName = &""
 var _replay_latched := false
 var _replay_latch: Dictionary = {}
+var _replay_body_driven := false
+var _replay_travel: Marker3D
+var _replay_objects: ReplayObjects
+var _dummy: DummyBody
+var _wrist_l: Marker3D
+var _wrist_r: Marker3D
+var _grip_down: Dictionary = {}
+var _trigger_down: Dictionary = {}
+var _wrist_synced: Dictionary = {}
+var _wrist_lock: Dictionary = {}
+var _wrist_from_local: Dictionary = {}
+var _wrist_blend: Dictionary = {}
+var _mesh_lab_parked := false
+var _mesh_lab_head_held := false
+var _mesh_lab_body_yaw := 0.0
+var _mesh_lab_pitch := 0.0
+var _mesh_lab_roll := 0.0
+var _mesh_lab_hands_held := false
+var _mesh_lab_freeze_l: Marker3D
+var _mesh_lab_freeze_r: Marker3D
+var _mesh_lab_cull_saved := false
+var _mesh_lab_cull_mask := 0
 
 
 func _ready() -> void:
@@ -114,6 +136,24 @@ func _ready() -> void:
 	_holding_hand = GunHand.NONE
 	_refresh_reload_status()
 	set_reload_volume_debug(DebugMenu.show_reload_volumes)
+	_dummy = DummyBody.spawn(self)
+	_dummy.follow_travel(rig)
+	_dummy.set_tint(Color(0.62, 0.60, 0.58))
+	_wrist_l = _make_wrist_marker("WristL")
+	_wrist_r = _make_wrist_marker("WristR")
+	# After the mannequin's 180° yaw, +X is the right arm.
+	_dummy.drive_arm(false, _wrist_l, true, DummyBody.WRIST_INSET)
+	_dummy.drive_arm(true, _wrist_r, true, DummyBody.WRIST_INSET)
+	_dummy.set_head_hidden(true)
+	_dummy.set_first_person_clip(true)
+	if use_vr:
+		_dummy.set_body_shelved(true)
+		_dummy.set_hand_scale(DummyBody.VR_HAND_SCALE)
+		_hide_vr_hand_boxes()
+	var drive := WristDrive.new()
+	drive.host = self
+	drive.process_priority = DummyBody.WRIST_PRIORITY
+	add_child(drive)
 
 
 func _physics_process(delta: float) -> void:
@@ -161,6 +201,29 @@ func _follow_body() -> void:
 	leg_hitbox.global_transform = Transform3D(
 		yaw, Vector3(head.origin.x, global_position.y + 0.4, head.origin.z))
 
+	# Alive: the mannequin stands under the head. Death freezes that pose for the orbit.
+	if _dummy != null and alive:
+		var body_yaw := PI + wrapf(head.basis.get_euler().y - global_rotation.y, -PI, PI)
+		var look_pitch := DummyBody.pitch_from_basis(head.basis)
+		if use_vr:
+			var look_roll := DummyBody.roll_from_basis(head.basis)
+			if GameManager.in_mesh_lab() and not MeshLabMotion.head:
+				if not _mesh_lab_head_held:
+					_mesh_lab_head_held = true
+					_mesh_lab_body_yaw = body_yaw
+					_mesh_lab_pitch = look_pitch
+					_mesh_lab_roll = look_roll
+				body_yaw = _mesh_lab_body_yaw
+				look_pitch = _mesh_lab_pitch
+				look_roll = _mesh_lab_roll
+			else:
+				_mesh_lab_head_held = false
+			_dummy.place_toward_head(
+				head.origin, body_yaw, look_pitch, rig.global_position, look_roll)
+		else:
+			_dummy.place_on_floor(head.origin, body_yaw)
+			_dummy.drive_look(look_pitch)
+
 	# Holster rides the chosen hip, following the head's yaw.
 	var hip := HOLSTER_HIP
 	if int(GameManager.tuning["holster_side"]) != 0:
@@ -171,6 +234,220 @@ func _follow_body() -> void:
 
 	# Ammo belt around the waist / lower torso.
 	ammo_belt.global_transform = Transform3D(yaw, torso_pos)
+
+
+func _make_wrist_marker(marker_name: String) -> Marker3D:
+	var marker := Marker3D.new()
+	marker.name = marker_name
+	add_child(marker)
+	return marker
+
+
+func _hide_vr_hand_boxes() -> void:
+	for path in ["LeftHand/HandMesh", "RightHand/HandMesh"]:
+		var box: MeshInstance3D = rig.get_node_or_null(path) as MeshInstance3D
+		if box != null:
+			box.visible = false
+
+
+## Runs after the camera and the revolver, before arm IK.
+func drive_wrists_late(delta: float) -> void:
+	if _dummy == null or not alive or rig == null:
+		return
+	var head: Transform3D = rig.get_head_transform()
+	var yaw := Basis(Vector3.UP, head.basis.get_euler().y)
+	var torso_pos := Vector3(head.origin.x, global_position.y + 1.1, head.origin.z)
+	if use_vr and rig is VRRig:
+		var vr := rig as VRRig
+		if GameManager.in_mesh_lab() and not MeshLabMotion.hands:
+			_drive_frozen_wrists(vr)
+			return
+		_mesh_lab_hands_held = false
+		_drive_vr_wrist(HAND_LEFT, vr, delta)
+		_drive_vr_wrist(HAND_RIGHT, vr, delta)
+		return
+	var left_hang := torso_pos + yaw * Vector3(
+			-ARM_FLAT_HAND_LOCAL.x, ARM_FLAT_HAND_LOCAL.y, ARM_FLAT_HAND_LOCAL.z)
+	var right_hang := torso_pos + yaw * ARM_FLAT_HAND_LOCAL
+	_drive_flat_wrist(HAND_LEFT, left_hang, yaw, delta)
+	_drive_flat_wrist(HAND_RIGHT, right_hang, yaw, delta)
+
+
+func _drive_frozen_wrists(vr: VRRig) -> void:
+	# Parent to the mannequin so a frozen pose stays on the body while the
+	# playspace walks. The player root itself does not move with the stick.
+	if _mesh_lab_freeze_l == null:
+		_mesh_lab_freeze_l = Marker3D.new()
+		_mesh_lab_freeze_l.name = "MeshLabFreezeL"
+		_mesh_lab_freeze_r = Marker3D.new()
+		_mesh_lab_freeze_r.name = "MeshLabFreezeR"
+		_dummy.add_child(_mesh_lab_freeze_l)
+		_dummy.add_child(_mesh_lab_freeze_r)
+	if not _mesh_lab_hands_held:
+		_mesh_lab_hands_held = true
+		_mesh_lab_freeze_l.global_transform = _mesh_lab_hand_source(HAND_LEFT, vr).global_transform
+		_mesh_lab_freeze_r.global_transform = _mesh_lab_hand_source(HAND_RIGHT, vr).global_transform
+	_dummy.set_arm_target(false, _mesh_lab_freeze_l, true, DummyBody.WRIST_INSET, Vector3.ZERO)
+	_dummy.set_arm_target(true, _mesh_lab_freeze_r, true, DummyBody.WRIST_INSET, Vector3.ZERO)
+
+
+func _mesh_lab_hand_source(hand_name: StringName, vr: VRRig) -> Node3D:
+	if held_gun_hand() == hand_name and revolver != null and not revolver.is_spin_active():
+		return revolver
+	return vr.get_hand_node(hand_name)
+
+
+## Flat mesh lab parks this body so the fly camera owns WASD and the view.
+func set_mesh_lab_parked(parked: bool) -> void:
+	if parked == _mesh_lab_parked:
+		return
+	_mesh_lab_parked = parked
+	visible = not parked
+	process_mode = Node.PROCESS_MODE_DISABLED if parked else Node.PROCESS_MODE_INHERIT
+	if rig is FlatRig:
+		(rig as FlatRig).camera.current = not parked
+
+
+## VR mesh lab: the desktop camera sees the full mannequin. The headset does not.
+func set_mesh_lab_preview(enabled: bool) -> void:
+	if _dummy == null:
+		return
+	_mesh_lab_head_held = false
+	_mesh_lab_hands_held = false
+	if enabled:
+		_dummy.set_body_shelved(false)
+		_dummy.set_head_hidden(false)
+		_dummy.set_first_person_clip(false)
+		_dummy.set_body_render_layers(DummyBody.SPECTATOR_BODY_LAYER)
+		if rig is VRRig:
+			var cam := (rig as VRRig).camera
+			if not _mesh_lab_cull_saved:
+				_mesh_lab_cull_mask = cam.cull_mask
+				_mesh_lab_cull_saved = true
+			cam.cull_mask = _mesh_lab_cull_mask & ~DummyBody.SPECTATOR_BODY_LAYER
+		return
+	_dummy.set_body_render_layers(1)
+	if rig is VRRig and _mesh_lab_cull_saved:
+		(rig as VRRig).camera.cull_mask = _mesh_lab_cull_mask
+	_mesh_lab_cull_saved = false
+	_dummy.set_head_hidden(true)
+	_dummy.set_body_shelved(use_vr)
+	_dummy.set_first_person_clip(true)
+
+
+func _drive_vr_wrist(hand_name: StringName, vr: VRRig, delta: float) -> void:
+	var positive_x := hand_name == HAND_RIGHT
+	var curl := _hand_curl(hand_name)
+	var anchor: Node3D = curl["anchor"]
+	var goal := vr.get_hand_node(hand_name).global_transform
+	if anchor != null:
+		goal = anchor.global_transform
+	_place_wrist(hand_name, goal, delta, _wrist_lock_id(anchor))
+	_dummy.set_arm_target(positive_x, _wrist_marker(hand_name), true, DummyBody.WRIST_INSET)
+	_dummy.set_hand_curl(positive_x, int(curl["pose"]), float(curl["trigger"]))
+
+
+func _drive_flat_wrist(hand_name: StringName, hang_pos: Vector3, yaw: Basis, delta: float) -> void:
+	var positive_x := hand_name == HAND_RIGHT
+	var curl := _hand_curl(hand_name)
+	var anchor: Node3D = curl["anchor"]
+	var twist := false
+	var inset := 0.0
+	var goal := Transform3D(yaw, hang_pos)
+	if anchor != null:
+		goal = anchor.global_transform
+		twist = true
+		inset = DummyBody.WRIST_INSET
+	_place_wrist(hand_name, goal, delta, _wrist_lock_id(anchor))
+	_dummy.set_arm_target(positive_x, _wrist_marker(hand_name), twist, inset)
+	_dummy.set_hand_curl(positive_x, int(curl["pose"]), float(curl["trigger"]))
+
+
+func _wrist_marker(hand_name: StringName) -> Marker3D:
+	return _wrist_r if hand_name == HAND_RIGHT else _wrist_l
+
+
+func _wrist_lock_id(anchor: Node3D) -> String:
+	return str(anchor.get_instance_id()) if anchor != null else "hang"
+
+
+## Ease only when the hold changes. After that the marker copies the goal, so
+## walking and looking do not leave the hand trailing the object.
+func _place_wrist(hand_name: StringName, goal: Transform3D, delta: float, lock_id: String) -> void:
+	var marker := _wrist_marker(hand_name)
+	var prev := str(_wrist_lock.get(hand_name, ""))
+	if prev != lock_id or not _wrist_synced.get(hand_name, false):
+		var current := marker.global_transform if _wrist_synced.get(hand_name, false) else goal
+		_wrist_from_local[hand_name] = global_transform.affine_inverse() * current
+		_wrist_blend[hand_name] = 0.0
+		_wrist_lock[hand_name] = lock_id
+		_wrist_synced[hand_name] = true
+	var t := float(_wrist_blend.get(hand_name, 1.0))
+	if t >= 1.0:
+		marker.global_transform = goal
+		return
+	t = minf(1.0, t + delta / DummyBody.WRIST_BLEND_SEC)
+	_wrist_blend[hand_name] = t
+	var start: Transform3D = global_transform * (_wrist_from_local[hand_name] as Transform3D)
+	marker.global_transform = start.interpolate_with(goal, t)
+
+
+## VR closes while the grab button is down. Flat closes once something is in that hand.
+func _hand_curl(hand_name: StringName) -> Dictionary:
+	var held := _held_curl(hand_name)
+	var pose := HandFingers.Pose.OPEN
+	var anchor: Node3D = null
+	if use_vr:
+		if _grip_down.get(hand_name, false):
+			if held.is_empty():
+				pose = HandFingers.Pose.FIST
+			else:
+				pose = int(held["pose"])
+				anchor = held["anchor"]
+	elif not held.is_empty():
+		pose = int(held["pose"])
+		anchor = held["anchor"]
+	var trigger := 0.0
+	if pose == HandFingers.Pose.PISTOL:
+		trigger = _trigger_pull(hand_name)
+	return {"pose": pose, "trigger": trigger, "anchor": anchor}
+
+
+func _held_curl(hand_name: StringName) -> Dictionary:
+	if revolver != null and revolver.held and _holding_hand_name() == hand_name:
+		var anchor: Node3D = null
+		if not revolver.is_spin_active():
+			anchor = _grip_anchor(revolver)
+		return {"pose": HandFingers.Pose.PISTOL, "anchor": anchor}
+	if _holding_bottle() and hand_name == _held_bottle_hand:
+		return {"pose": HandFingers.Pose.BOTTLE, "anchor": _grip_anchor(_held_bottle)}
+	if _holding_cartridge() and hand_name == off_hand_name():
+		return {"pose": HandFingers.Pose.PINCH, "anchor": _grip_anchor(_held_cartridge)}
+	if props != null and props.is_prop_in_hand() and hand_name == off_hand_name():
+		var pose := HandFingers.Pose.PINCH
+		if props.equipped_item() == PropController.ITEM_BOTTLE:
+			pose = HandFingers.Pose.BOTTLE
+		return {"pose": pose, "anchor": _grip_anchor(props.current_prop())}
+	return {}
+
+
+func _grip_anchor(node: Node) -> Node3D:
+	if node == null:
+		return null
+	var anchor := node.find_child("GripAnchor", true, false) as Node3D
+	return anchor if anchor != null else node as Node3D
+
+
+func _trigger_pull(hand_name: StringName) -> float:
+	if use_vr and rig is VRRig and PlayerSettings.get_vr_bind(&"fire") == "trigger_click":
+		return (rig as VRRig).trigger_amount(hand_name)
+	return 1.0 if _trigger_down.get(hand_name, false) else 0.0
+
+
+func _packed_hands() -> int:
+	var left := _hand_curl(HAND_LEFT)
+	var right := _hand_curl(HAND_RIGHT)
+	return HandFingers.pack(int(left["pose"]), int(right["pose"]), float(left["trigger"]), float(right["trigger"]))
 
 
 func get_head_position() -> Vector3:
@@ -230,6 +507,14 @@ func reset_for_duel(spawn: Transform3D) -> void:
 	health = max_health
 	alive = true
 	killed_by_self = false
+	_replay_body_driven = false
+	_end_replay_loadout()
+	if _dummy != null:
+		_dummy.follow_travel(rig)
+		_dummy.set_pose_driven(true)
+		_dummy.set_head_hidden(true)
+		_dummy.set_body_shelved(use_vr)
+		_dummy.set_first_person_clip(true)
 	_replay_latched = false
 	move_speed_mult = 1.0
 	_leg_remaining = 0.0
@@ -288,6 +573,11 @@ func apply_wound(region: StringName, new_health: float) -> void:
 
 func play_death_feedback() -> void:
 	alive = false
+	if _dummy != null:
+		_dummy.set_pose_driven(false)
+		_dummy.set_body_shelved(false)
+		_dummy.set_head_hidden(false)
+		_dummy.set_first_person_clip(false)
 	move_speed_mult = 1.0
 	_leg_remaining = 0.0
 	ImpactFeedback.player_hurt(true)
@@ -298,6 +588,8 @@ func play_death_feedback() -> void:
 # -- Gun handling -----------------------------------------------------------------
 
 func _on_grip_changed(hand: StringName, pressed: bool) -> void:
+	if use_vr:
+		_grip_down[hand] = pressed
 	if _combat_blocked():
 		return
 	if not use_vr:
@@ -587,9 +879,10 @@ func _on_menu_button() -> void:
 	if GameManager.mode == GameManager.GameMode.BOOT:
 		return
 	if use_vr:
+		# Controller menu / pause never opens the debug panel. That is F3.
 		if GameManager.mode == GameManager.GameMode.MENU:
-			DebugMenu.toggle()
-		elif is_instance_valid(GameManager.hud) and GameManager.hud.pause_menu != null:
+			return
+		if is_instance_valid(GameManager.hud) and GameManager.hud.pause_menu != null:
 			GameManager.hud.pause_menu.toggle()
 	else:
 		DebugMenu.toggle()
@@ -601,6 +894,7 @@ func _combat_blocked() -> bool:
 
 
 func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
+	_trigger_down[hand] = pressed
 	if pressed and DeathCam.can_skip():
 		DeathCam.request_skip()
 		return
@@ -782,9 +1076,6 @@ func _on_gate_pressed(hand: StringName) -> void:
 			_close_armed = true
 			_dump_hold_accum = 0.0
 			_flash_reload_event("GATE OPEN — shake to dump, belt to load")
-		return
-	if hand == HAND_LEFT:
-		DebugMenu.toggle()
 
 
 func _on_reload_pressed() -> void:
@@ -1183,6 +1474,9 @@ func pose_flags() -> int:
 		flags |= NetworkManager.POSE_FLAG_GUN_HELD_LEFT
 	if int(GameManager.tuning["holster_side"]) != 0:
 		flags |= NetworkManager.POSE_FLAG_HOLSTER_LEFT
+	if revolver.gate_open:
+		flags |= NetworkManager.POSE_FLAG_GATE_OPEN
+	flags |= revolver.chamber_index() << NetworkManager.POSE_FLAG_CHAMBER_SHIFT
 	if PlayerSettings.voice_muted:
 		flags |= NetworkManager.POSE_FLAG_VOICE_MUTED
 	var steadied := revolver.use_aim_steady and revolver.held and not revolver.is_spin_active() \
@@ -1218,15 +1512,102 @@ func apply_replay_pose(pose: Dictionary) -> void:
 		var flat := rig as FlatRig
 		flat.global_position = Vector3(head.origin.x, head.origin.y - FlatRig.EYE_HEIGHT, head.origin.z)
 		flat.set_replay_look(euler.y, euler.x)
-	revolver.follow_parent = false
-	revolver.reset_spin()
-	revolver.global_transform = pose["gun"]
+	revolver.hold_replay_pose(pose["gun"], int(pose.get("flags", 0)))
+	_apply_replay_loadout(pose)
+	# A living winner keeps the live wrist writers. Only the corpse is posed from the clip.
+	if not alive:
+		_pose_dummy_from_replay(pose, head)
 
 
 func clear_replay_pose() -> void:
 	_replay_latched = false
 	_replay_latch = {}
-	revolver.follow_parent = revolver.held or not revolver.drawn
+	freeze_replay_body()
+	_end_replay_loadout()
+	if _dummy != null and rig != null:
+		_dummy.follow_travel(rig)
+	revolver.release_replay_hold()
+
+
+## Stop the replay writers after the last pose has been applied. No-op unless
+## this corpse was driven by the clip. Legs stay on the rig again.
+func freeze_replay_body() -> void:
+	if not _replay_body_driven:
+		return
+	_replay_body_driven = false
+	if _dummy != null and rig != null:
+		_dummy.follow_travel(rig)
+	if _dummy != null and not alive:
+		_dummy.set_pose_driven(false)
+	_end_replay_loadout()
+
+
+func _pose_dummy_from_replay(pose: Dictionary, head: Transform3D) -> void:
+	if _dummy == null:
+		return
+	var starting := not _replay_body_driven
+	_replay_body_driven = true
+	# Corpse visibility stays as play_death_feedback left it.
+	_dummy.set_pose_driven(true)
+	if starting:
+		_ensure_replay_travel()
+		_dummy.follow_travel(_replay_travel)
+	_replay_travel.global_position = head.origin
+	var head_basis := head.basis
+	var yaw := Basis(Vector3.UP, head_basis.get_euler().y)
+	var root_yaw := global_transform.basis.get_euler().y
+	var body_yaw := PI + wrapf(yaw.get_euler().y - root_yaw, -PI, PI)
+	_dummy.place_toward_head(
+		head.origin, body_yaw, DummyBody.pitch_from_basis(head_basis),
+		head.origin, DummyBody.roll_from_basis(head_basis))
+	var flags := int(pose.get("flags", 0))
+	var drawn := flags & NetworkManager.POSE_FLAG_GUN_DRAWN != 0
+	var free := flags & NetworkManager.POSE_FLAG_GUN_FREE != 0
+	var spinning := flags & NetworkManager.POSE_FLAG_GUN_SPINNING != 0
+	var held_left := flags & NetworkManager.POSE_FLAG_GUN_HELD_LEFT != 0
+	var gun_in_hand := drawn and not free and not spinning
+	var objects := int(pose.get("objects", 0))
+	var prop_id := objects & ReplayBuffer.PROP_ID_MASK
+	var prop_place := (objects >> ReplayBuffer.PROP_PLACE_SHIFT) & ReplayBuffer.PROP_PLACE_MASK
+	var round_held := objects & ReplayBuffer.ROUND_HELD != 0
+	var holster_left := flags & NetworkManager.POSE_FLAG_HOLSTER_LEFT != 0
+	var off_is_left := not holster_left
+	var off_curl := HandFingers.Pose.OPEN
+	if prop_place == ReplayBuffer.PROP_PLACE_HAND:
+		off_curl = HandFingers.Pose.BOTTLE if prop_id == ReplayBuffer.PROP_BOTTLE else HandFingers.Pose.PINCH
+	elif round_held:
+		off_curl = HandFingers.Pose.PINCH
+	_snap_replay_wrist(_wrist_l, pose["left"], gun_in_hand and held_left)
+	_snap_replay_wrist(_wrist_r, pose["right"], gun_in_hand and not held_left)
+	_dummy.set_arm_target(false, _wrist_l, true, DummyBody.WRIST_INSET)
+	_dummy.set_arm_target(true, _wrist_r, true, DummyBody.WRIST_INSET)
+	var left_curl := HandFingers.Pose.PISTOL if gun_in_hand and held_left else HandFingers.Pose.OPEN
+	var right_curl := HandFingers.Pose.PISTOL if gun_in_hand and not held_left else HandFingers.Pose.OPEN
+	if off_is_left and not (gun_in_hand and held_left):
+		left_curl = off_curl
+	if not off_is_left and not (gun_in_hand and not held_left):
+		right_curl = off_curl
+	_dummy.set_hand_curl(false, left_curl, 0.0)
+	_dummy.set_hand_curl(true, right_curl, 0.0)
+
+
+func _ensure_replay_travel() -> void:
+	if _replay_travel != null:
+		return
+	_replay_travel = Marker3D.new()
+	_replay_travel.name = "ReplayTravel"
+	add_child(_replay_travel)
+
+
+func _snap_replay_wrist(marker: Marker3D, recorded: Transform3D, on_gun: bool) -> void:
+	if marker == null:
+		return
+	if on_gun:
+		var anchor := revolver.find_child("GripAnchor", true, false) as Node3D
+		if anchor != null:
+			marker.global_transform = anchor.global_transform
+			return
+	marker.global_transform = recorded
 
 
 func _live_replay_pose() -> Dictionary:
@@ -1244,7 +1625,77 @@ func _live_replay_pose() -> Dictionary:
 		"right": right,
 		"gun": revolver.global_transform,
 		"flags": pose_flags(),
+		"objects": _replay_object_word(),
+		"prop": _replay_prop_transform(),
+		"round": _replay_round_transform(),
 	}
+
+
+func _apply_replay_loadout(pose: Dictionary) -> void:
+	var objects := int(pose.get("objects", 0))
+	var prop_xf: Transform3D = pose.get("prop", Transform3D.IDENTITY)
+	var round_xf: Transform3D = pose.get("round", Transform3D.IDENTITY)
+	if props != null:
+		props.set_replay_suspended(true)
+	if is_instance_valid(_held_cartridge):
+		_held_cartridge.visible = false
+	_replay_objects_node().show_snapshot(objects, prop_xf, round_xf)
+
+
+func _end_replay_loadout() -> void:
+	if _replay_objects != null:
+		_replay_objects.dismiss()
+	if props != null:
+		props.set_replay_suspended(false)
+	if is_instance_valid(_held_cartridge):
+		_held_cartridge.visible = true
+
+
+func _replay_objects_node() -> ReplayObjects:
+	if _replay_objects == null:
+		_replay_objects = ReplayObjects.new()
+		_replay_objects.name = "ReplayObjects"
+		add_child(_replay_objects)
+	return _replay_objects
+
+
+func _replay_object_word() -> int:
+	var word := 0
+	if props != null and props.has_prop():
+		var id := _replay_prop_id(props.equipped_item())
+		if id != ReplayBuffer.PROP_NONE:
+			var place := ReplayBuffer.PROP_PLACE_WORLD
+			if props.is_prop_in_hand() and not _holding_cartridge():
+				place = ReplayBuffer.PROP_PLACE_HAND
+			word = id | (place << ReplayBuffer.PROP_PLACE_SHIFT)
+	if _holding_cartridge():
+		word |= ReplayBuffer.ROUND_HELD
+	return word
+
+
+func _replay_prop_id(item: StringName) -> int:
+	match item:
+		PropController.ITEM_CIGARETTE:
+			return ReplayBuffer.PROP_CIGARETTE
+		PropController.ITEM_COIN:
+			return ReplayBuffer.PROP_COIN
+		PropController.ITEM_ACE:
+			return ReplayBuffer.PROP_ACE
+		PropController.ITEM_BOTTLE:
+			return ReplayBuffer.PROP_BOTTLE
+	return ReplayBuffer.PROP_NONE
+
+
+func _replay_prop_transform() -> Transform3D:
+	if props != null and props.has_prop():
+		return props.current_prop().global_transform
+	return Transform3D.IDENTITY
+
+
+func _replay_round_transform() -> Transform3D:
+	if _holding_cartridge() and is_instance_valid(_held_cartridge):
+		return _held_cartridge.global_transform
+	return Transform3D.IDENTITY
 
 
 func _broadcast_pose(delta: float) -> void:
@@ -1265,7 +1716,11 @@ func _broadcast_pose(delta: float) -> void:
 		rig.get_left_hand_transform(),
 		rig.get_right_hand_transform(),
 		flags,
-		gun_xf)
+		gun_xf,
+		_packed_hands(),
+		_replay_object_word(),
+		_replay_prop_transform(),
+		_replay_round_transform())
 
 
 # -- VR UI ------------------------------------------------------------------------
@@ -1361,3 +1816,12 @@ func _update_vr_message(delta: float) -> void:
 	_vr_message_timer -= delta / maxf(Engine.time_scale, 0.001)
 	if _vr_message_timer <= 0.0:
 		_vr_message.visible = false
+
+
+## Samples wrists after FlatRig look and WeaponBase follow, before arm IK.
+class WristDrive extends Node:
+	var host: Player
+
+	func _process(delta: float) -> void:
+		if host != null:
+			host.drive_wrists_late(delta)

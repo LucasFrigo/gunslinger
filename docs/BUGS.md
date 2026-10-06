@@ -17,6 +17,44 @@ None.
 
 ## Fixed
 
+### BUG-015 — Replay freezes the dead player's body
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-04 |
+| Fixed | 2026-10-06 |
+| Platforms | SP free duel and gauntlet (killed by the AI). Flat and VR. The same local-player path is what a dead peer would see in 1v1; that side is not confirmed in a playtest. |
+| Areas | `player/player.gd` `apply_replay_pose`, `freeze_replay_body`; `autoload/death_cam.gd` `_enter_trailing` |
+
+**What:** On the replay, your mannequin stays in the pose it died in. The revolver still follows the clip. The body should retrace the draw, aim, and steps from before the shot.
+
+**Repro:**
+1. Free duel or gauntlet against an AI.
+2. Lose — the bot lands the killing shot.
+3. Wait through the fly-along and the corpse hold until the replay starts.
+4. Your mesh does not move. Only the gun does.
+
+**Fix:** `Player.apply_replay_pose` turns the pose writers back on for the dead local mannequin and places it from the recorded head, hands, and gun flags. The revolver is pinned to the recorded pose (hip, hand, spin, or in the air, with the gate and cylinder). An off-hand prop and a held reload round are ghosted along the clip. A travel marker drives the in-place step, including in VR where the rig stays put. When the clip ends, `freeze_replay_body` stops those writers again so the corpse orbit holds the death pose.
+
+### BUG-014 — VR prop wheel is mirrored against the stick
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-04 |
+| Fixed | 2026-10-04 |
+| Platforms | VR (Quest / OpenXR) |
+| Areas | `props/prop_radial.gd` |
+
+**What:** The off-hand misc wheel highlights the opposite side from the stick, and the wedge names read backwards. Stick up still hits **Empty Hand** at the top, but stick right lights the wedge on the left.
+
+**Repro:** In VR, hold the off-hand stick click to open the prop wheel. The words are mirrored. Push the stick toward **Cigarette** (clockwise from the top). The highlight lands on the wedge on the other side.
+
+**Fix:** `Label3D` draws on +Z and is double-sided, so aiming -Z at the headset showed the glyphs from behind. The ring now uses model-front (`looking_at` with `use_model_front`), which puts the readable face toward the HMD and local +X on the viewer's right. Wedges stay clockwise from the top, matching `highlight_index` and the flat wheel.
+
 ### BUG-013 — VR height and hitboxes wrong after booting seated
 
 | | |

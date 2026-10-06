@@ -30,3 +30,6 @@ surface_material_override/0 = SubResource("mat_brass")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 shape = SubResource("shape_cartridge")
+
+[node name="GripAnchor" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.014)

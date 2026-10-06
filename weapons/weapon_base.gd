@@ -16,6 +16,13 @@ const COLLISION_LAYER_WORLD := 1
 const COLLISION_LAYER_WEAPON := 32  # physics layer 6
 ## Local COM for hang gravity (barrel/cylinder), not the trigger pivot.
 const SPIN_COM_LOCAL := Vector3(0.0, 0.02, -0.09)
+## World hinge rate (rad/s) where startup assist ends. Below this the wrist does
+## not drag the barrel along, so the first motion breaks it into a spin.
+const SPIN_BREAKAWAY_OMEGA := 10.0
+## Coupling scale at rest. Full `spin_coupling` returns once the gun is turning.
+const SPIN_BREAKAWAY_COUPLING := 0.22
+## Extra hand-shove scale at rest, on top of torquing the center of mass.
+const SPIN_BREAKAWAY_WHIP := 1.55
 ## Slow-hand aim steady. Full damping at or below the slow rate, raw at or above
 ## the fast rate. Tau is the slow-band time constant at strength 1.
 const AIM_STEADY_SLOW_DEG := 25.0
@@ -243,6 +250,32 @@ func begin_spin() -> void:
 	spinning = true
 	relocking = false
 	_spin_motion_init = false
+	_spin_world_omega = _spin_start_kick()
+	spin_omega = _spin_world_omega
+
+
+## Hinge speed that lifts the muzzle. Positive rotation follows the right-hand
+## rule on the hand's local X, so the sign is chosen from where the tip is.
+func _spin_start_kick() -> float:
+	var boost := _tune("spin_start_boost", 6.0)
+	if boost <= 0.0:
+		return 0.0
+	var p := get_parent() as Node3D
+	if p == null:
+		return boost
+	var parent_xf := p.global_transform
+	var axis := parent_xf.basis.x
+	if axis.length_squared() < 0.0001:
+		return boost
+	axis = axis.normalized()
+	var tip_local := Vector3(0.0, 0.02, -0.21)
+	var muzzle := get_node_or_null("Muzzle") as Node3D
+	if muzzle != null:
+		tip_local = muzzle.position
+	var r := Basis(axis, spin_angle) * (parent_xf.basis * (tip_local - _pivot_local()))
+	if axis.cross(r).y < 0.0:
+		return -boost
+	return boost
 
 
 func end_spin(snap: bool) -> void:
@@ -261,6 +294,28 @@ func end_spin(snap: bool) -> void:
 	spin_omega = 0.0
 	_spin_world_omega = 0.0
 	_relock_elapsed = 0.0
+
+
+## Pin the mesh to a recorded world pose. Physics must not keep a toss going.
+func hold_for_replay(world_xf: Transform3D) -> void:
+	reset_spin()
+	follow_parent = false
+	visible = true
+	_freeze_attached()
+	global_transform = world_xf
+
+
+## Winner is live again. A gun that was in the air starts simulating; a held
+## or holstered gun sticks to its attach.
+func release_replay_hold() -> void:
+	if held or not drawn:
+		follow_parent = true
+		return
+	follow_parent = false
+	freeze = false
+	continuous_cd = true
+	collision_layer = COLLISION_LAYER_WEAPON
+	collision_mask = COLLISION_LAYER_WORLD
 
 
 func reset_spin() -> void:
@@ -425,17 +480,22 @@ func _integrate_spin(delta: float) -> void:
 	var pivot_vel := (pivot_world - _prev_pivot_world) / real_delta
 	var pivot_accel := (pivot_vel - _prev_pivot_vel) / real_delta
 	var rotated := Basis(axis, spin_angle)
-	var r_whip := rotated * (parent_xf.origin - pivot_world)
-	var r_grav := rotated * (parent_xf.basis * (SPIN_COM_LOCAL - _pivot_local()))
-	var inertia := maxf(_tune("spin_inertia", 0.03), 0.01)
-	var gravity_k := _tune("spin_gravity", 2.0)
+	var r_com := rotated * (parent_xf.basis * (SPIN_COM_LOCAL - _pivot_local()))
+	var inertia := maxf(_tune("spin_inertia", 0.02), 0.01)
+	var gravity_k := _tune("spin_gravity", 1.6)
 	var damping := maxf(_tune("spin_damping", 0.0), 0.0)
-	var coupling := maxf(_tune("spin_coupling", 8.0), 0.0)
-	var tau := r_grav.cross(Vector3(0.0, -9.81 * gravity_k, 0.0)).dot(axis)
-	tau += r_whip.cross(-pivot_accel).dot(axis)
+	var coupling := maxf(_tune("spin_coupling", 3.0), 0.0)
+	# Slow hinge: lighter wrist stick and a stronger shove. A fast spin keeps
+	# the tuned coupling so a flick still adds speed once it is going.
+	var breakaway := 1.0 - smoothstep(1.2, SPIN_BREAKAWAY_OMEGA, absf(_spin_world_omega))
+	var tau := r_com.cross(Vector3(0.0, -9.81 * gravity_k, 0.0)).dot(axis)
+	# The barrel's mass sits forward of the finger, so moving the hand swings it.
+	var whip := r_com.cross(-pivot_accel).dot(axis)
+	tau += whip * lerpf(1.0, SPIN_BREAKAWAY_WHIP, breakaway)
 	_spin_world_omega += tau / inertia * real_delta
 	if absf(hand_omega_axis) > absf(_spin_world_omega):
-		var blend := clampf(coupling * real_delta, 0.0, 1.0)
+		var couple := coupling * lerpf(1.0, SPIN_BREAKAWAY_COUPLING, breakaway)
+		var blend := clampf(couple * real_delta, 0.0, 1.0)
 		_spin_world_omega = lerpf(_spin_world_omega, hand_omega_axis, blend)
 	_spin_world_omega *= exp(-damping * real_delta)
 	_spin_world_omega = clampf(_spin_world_omega, -80.0, 80.0)

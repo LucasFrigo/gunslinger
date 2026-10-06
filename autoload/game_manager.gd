@@ -7,7 +7,7 @@ extends Node
 signal mode_changed(mode: int)
 signal tuning_changed(key: String, value: Variant)
 
-enum GameMode { BOOT, MENU, FREE_DUEL, GAUNTLET, MULTIPLAYER, PRACTICE }
+enum GameMode { BOOT, MENU, FREE_DUEL, GAUNTLET, MULTIPLAYER, PRACTICE, MESH_LAB }
 
 const TUNING_PATH := "user://tuning.cfg"
 
@@ -21,6 +21,9 @@ const SCENARIOS: Array[String] = [
 
 ## Local warmup lot. Deliberately not in SCENARIOS, so no menu offers it as a duel.
 const PRACTICE_HUB := "res://scenarios/practice_hub/practice_hub.tres"
+
+## Debug-only mannequin stage. Not in SCENARIOS, so no menu offers it as a duel.
+const MESH_LAB_SCENE := "res://dev/mesh_lab/mesh_lab.tscn"
 
 const ARCHETYPES: Array[String] = [
 	"res://ai/archetypes/drunk.tres",
@@ -87,14 +90,20 @@ var tuning := {
 	"jam_clear_pitch": 0.55,
 	## VR Ocelot: |stick Y| to unlock (down) / relock (up) the gun-hand stick.
 	"spin_stick_threshold": 0.55,
+	## Hinge speed (rad/s) applied when the spin bind is pressed, signed so the
+	## muzzle tip moves upward. 0 disables the kick.
+	"spin_start_boost": 6.0,
 	## Hinge damping (1/s). Higher = spin dies faster. 0 = coasts forever.
 	"spin_damping": 0.0,
 	## Gravity torque scale on the hanging barrel (0 = inertial only).
-	"spin_gravity": 2.0,
-	## Moment of inertia for whip / gravity (kg·m²-ish). Lower = snappier.
-	"spin_inertia": 0.03,
-	## How quickly a fast wrist flick transfers into residual spin.
-	"spin_coupling": 8.0,
+	## Lower makes the first loop easier to pump over the top.
+	"spin_gravity": 1.6,
+	## Moment of inertia for whip / gravity (kg·m²-ish). Lower = snappier start.
+	"spin_inertia": 0.02,
+	## How quickly a fast wrist flick transfers into residual spin. While the
+	## hinge is still slow, WeaponBase scales this down so the first motion
+	## breaks the barrel free instead of sticking to the hand.
+	"spin_coupling": 3.0,
 	## Seconds to tween back to the locked pose after stick-up.
 	"spin_relock_time": 0.12,
 	## Cigarette boomerang: flight speed (m/s), same outbound and homing.
@@ -172,6 +181,10 @@ var hud: Hud
 var duel: DuelManager
 var gauntlet: GauntletController
 var _action_generation := 0
+var _mesh_lab_open := false
+var _mesh_lab_puppet: MeshLabPuppet
+var _mesh_lab_flycam: MeshLabFlycam
+var _mesh_lab_menu: MeshLabMotionMenu
 
 
 func _ready() -> void:
@@ -245,6 +258,7 @@ func is_pause_open() -> bool:
 ## Flat: a random duel arena, frozen, behind the fullscreen menu. VR: the
 ## practice hub, live, with the menu floating in front of the player.
 func go_to_menu() -> void:
+	_close_mesh_lab_view()
 	if is_instance_valid(hud):
 		hud.close_pause()
 	_bump_action_generation()
@@ -288,6 +302,98 @@ func start_practice() -> void:
 ## True whenever the practice hub is loaded, including under the VR menu.
 func in_practice() -> bool:
 	return current_scenario is PracticeHub
+
+
+func in_mesh_lab() -> bool:
+	return mode == GameMode.MESH_LAB
+
+
+## Debug stage. Flat: a scripted mannequin and a fly camera. VR: the headset
+## player stays in control and the desktop window is the fly camera.
+## Leaving always returns to the main menu.
+func enter_mesh_lab() -> void:
+	if in_mesh_lab():
+		return
+	if is_instance_valid(hud):
+		hud.close_pause()
+	_bump_action_generation()
+	# Set the mode before leave(), so a multiplayer session_ended does not
+	# bounce through the main menu on the way in.
+	_set_mode(GameMode.MESH_LAB)
+	KillCam.cancel()
+	NetworkManager.leave()
+	duel.stop()
+	gauntlet.stop()
+	TimeManager.reset()
+	_clear_combatants()
+	if is_instance_valid(hud):
+		hud.hide_menu()
+	_remove_vr_menu_panel()
+	_instance_mesh_lab()
+	MeshLabMotion.reset()
+	_mesh_lab_open = true
+	_mesh_lab_flycam = MeshLabFlycam.new()
+	_mesh_lab_flycam.name = "MeshLabFlycam"
+	main_root.add_child(_mesh_lab_flycam)
+	_mesh_lab_menu = MeshLabMotionMenu.new()
+	_mesh_lab_menu.name = "MeshLabMotionMenu"
+	if is_vr:
+		_place_local_player(current_scenario.get_player_spawn())
+		local_player.set_mesh_lab_preview(true)
+		var env := _mesh_lab_environment()
+		_mesh_lab_flycam.attach_vr(main_root, world_root.get_world_3d(), env)
+		_mesh_lab_flycam.mount_menu(_mesh_lab_menu)
+	else:
+		local_player.set_mesh_lab_parked(true)
+		_mesh_lab_puppet = MeshLabPuppet.new()
+		_mesh_lab_puppet.name = "MeshLabPuppet"
+		current_scenario.add_child(_mesh_lab_puppet)
+		_mesh_lab_flycam.attach_flat(world_root)
+		main_root.add_child(_mesh_lab_menu)
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func leave_mesh_lab() -> void:
+	if not in_mesh_lab():
+		return
+	_close_mesh_lab_view()
+	go_to_menu()
+
+
+func _close_mesh_lab_view() -> void:
+	if not _mesh_lab_open:
+		return
+	_mesh_lab_open = false
+	if is_instance_valid(_mesh_lab_puppet):
+		_mesh_lab_puppet.queue_free()
+	_mesh_lab_puppet = null
+	if is_instance_valid(_mesh_lab_menu):
+		_mesh_lab_menu.queue_free()
+	_mesh_lab_menu = null
+	if is_instance_valid(_mesh_lab_flycam):
+		_mesh_lab_flycam.shutdown()
+	_mesh_lab_flycam = null
+	if is_instance_valid(local_player):
+		local_player.set_mesh_lab_preview(false)
+		local_player.set_mesh_lab_parked(false)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _instance_mesh_lab() -> void:
+	if current_scenario != null:
+		current_scenario.queue_free()
+		current_scenario = null
+	var packed: PackedScene = load(MESH_LAB_SCENE)
+	current_scenario = packed.instantiate()
+	current_scenario.time_of_day = 1.0
+	world_root.add_child(current_scenario)
+
+
+func _mesh_lab_environment() -> Environment:
+	var world := current_scenario.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if world == null:
+		return null
+	return world.environment
 
 
 func practice_hub() -> PracticeHub:
@@ -452,11 +558,12 @@ func _despawn_avatar() -> void:
 
 
 func _on_pose_received(_peer_id: int, head: Transform3D, left: Transform3D,
-		right: Transform3D, flags: int, gun: Transform3D) -> void:
+		right: Transform3D, flags: int, gun: Transform3D, hands: int, objects: int,
+		prop: Transform3D, round_xf: Transform3D) -> void:
 	if DeathCam.blocks_remote_pose():
 		return
 	if is_instance_valid(remote_avatar):
-		remote_avatar.apply_pose(head, left, right, flags, gun)
+		remote_avatar.apply_pose(head, left, right, flags, gun, hands, objects, prop, round_xf)
 
 
 func _on_shot_received(_peer_id: int, origin: Vector3, direction: Vector3) -> void:
@@ -608,6 +715,7 @@ func set_tuning(key: String, value: Variant) -> void:
 
 func _save_tuning() -> void:
 	var cfg := ConfigFile.new()
+	cfg.load(TUNING_PATH)
 	for key in tuning:
 		cfg.set_value("tuning", key, tuning[key])
 	cfg.save(TUNING_PATH)
@@ -619,3 +727,19 @@ func _load_tuning() -> void:
 		return
 	for key in tuning:
 		tuning[key] = cfg.get_value("tuning", key, tuning[key])
+	if cfg.get_value("meta", "spin_startup", false):
+		return
+	# Saved copies of the old spin defaults would hide the easier startup.
+	# Only replace a value that is still that old default, and only once.
+	const SPIN_DEFAULT_MIGRATION := {
+		"spin_gravity": [2.0, 1.6],
+		"spin_inertia": [0.03, 0.02],
+		"spin_coupling": [8.0, 3.0],
+	}
+	for key in SPIN_DEFAULT_MIGRATION:
+		var pair: Array = SPIN_DEFAULT_MIGRATION[key]
+		if is_equal_approx(float(tuning.get(key, pair[1])), float(pair[0])):
+			tuning[key] = pair[1]
+			cfg.set_value("tuning", key, pair[1])
+	cfg.set_value("meta", "spin_startup", true)
+	cfg.save(TUNING_PATH)

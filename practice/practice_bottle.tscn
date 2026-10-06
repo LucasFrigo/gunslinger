@@ -24,3 +24,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.115, 0)
 shape = SubResource("shape")
 
 [node name="Model" parent="." instance=ExtResource("2")]
+
+[node name="GripAnchor" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0.032, 0.1, 0)

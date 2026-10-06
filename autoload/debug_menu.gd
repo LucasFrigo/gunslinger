@@ -1,10 +1,10 @@
 extends CanvasLayer
 ## Autoload. Live-tuning panel: slow-mo, gunplay/AI, Flat+VR movement,
 ## named presets, and session controls (reset duel / main menu).
-## Toggled with F3 in flat mode; in VR it lives on a wrist panel (left
-## controller) and is toggled with the left menu/Y button.
+## Toggled with F3 in flat and in VR. No controller button opens it.
 ## The same Control is shared: it reparents between this CanvasLayer and the
-## wrist UIPanel3D.
+## wrist UIPanel3D. WristAttach +Z faces the headset; the quad sits further
+## along -Z so it clears the hand and is far enough to read.
 
 const SLOWMO_SLIDERS := {
 	"constant_factor": [0.05, 1.0, 0.01],
@@ -26,6 +26,9 @@ const REPLAY_SLIDERS := {
 	"replay_slow_seconds": [0.0, 8.0, 0.1],
 	"replay_slow_factor": [0.05, 1.0, 0.01],
 }
+
+## Meters. Panel faces the headset (+Z), so -Z is away from the head.
+const VR_PANEL_HEAD_CLEARANCE := 0.4
 
 const MOVEMENT_SLIDERS := {
 	"walk_speed": [0.5, 6.0, 0.1],
@@ -71,6 +74,7 @@ var _movement_sliders: Dictionary = {}
 var _turn_mode_option: OptionButton
 var _preset_option: OptionButton
 var _preset_name_edit: LineEdit
+var _mesh_lab_button: Button
 var _time_slider_widgets: Dictionary = {}
 var _reload_volume_toggle: CheckButton
 ## Session-only: translucent meshes on belt / chamber / bump / hand probe.
@@ -102,6 +106,8 @@ func toggle() -> void:
 		if panel.visible:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			_refresh_from_systems()
+		elif GameManager.in_mesh_lab():
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _toggle_vr() -> void:
@@ -127,6 +133,7 @@ func _toggle_vr() -> void:
 	_wrist_panel = UIPanel3D.new()
 	_wrist_panel.panel_size = Vector2(0.42, 0.56)
 	wrist.add_child(_wrist_panel)
+	_wrist_panel.position = Vector3(0.0, 0.0, -VR_PANEL_HEAD_CLEARANCE)
 	if panel.get_parent() == self:
 		remove_child(panel)
 	_wrist_panel.set_control(panel)
@@ -413,9 +420,10 @@ func _build_gunplay_section(root: Control) -> void:
 	_add_header(root, "VR Spin")
 	const SPIN_SLIDERS := {
 		"spin_stick_threshold": [0.2, 0.95, 0.05],
+		"spin_start_boost": [0.0, 20.0, 0.5],
 		"spin_damping": [0.0, 6.0, 0.1],
 		"spin_gravity": [0.0, 8.0, 0.1],
-		"spin_inertia": [0.02, 0.4, 0.01],
+		"spin_inertia": [0.01, 0.4, 0.01],
 		"spin_coupling": [0.0, 12.0, 0.1],
 		"spin_relock_time": [0.04, 0.4, 0.01],
 		"self_hit_grace": [0.08, 0.8, 0.02],
@@ -568,6 +576,11 @@ func _build_session_section(root: Control) -> void:
 		GameManager.reset_current_duel())
 	root.add_child(reset_duel)
 
+	_mesh_lab_button = Button.new()
+	_mesh_lab_button.text = "Mesh lab"
+	_mesh_lab_button.pressed.connect(_on_mesh_lab_pressed)
+	root.add_child(_mesh_lab_button)
+
 	var menu_button := Button.new()
 	menu_button.text = "Back to main menu"
 	menu_button.pressed.connect(func() -> void:
@@ -577,6 +590,17 @@ func _build_session_section(root: Control) -> void:
 			panel.visible = false
 		GameManager.go_to_menu())
 	root.add_child(menu_button)
+
+
+func _on_mesh_lab_pressed() -> void:
+	if use_vr and _open_in_vr:
+		_toggle_vr()
+	elif panel.visible:
+		panel.visible = false
+	if GameManager.in_mesh_lab():
+		GameManager.leave_mesh_lab()
+	else:
+		GameManager.enter_mesh_lab()
 
 
 # -- Presets -------------------------------------------------------------------
@@ -714,6 +738,8 @@ func _refresh_from_systems() -> void:
 		_time_slider_widgets["slider"].value = time_value
 		_time_slider_widgets["label"].text = "%.2f" % time_value
 	_refresh_preset_list()
+	if _mesh_lab_button != null:
+		_mesh_lab_button.text = "Leave mesh lab" if GameManager.in_mesh_lab() else "Mesh lab"
 	_refreshing = false
 
 

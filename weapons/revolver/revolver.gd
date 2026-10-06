@@ -52,6 +52,22 @@ func get_chamber_point() -> Vector3:
 	return _chamber.global_position
 
 
+func chamber_index() -> int:
+	return _chamber_index
+
+
+## Snap the gate and the drum to a recorded frame. No click, no tween.
+func hold_replay_pose(world_xf: Transform3D, flags: int) -> void:
+	hold_for_replay(world_xf)
+	gate_open = flags & NetworkManager.POSE_FLAG_GATE_OPEN != 0
+	_chamber_index = ((flags >> NetworkManager.POSE_FLAG_CHAMBER_SHIFT) & 7) % max_rounds
+	if _gate_tween != null and _gate_tween.is_valid():
+		_gate_tween.kill()
+	if _spin_tween != null and _spin_tween.is_valid():
+		_spin_tween.kill()
+	_apply_cylinder_pose(true)
+
+
 func reset() -> void:
 	_chamber_index = 0
 	if _kick_tween != null:

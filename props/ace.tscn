@@ -1,6 +1,6 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene format=3 uid="uid://c5652vro15dns"]
 
-[ext_resource type="Script" path="res://props/ace.gd" id="1"]
+[ext_resource type="Script" uid="uid://ds78so78rvr2v" path="res://props/ace.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://bkelos2gfk441" path="res://assets/models/props/msc_ace.glb" id="2"]
 
 [sub_resource type="PhysicsMaterial" id="phys_ace"]
@@ -10,7 +10,7 @@ bounce = 0.08
 [sub_resource type="BoxShape3D" id="shape_ace"]
 size = Vector3(0.0635, 0.012, 0.0889)
 
-[node name="AceOfSpades" type="RigidBody3D"]
+[node name="AceOfSpades" type="RigidBody3D" unique_id=1035269843]
 collision_layer = 0
 collision_mask = 0
 mass = 0.02
@@ -19,7 +19,10 @@ freeze = true
 continuous_cd = true
 script = ExtResource("1")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=5509603]
 shape = SubResource("shape_ace")
 
-[node name="Model" parent="." instance=ExtResource("2")]
+[node name="Model" parent="." unique_id=2023204587 instance=ExtResource("2")]
+
+[node name="GripAnchor" type="Marker3D" parent="." unique_id=683111117]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, -0.043799404, 0.068026096, 0)

@@ -102,6 +102,10 @@ func _refresh_buttons() -> void:
 			restart_button.text = "RESET RANGE"
 			restart_button.disabled = false
 			host_note.visible = false
+		GameManager.GameMode.MESH_LAB:
+			restart_button.text = "RESTART DUEL"
+			restart_button.disabled = true
+			host_note.visible = false
 		_:
 			restart_button.text = "RESTART DUEL"
 			restart_button.disabled = false
@@ -135,4 +139,5 @@ func _in_match() -> bool:
 		GameManager.GameMode.GAUNTLET,
 		GameManager.GameMode.MULTIPLAYER,
 		GameManager.GameMode.PRACTICE,
+		GameManager.GameMode.MESH_LAB,
 	]

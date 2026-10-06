@@ -33,6 +33,10 @@ var _death_tween: Tween
 @onready var arm_hitbox: Hitbox = $Arm/ArmHitbox
 @onready var leg_hitbox: Hitbox = $LegHitbox
 
+var _dummy: DummyBody
+var _grip_target: Marker3D
+var _index_pull := 0.0
+
 
 func setup(new_archetype: AIArchetype, health_mult: float, target: Player) -> void:
 	archetype = new_archetype
@@ -52,6 +56,7 @@ func _ready() -> void:
 	revolver.drawn = false
 	revolver.held = false
 	_rest_arm_basis = arm.transform.basis
+	_attach_dummy()
 
 
 ## Store current world position as the strafe origin. Call after placing on the marker.
@@ -119,6 +124,7 @@ func _process(delta: float) -> void:
 				_finish_reload()
 		AIState.DISARMED:
 			pass
+	_drive_gun_hand(delta)
 
 
 func _start_drawing() -> void:
@@ -163,6 +169,7 @@ func _fire() -> void:
 	var direction := (_target.get_head_position() + Vector3.DOWN * 0.2 - muzzle).normalized()
 	direction = _apply_accuracy_cone(direction)
 	revolver.try_fire(true, direction)
+	_index_pull = 1.0
 	if revolver.rounds <= 0:
 		_begin_reload()
 
@@ -207,8 +214,11 @@ func capture_replay_pose() -> Dictionary:
 	var flags := 0
 	if revolver.drawn:
 		flags |= NetworkManager.POSE_FLAG_GUN_DRAWN
-	if not revolver.held:
+	if revolver.drawn and not revolver.held:
 		flags |= NetworkManager.POSE_FLAG_GUN_FREE
+	if revolver.gate_open:
+		flags |= NetworkManager.POSE_FLAG_GATE_OPEN
+	flags |= revolver.chamber_index() << NetworkManager.POSE_FLAG_CHAMBER_SHIFT
 	return {
 		"root": global_transform,
 		"head": ($Head as Node3D).global_transform,
@@ -224,12 +234,11 @@ func apply_replay_pose(pose: Dictionary) -> void:
 		_death_tween.kill()
 	global_transform = pose["root"]
 	arm.global_transform = pose["right"]
-	revolver.follow_parent = false
-	revolver.global_transform = pose["gun"]
+	revolver.hold_replay_pose(pose["gun"], int(pose.get("flags", 0)))
 
 
 func clear_replay_pose() -> void:
-	revolver.follow_parent = true
+	revolver.release_replay_hold()
 
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
@@ -318,7 +327,40 @@ func hitbox_rids() -> Array[RID]:
 	]
 
 
+func _attach_dummy() -> void:
+	_dummy = DummyBody.spawn(self)
+	_dummy.follow_travel(self)
+	($Body as MeshInstance3D).visible = false
+	($Head/HeadMesh as MeshInstance3D).visible = false
+	($Head/Hat as MeshInstance3D).visible = false
+	var grip := Marker3D.new()
+	grip.name = "GripTarget"
+	# Wrist sits just behind the revolver, which lives on this arm's -Z.
+	grip.position = Vector3(0.0, 0.0, -0.16)
+	arm.add_child(grip)
+	_grip_target = grip
+	# The gun arm is on +X.
+	_dummy.drive_arm(true, grip)
+
+
+func _drive_gun_hand(delta: float) -> void:
+	if _dummy == null:
+		return
+	_index_pull = maxf(_index_pull - delta / 0.15, 0.0)
+	if revolver.held:
+		var anchor := revolver.get_node_or_null("GripAnchor") as Node3D
+		_dummy.set_arm_target(true, anchor if anchor != null else _grip_target, true, DummyBody.WRIST_INSET)
+		_dummy.set_hand_curl(true, HandFingers.Pose.PISTOL, _index_pull)
+		return
+	if _grip_target != null:
+		_dummy.set_arm_target(true, _grip_target, true, DummyBody.WRIST_INSET)
+	_dummy.set_hand_curl(true, HandFingers.Pose.OPEN, 0.0)
+
+
 func _tint(color: Color) -> void:
+	if _dummy != null:
+		_dummy.set_tint(color)
+		return
 	for mesh in [$Body, $Head/HeadMesh, $Head/Hat]:
 		var material := StandardMaterial3D.new()
 		material.albedo_color = color

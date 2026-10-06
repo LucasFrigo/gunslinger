@@ -1,6 +1,6 @@
 # Feature Roadmap & Key Concepts: VR Gunslinger Game
 
-Ordered easiest → hardest to implement, given what already exists in the codebase.
+Ordered cheapest → costliest for an agent to implement, given what already exists. Cost is the context a turn has to hold, how many live systems a wrong edit breaks, and how many sessions a miss takes. A stronger model plans the upper tiers; a cheaper model implements once that plan is settled. An item that names a dependency stays after it.
 
 **Living status of what already ships:** `[docs/FEATURES.md](docs/FEATURES.md)` · **How systems work:** `[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)` · **Bugs:** `[docs/BUGS.md](docs/BUGS.md)` · **Pre-release TODOs:** `[docs/RELEASE_TODOS.md](docs/RELEASE_TODOS.md)` · **SFX checklist:** `[docs/SOUND.md](docs/SOUND.md)` · **Design / lore:** `[docs/design/README.md](docs/design/README.md)` · **Versions:** `[CHANGELOG.md](CHANGELOG.md)` / `[VERSION](VERSION)`
 
@@ -8,49 +8,50 @@ When an item below lands (or is clearly underway), update `docs/FEATURES.md`. Wh
 
 **Ideas** (before Completed) is not part of that queue. Those concepts are not ready to build. Add an item there only when asked.
 
-## 1. Polish / visual
+## 1. Low — small context
 
-VFX, trail, and presentation tweaks. Not new mechanics. Numbered easiest → hardest.
+A cheaper model. One named file, or a catalog entry that already plays. Do not explore the repo.
 
 1. **Shorter bullet trails:** Trails linger too long after the slug is gone. Drop `FADE_TIME` in `weapons/bullet_trail.gd` (currently 1.6s) so the ribbon disappears faster; optional debug knob.
 2. **Replace placeholder SFX:** Combat cues play today via `PlaceholderAudio` except `duel_end.wav`. Check boxes in `[docs/SOUND.md](docs/SOUND.md)` as real files land in `assets/audio/`. Gunshot first.
 3. **Barrel smoke:** Visible smoke coming out of the barrel after a shot. A short stub already plays (`VfxCatalog` `&"muzzle_smoke"` from `ImpactFeedback.shot_fired` / `assets/vfx/muzzle_smoke.tscn`); this is a lingering plume that reads as gunsmoke, not a 0.45s puff.
-4. **Flat jam as long clear animation:** Maybe drop the heat / chance / look-down hold clear and make a jam just play a long clear animation (cylinder fuss / shake) before you can fire again — same flat-only cadence punishment, less fiddly. Today: heat build + click + look down + hold Space (`weapons/weapon_base.gd` / FlatRig). Keep VR/AI jam-free.
-5. **Wind bed + gusts:** Always-on outdoor wind, mixed per arena, plus occasional visual gusts that fire a gust SFX at the same moment. Bed can start from `ScenarioResource.ambience` (`scenario_base.gd`) — unused today. Gusts are a new `VfxCatalog` cue (dust/tumbleweed/cloth) paired with an `AudioCatalog` `&"wind_gust"` one-shot. Per map: quiet/still Main Street, drier Canyon, more height/air on Train Rooftop; Saloon stays interior (no outdoor bed). Cosmetic only (local, no net). Foley notes in `[docs/SOUND.md](docs/SOUND.md)`.
 
 
 
-## 2. Medium — contained mechanics & set pieces
+## 2. Moderate — one focused session
 
-Numbered easiest → hardest. Later items that name a dependency stay after that dependency.
+A mid-tier coding model. The spec is already tight, or another actor already does the thing. Name the files. A stronger model does not earn its keep here.
 
-1. **Duel title cards:** Before the standoff, a Tekken-style intro isolates each duelist in turn. A fixed 3D camera points at them in the live arena, in whatever pose they are already holding; flat and VR both take that camera. A shared multilayer 2D card slams in from the side and holds about 2 seconds — one western template for every fighter, big letters are the name only. NPCs use `AIArchetype.display_name`. Humans use a display name in Settings; the Steam persona name overrides it while online. Order: in SP the NPC first, then the player; in 1v1 the host, then the joiner. Later 3+ modes cycle every combatant. You can walk, draw, and spin the revolver; fire stays locked. Fire or a button skips to the standoff, and in MP either peer skips both. A whoosh plays as the layers hit, plus a short sting per card. Plays on a new matchup in free duel, gauntlet, and 1v1; a rematch of that same duel skips it. Practice hub has no intro. The existing standoff → bell → draw still follows.
-2. **Duel vs up to 3 NPCs:** Free-duel option to face 1–3 AI opponents in one standoff (local, no netcode). Needs extra spawn marks, multi-combatant targeting, and resolve when more than two duelists fire. Reuses `ai/duelist.tscn` + archetypes.
-3. **Ragdoll physics:** On a lethal hit, the corpse collapses instead of holding the last pose the death cam orbits. `assets/models/characters/gunslinger.glb` is still an unskinned A-pose (not on AI or the remote avatar), so this needs a skeleton plus Godot `PhysicalBone3D` / `PhysicalBoneSimulator3D` against arena collision. At the lethal hit, drop the controller / IK pose and let the sim take the body; an impulse from the shot direction sells the fall. SP first; 1v1 MP can share a host-authored impulse so both peers see the same collapse. Depends on the death-cam corpse.
-4. **Dismemberment:** A killing or limb-removing hit severs that part (head, either arm, a leg), keyed off the existing regions (`HeadHitbox`, `ArmHitboxL` / `ArmHitboxR`, `LegHitbox` in `player/player.gd`). Cost-effective path: pre-cut boolean meshes in `gunslinger.blend` that hide or swap out a chunk, rather than runtime CSG or a fracture sim. Show the stump and spawn the cut piece as a rigid body so it drops with the ragdoll. Cosmetic only — hit resolution stays `combat/combat_rules.gd`. Depends on the ragdoll item for the falling piece.
-
-
-
-## 3. Hard — new modes & netcode scope
-
-Numbered easiest → hardest.
-
-1. **Horde Mode:** Add an endless survival mode featuring wave-based enemy challenges. (Reuses AI/arenas, but needs wave/spawn systems.) The shot that drops the last enemy of a wave also plays the kill-cam slow-mo burst (`TimeManager.notify_kill_cam`, `kill_cam_factor` / `kill_cam_duration`) — same presentation as a duel-ending hit, then time returns and the next wave spawns. Mid-wave kills stay at normal speed.
+1. **Wind bed + gusts:** Always-on outdoor wind, mixed per arena, plus occasional visual gusts that fire a gust SFX at the same moment. Bed can start from `ScenarioResource.ambience` (`scenario_base.gd`) — unused today. Gusts are a new `VfxCatalog` cue (dust/tumbleweed/cloth) paired with an `AudioCatalog` `&"wind_gust"` one-shot. Per map: quiet/still Main Street, drier Canyon, more height/air on Train Rooftop; Saloon stays interior (no outdoor bed). Cosmetic only (local, no net). Foley notes in `[docs/SOUND.md](docs/SOUND.md)`.
+2. **Flat jam as long clear animation:** Maybe drop the heat / chance / look-down hold clear and make a jam just play a long clear animation (cylinder fuss / shake) before you can fire again — same flat-only cadence punishment, less fiddly. Today: heat build + click + look down + hold Space (`weapons/weapon_base.gd` / FlatRig). Keep VR/AI jam-free. Lock that "maybe" before coding; it is flat-only and already has debug knobs.
+3. **Duel title cards:** Before the standoff, a Tekken-style intro isolates each duelist in turn. A fixed 3D camera points at them in the live arena, in whatever pose they are already holding; flat and VR both take that camera. A shared multilayer 2D card slams in from the side and holds about 2 seconds — one western template for every fighter, big letters are the name only. NPCs use `AIArchetype.display_name`. Humans use a display name in Settings; the Steam persona name overrides it while online. Order: in SP the NPC first, then the player; in 1v1 the host, then the joiner. Later 3+ modes cycle every combatant. You can walk, draw, and spin the revolver; fire stays locked. Fire or a button skips to the standoff, and in MP either peer skips both. A whoosh plays as the layers hit, plus a short sting per card. Plays on a new matchup in free duel, gauntlet, and 1v1; a rematch of that same duel skips it. Practice hub has no intro. The existing standoff → bell → draw still follows. The writeup is the plan; the cost is the shared camera, the card, and the skip RPC.
 
 
 
-## 4. Very hard — content & platform systems
+## 3. High — plan on a stronger model
 
-Numbered easiest → hardest.
+A stronger model writes the plan (files, and what must stay put). A mid-tier model implements it. One item makes the hit volumes follow the mannequin, one is a new mode beside the duel, one amends the 1v1 resolver, and one drives physics the agent cannot see.
 
-1. **Campaign Mode:** Develop a narrative-driven or level-based single-player story mode.
-2. **Mod Support:** Provide community modding capabilities (custom gun skins, custom maps, sound packs, and duel scenarios).
+1. **Hitboxes follow the mesh:** Player and NPC capsules do not move with the mannequin. Head, torso, and the single leg volume sit on fixed offsets from the body (`player/player.gd` `_follow_body`; the NPC volumes stay on the greybox `Head` / `Arm` / legs in `ai/duelist.tscn`). Arms are a straight shoulder-to-hand line, so a nod, an IK reach, or a step leaves the shot volume behind the mesh. The remote avatar is the same mannequin (`player/remote_avatar.gd`). Drive the existing regions off the posed bones after arm IK, and keep `combat/combat_rules.gd` (head kill, arm disarm, leg slow, gun-hand grace). Plan which bone owns which capsule before moving them; a wrong volume changes who gets hit in free duel, gauntlet, and 1v1. Do this before the ragdoll, so the corpse volumes match the mesh those hits already use.
+2. **Horde Mode:** Add an endless survival mode featuring wave-based enemy challenges. (Reuses AI/arenas, but needs wave/spawn systems.) The shot that drops the last enemy of a wave also plays the kill-cam slow-mo burst (`TimeManager.notify_kill_cam`, `kill_cam_factor` / `kill_cam_duration`) — same presentation as a duel-ending hit, then time returns and the next wave spawns. Mid-wave kills stay at normal speed. Plan the wave rules first, and keep it a new mode beside `gauntlet/duel_manager.gd`.
+3. **Duel vs up to 3 NPCs:** Free-duel option to face 1–3 AI opponents in one standoff (local, no netcode). Needs extra spawn marks, multi-combatant targeting, and resolve when more than two duelists fire. Reuses `ai/duelist.tscn` + archetypes. Resolve, kill cam, and replay are 1v1 today; a wrong pass breaks free duel and gauntlet.
+4. **Ragdoll physics:** On a lethal hit, the corpse collapses instead of holding the last pose the death cam orbits. The visible body is the rigged mannequin (`assets/models/characters/dummy.glb`); this still needs Godot `PhysicalBone3D` / `PhysicalBoneSimulator3D` against arena collision. At the lethal hit, drop the controller / IK pose and let the sim take the body; an impulse from the shot direction sells the fall. SP first; 1v1 MP can share a host-authored impulse so both peers see the same collapse. Depends on the death-cam corpse. Plan the bone handoff on the stronger model; expect playtest iterations after that.
+
+
+
+## 4. Very high — several sessions
+
+The plan, and the part that is expensive to undo, stay on a stronger model. A mid-tier model can do the follow-through once a template exists.
+
+1. **Dismemberment:** A killing or limb-removing hit severs that part (head, either arm, a leg), keyed off the existing regions (`HeadHitbox`, `ArmHitboxL` / `ArmHitboxR`, `LegHitbox` in `player/player.gd`). Cost-effective path: pre-cut boolean meshes in `gunslinger.blend` that hide or swap out a chunk, rather than runtime CSG or a fracture sim. Show the stump and spawn the cut piece as a rigid body so it drops with the ragdoll. Cosmetic only — hit resolution stays `combat/combat_rules.gd`. Depends on the ragdoll item for the falling piece. The Blender cuts and the GLB round-trip are the costly part.
+2. **Mod Support:** Provide community modding capabilities (custom gun skins, custom maps, sound packs, and duel scenarios). Plan the loading boundary before any loader; a wrong API is costly to unwind.
+3. **Campaign Mode:** Develop a narrative-driven or level-based single-player story mode. Highest session count here. The framework stays on a stronger model; a chapter is mid-tier work only after a template exists.
 
 
 
 ## Ideas
 
-Not ready to build. These stay parked until you ask to mature one into a numbered section above. Add an item here only when asked.
+Not ready to build. These stay parked until you ask to mature one into a numbered section above. Add an item here only when asked. This list is not sorted by agent cost.
 
 - **Airborne fire / mystic trick shots:** Optional tech/mystic branch: allow firing while the revolver is tossed and spinning, so you can go for mid-air trick shots. Today fire/reload require `held` (`weapons/weapon_base.gd`). Gate behind a flag so the grounded western default stays.
 - **More off-hand props:** Extra radial wedges beyond the cigarette, coin, ace, and bottle — badge, etc. Each needs a mesh vendored next to `assets/models/props/msc_cigarette.glb` and an entry in `PropController.ITEMS`; the wheel, attach, and stow plumbing already exist. Props are local-only today: remote avatars show nothing in the off hand, so MP pose sync (a flag plus the equipped id) is the other half. Cigarette polish that is still open: an ember emission / tiny light on the tip, and a readability pass on the thrown cig (real 8.4 cm scale is nearly invisible in flight — see `cig_spin_axis`).
@@ -68,11 +69,12 @@ Not ready to build. These stay parked until you ask to mature one into a numbere
 
 Newest at the top. Keep a one-line note of what shipped and where; details live in `[docs/FEATURES.md](docs/FEATURES.md)`.
 
+- **Replay retraces the dead player's body:** The local victim's mannequin plays the recorded head, arms, and steps during the clip, and the revolver, off-hand prop, and a held reload round follow that same clip, then the corpse holds the death pose (`player/player.gd` `apply_replay_pose`, `player/replay_objects.gd`). Fixes [BUG-015](docs/BUGS.md). (`done` in FEATURES)
 - **Death cam (3rd-person corpse):** After the kill-cam fly-along, only the dead player orbits the corpse (mouse up looks up) until the next duel. The winner keeps control. Fire or the trigger skips the replay onto that orbit. (`done` in FEATURES)
 - **Duel replay:** After `death_cam_hold`, both watch the killer's eyes until the death, then the corpse orbit for the slow-motion tail. SP and 1v1 share the host clip. (`done` in FEATURES)
 - **Slow-hand aim steady:** VR **Aim Steady** slider (default half, 0 is raw) damps a slow wrist on the held revolver and leaves a fast draw raw. The trigger frame keeps the previous bore. Flat and AI are unchanged. 1v1 sends `POSE_FLAG_GUN_STEADIED` so the peer gun matches that bore. (`done` in FEATURES)
 - **VR height calibration:** Settings standing height in cm (feet and inches toggle). Calibrate samples the headset; Reset view height and the next VR launch shift `XROrigin3D` on Y so the headset matches that height. Torso, legs, and holster stay on the floor offsets. Flat stays at 1.7 m. Fixes [BUG-013](docs/BUGS.md). (`done` in FEATURES)
-- **VR pause on the gun-hand stick click:** Meta and Steam take the controller menu buttons ([BUG-012](docs/BUGS.md)). Pause (debug panel on the main menu) is the draw-hand stick click, rebindable in Settings. The off-hand click stays the prop wheel. (`done` in FEATURES)
+- **VR pause on the gun-hand stick click:** Meta and Steam take the controller menu buttons ([BUG-012](docs/BUGS.md)). Pause is the draw-hand stick click, rebindable in Settings. The off-hand click stays the prop wheel. The debug panel is F3. (`done` in FEATURES)
 - **Holster side drives the hand:** Settings **Holster Side** still moves the hip, and now also picks the default draw hand (flat RMB, holstered pause stick, off-hand props and reload). VR can still grab the hip with either hand. (`done` in FEATURES)
 - **Bottle (misc prop):** Off-hand longneck (`props/bottle.gd`, `assets/models/props/msc_longneck.glb`). Charge throw matches the ace; a bullet or a hard impact shatters it with the rail-bottle glass VFX / sound and it does not respawn. Pickup of a still-whole loose bottle matches the ace. Local-only. Practice-hub rail bottles stay range targets. (`done` in FEATURES)
 - **Ace of spades:** Off-hand prop (`props/ace.gd`, `assets/models/props/msc_ace.glb`). Charge throw becomes a pick-up-able rigid body. Local-only. (`done` in FEATURES)

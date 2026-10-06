@@ -1,6 +1,6 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene format=3 uid="uid://cb8x8wa41cy71"]
 
-[ext_resource type="Script" path="res://props/bottle.gd" id="1"]
+[ext_resource type="Script" uid="uid://bu4snotdrvo41" path="res://props/bottle.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://c20wcf0f0sacv" path="res://assets/models/props/msc_longneck.glb" id="2"]
 
 [sub_resource type="PhysicsMaterial" id="phys_bottle"]
@@ -11,7 +11,7 @@ bounce = 0.15
 height = 0.23
 radius = 0.028
 
-[node name="Longneck" type="RigidBody3D"]
+[node name="Longneck" type="RigidBody3D" unique_id=951013543]
 collision_layer = 0
 collision_mask = 0
 mass = 0.35
@@ -20,8 +20,11 @@ freeze = true
 continuous_cd = true
 script = ExtResource("1")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1053311927]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.115, 0)
 shape = SubResource("shape_bottle")
 
-[node name="Model" parent="." instance=ExtResource("2")]
+[node name="Model" parent="." unique_id=331594943 instance=ExtResource("2")]
+
+[node name="GripAnchor" type="Marker3D" parent="." unique_id=666696690]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, -0.049387325, 0.1, 0)

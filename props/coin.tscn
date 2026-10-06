@@ -1,6 +1,6 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene format=3 uid="uid://benjygt5a0lc4"]
 
-[ext_resource type="Script" path="res://props/coin.gd" id="1"]
+[ext_resource type="Script" uid="uid://bufav8yg5ahf8" path="res://props/coin.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://ds6ohd3spmwu" path="res://assets/models/props/msc_coin.glb" id="2"]
 
 [sub_resource type="PhysicsMaterial" id="phys_coin"]
@@ -11,7 +11,7 @@ bounce = 0.18
 height = 0.006
 radius = 0.022
 
-[node name="Coin" type="RigidBody3D"]
+[node name="Coin" type="RigidBody3D" unique_id=97313701]
 collision_layer = 0
 collision_mask = 0
 mass = 0.012
@@ -20,7 +20,10 @@ freeze = true
 continuous_cd = true
 script = ExtResource("1")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=303732778]
 shape = SubResource("shape_coin")
 
-[node name="Model" parent="." instance=ExtResource("2")]
+[node name="Model" parent="." unique_id=1858221064 instance=ExtResource("2")]
+
+[node name="GripAnchor" type="Marker3D" parent="." unique_id=8685144]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, -0.06321187, 0.10643193, -0.018799119)

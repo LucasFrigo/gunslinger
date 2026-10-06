@@ -9,8 +9,24 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ## [Unreleased]
 
+### Added
+
+- Mannequin legs take an in-place step while a player, remote avatar, or NPC moves, and settle when they stop. In VR the local body stays hidden, so the other player is the one who sees the step.
+- Mannequin fingers curl when a hand closes. In VR the grab button closes that hand (a fist if it caught nothing, otherwise the pose for the revolver, bottle, pinch prop, or belt round) and the index follows the trigger. Flat stays open until that hand is holding something. The wrist eases onto a grip marker on the object.
+
 ### Fixed
 
+- On the replay, the dead player's mannequin retraces the draw, aim, and steps, then holds that death pose for the corpse orbit. The revolver, an off-hand prop, and a held reload round follow the clip with it. [BUG-015]
+- A held object keeps the mannequin hand on it while walking or looking. The index, not the pinky, curls with the trigger.
+- Mannequin fingers sit on the palm, match its thickness, and curl into the hand instead of splaying.
+- The mannequin torso stays in its rest pose. Spine and chest are no longer bent toward the head; only the neck nods.
+- F3 and Esc work in the mesh lab. The parked flat player no longer swallows the debug panel, and Esc opens the pause menu there.
+- VR prop wheel matches the stick, and the wedge names read forwards. The ring had faced the headset backwards, so the labels were mirrored and stick-right lit the wedge on the left.
+- VR **Calibrate** no longer stops the game. The headset camera in this Godot version has no tracking-data property, and reading it also blocked the next launch once a height was saved.
+- In VR the arms stretch to the controllers when you reach past the mannequin’s rest length, instead of leaving the hands behind.
+- In VR the hand sits on the controller, and on the revolver when it is in that hand, instead of hanging back toward the shoulder.
+- In VR the hands bend at the wrist with the controller, including radial and ulnar tilt, instead of staying locked to the forearm.
+- Looking down no longer shows the inside of your body. The mannequin sits just behind the eyes, and anything closer than the lens is clipped. The gun hand’s thumb points up, and the arm stays on the revolver while you look around instead of snapping to it.
 - A VR session that started seated can be lined up after you stand: Settings **Reset view height** puts the headset at the saved standing height so the torso and holster meet the head. [BUG-013]
 - Practice porch: a dropped revolver stays on the deck planks instead of falling through onto the lot underneath.
 - VR pause no longer depends on the Meta or Steam menu buttons. The draw-hand stick click opens pause (the debug panel on the main menu). The off-hand click still opens the prop wheel. **Pause** can be rebound in Settings. Holster Side Left uses the left hand as that draw hand, including flat RMB.
@@ -19,12 +35,21 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Changed
 
+- Mannequin arms and hands match the Blender mesh. They no longer render larger than the imported rig.
+- VR debug panel sits 0.4 m off the off-hand so it is readable, further from the headset.
+- VR scrollable menus (debug panel, Settings, server lists) have a scrollbar twice as thick. Point the laser at the bar and hold the trigger to drag it. While the laser is on that window, the right stick scrolls it and the left stick still walks.
+
+- VR Ocelot spin is easier to start. The first motion breaks the barrel off the hand; a spin that is already going still takes speed from a flick. Pressing the spin button also kicks the muzzle upward.
+- The VR debug panel no longer opens from a controller. F3 still toggles it.
 - In-game title is **Duello!** on the loading screen, main menu, and Quest launcher name.
 - Practice-hub ground: the imported 80 m pad no longer sits above the desert visual, so a thrown ace rests on the sand instead of floating past the fence. The card is heavier and snaps back onto a surface if it tunnels. Flat **G** flips the coin on press (it no longer reseats in the same instant). A toss now picks heads or tails instead of always returning the default tails-up face.
 - The cigarette shatters practice bottles on the way home as well as on the way out.
 
 ### Added
 
+- Debug mesh lab (F3 **Mesh lab**). A small sunset lot for watching the mannequin. In flat, a stand-in walks a circle and moves its head and hands on its own while you fly with WASD and the mouse. In VR, you keep playing in the headset and a second window on the desktop flies around you. Head, Walk, and Hands can each be turned off. Leaving the lab returns to the main menu.
+- Your own body is the Reto mannequin in VR and in flat. Look down and you see the torso, arms, and legs; the head stays hidden until the death-cam orbit. The arms follow the controllers, or in flat they hang at the sides, reach the held revolver, and follow an off-hand prop. The legs stay planted.
+- Rigged duelist mannequin. AI opponents and the other player in a 1v1 are the Reto dummy instead of grey boxes, and the arms reach the gun or the tracked hands. When you die, that same mesh is the corpse the death cam orbits. The designed gunslinger outfit is still unused.
 - Death cam and duel replay. After a killing shot the bullet fly-along still plays, then the dead player orbits the corpse while the winner keeps control. A couple of seconds later both watch the last moments from the killer's eyes until the shot lands, then the same orbit through the slow-motion tail. The end-duel guitar plays again when the replay reaches the killing shot. A REPLAY tag sits in the corner while the clip plays. After the clip the dead player stays on that orbit until the usual menu, next gauntlet fight, or rematch, and the winner is back on their character. Fire or the trigger skips the clip onto that orbit. Same sequence in single-player and 1v1. Fouls are unchanged.
 
 - VR **Aim Steady** in Settings (Quest and PCVR): a slow wrist damps the held revolver’s aim, a fast draw stays raw, and the trigger pull does not kick the shot. The slider goes down to raw. The other player sees that steadied gun. Flat aim is unchanged.
