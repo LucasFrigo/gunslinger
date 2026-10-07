@@ -1,5 +1,7 @@
 [gd_resource type="Theme" format=3 uid="uid://dvt0tr3eu2cwp"]
 
+[ext_resource type="FontFile" uid="uid://ddi2rdvsuv8ug" path="res://assets/fonts/Silkscreen-Regular.ttf" id="1_silk"]
+
 [sub_resource type="StyleBoxFlat" id="button"]
 content_margin_left = 10.0
 content_margin_top = 6.0
@@ -61,6 +63,7 @@ border_width_bottom = 2
 border_color = Color(0.78, 0.62, 0.28, 1)
 
 [resource]
+default_font = ExtResource("1_silk")
 default_font_size = 16
 Button/colors/font_color = Color(0.93, 0.86, 0.72, 1)
 Button/colors/font_focus_color = Color(0.98, 0.94, 0.84, 1)

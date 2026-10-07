@@ -61,6 +61,8 @@ var _spin_world_omega := 0.0
 var _relock_from := 0.0
 var _relock_elapsed := 0.0
 var _spin_motion_init := false
+## Tossed off a hinge spin and still airborne: a catch resumes the hinge at this speed.
+var carrying_spin := false
 var _prev_parent_basis := Basis.IDENTITY
 var _prev_pivot_world := Vector3.ZERO
 var _prev_pivot_vel := Vector3.ZERO
@@ -90,6 +92,7 @@ func reset() -> void:
 	jammed = false
 	_jam_heat = 0.0
 	_jam_last_shot_s = -1.0
+	carrying_spin = false
 	reset_spin()
 	_on_gate_changed()
 	state_changed.emit()
@@ -176,6 +179,8 @@ func cock() -> void:
 
 ## Snap to a hand attach. Keeps global pose only if `keep_pose` (unused; identity).
 func attach_to(hand_attach: Node3D, rumble_hand: StringName = &"right_hand") -> void:
+	var carried := _caught_spin_omega(hand_attach)
+	carrying_spin = false
 	reset_spin()
 	_freeze_attached()
 	follow_parent = true
@@ -184,12 +189,16 @@ func attach_to(hand_attach: Node3D, rumble_hand: StringName = &"right_hand") -> 
 	transform = Transform3D.IDENTITY
 	held = true
 	drawn = true
+	if carried != 0.0:
+		_start_hinge(carried)
 	_sync_follow_parent()
 
 
 ## Toss into the world with the given velocities. Stays `drawn` (not holstered).
-func release_into_world(parent: Node, velocity: Vector3, spin: Vector3) -> void:
+## A hinge spin keeps turning in the air and resumes on a catch unless `keep_hinge` is false.
+func release_into_world(parent: Node, velocity: Vector3, spin: Vector3, keep_hinge := true) -> void:
 	var extra_spin := _hinge_throw_spin()
+	carrying_spin = keep_hinge and spinning and not relocking
 	var xf := global_transform
 	reset_spin()
 	reparent(parent, true)
@@ -204,6 +213,28 @@ func release_into_world(parent: Node, velocity: Vector3, spin: Vector3) -> void:
 	sleeping = false
 	linear_velocity = velocity
 	angular_velocity = spin + extra_spin
+	if carrying_spin:
+		contact_monitor = true
+		max_contacts_reported = maxi(max_contacts_reported, 1)
+		if not body_entered.is_connected(_on_carry_contact):
+			body_entered.connect(_on_carry_contact)
+
+
+func _on_carry_contact(_body: Node) -> void:
+	carrying_spin = false
+
+
+## Signed hinge speed on the catching hand's X axis, or 0 when nothing is carried.
+## Uses the body's turn rate now, so a bounce or drag has already slowed it.
+func _caught_spin_omega(hand_attach: Node3D) -> float:
+	if not carrying_spin or held:
+		return 0.0
+	var speed := angular_velocity.length()
+	if speed < 0.01:
+		return 0.0
+	var axis := hand_attach.global_transform.basis.x
+	var along := angular_velocity.dot(axis)
+	return -speed if along < 0.0 else speed
 
 
 ## Arm-hit fling: a short upward pop, not the hand's throw velocity. Stays drawn.
@@ -213,10 +244,11 @@ func pain_jerk_into_world(parent: Node) -> void:
 	var axis := global_basis.x
 	if axis.length_squared() < 0.0001:
 		axis = Vector3.RIGHT
-	release_into_world(parent, Vector3.UP * up_speed, axis.normalized() * spin_speed)
+	release_into_world(parent, Vector3.UP * up_speed, axis.normalized() * spin_speed, false)
 
 
 func holster_to(holster: Node3D) -> void:
+	carrying_spin = false
 	reset_spin()
 	_freeze_attached()
 	follow_parent = true
@@ -247,10 +279,14 @@ func begin_spin() -> void:
 		return
 	if spinning and not relocking:
 		return
+	_start_hinge(_spin_start_kick())
+
+
+func _start_hinge(world_omega: float) -> void:
 	spinning = true
 	relocking = false
 	_spin_motion_init = false
-	_spin_world_omega = _spin_start_kick()
+	_spin_world_omega = clampf(world_omega, -80.0, 80.0)
 	spin_omega = _spin_world_omega
 
 
@@ -298,6 +334,7 @@ func end_spin(snap: bool) -> void:
 
 ## Pin the mesh to a recorded world pose. Physics must not keep a toss going.
 func hold_for_replay(world_xf: Transform3D) -> void:
+	carrying_spin = false
 	reset_spin()
 	follow_parent = false
 	visible = true

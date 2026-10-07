@@ -11,12 +11,16 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Added
 
+- VR spin throw and catch: releasing grip while the revolver hangs on the finger hinge throws it still turning on the same axis. Catch it with either hand and it hangs on that hand at the speed it had, until that hand presses and releases trick-shot. A bind already held at the catch does not stop it. Tossing it again repeats the throw.
 - Menus, the HUD, and the prop wheel use the Duello theme: ink, paper, rust, and gold, with the Silkscreen pixel font.
 - Mannequin legs take an in-place step while a player, remote avatar, or NPC moves, and settle when they stop. In VR the local body stays hidden, so the other player is the one who sees the step.
 - Mannequin fingers curl when a hand closes. In VR the grab button closes that hand (a fist if it caught nothing, otherwise the pose for the revolver, bottle, pinch prop, or belt round) and the index follows the trigger. Flat stays open until that hand is holding something. The wrist eases onto a grip marker on the object.
 
 ### Fixed
 
+- Mannequin knees fold the shin back on the in-place step. They were swinging the ankle toward the face, so the joint bowed backward. [BUG-016]
+- The game starts again. A bad indent in the flat prop wheel script made Godot refuse the `PropRadialOverlay` class on load.
+- Holding Tab opens the prop wheel. Its labels use the Duello pixel font; the theme had no font assigned, so drawing the names crashed.
 - On the replay, the dead player's mannequin retraces the draw, aim, and steps, then holds that death pose for the corpse orbit. The revolver, an off-hand prop, and a held reload round follow the clip with it. [BUG-015]
 - A held object keeps the mannequin hand on it while walking or looking. The index, not the pinky, curls with the trigger.
 - Mannequin fingers sit on the palm, match its thickness, and curl into the hand instead of splaying.

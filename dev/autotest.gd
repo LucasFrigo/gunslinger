@@ -68,7 +68,7 @@ func _test_gauntlet() -> void:
 	for rung in 2:
 		if not await _wait_for_state(DuelManager.State.DRAW, 25.0):
 			return _fail("gauntlet rung %d never reached DRAW" % (rung + 1))
-		if rung == 0 and not _assert_pain_jerk():
+		if rung == 0 and not (_assert_pain_jerk() and _assert_spin_throw()):
 			return
 		# Arm the listener before the kill: duel_finished fires synchronously.
 		var result := _arm_duel_listener()
@@ -115,6 +115,32 @@ func _assert_pain_jerk() -> bool:
 		_fail("pain-jerk: AI toss had no upward velocity")
 		return false
 	print("AUTOTEST: pain-jerk toss ok")
+	return true
+
+
+## A hinge spin survives the toss and resumes on a catch. An arm hit does not keep it.
+func _assert_spin_throw() -> bool:
+	var player := GameManager.local_player
+	var gun: WeaponBase = player.revolver
+	gun.begin_spin()
+	gun.spin_omega = 12.0
+	gun.release_into_world(get_tree().current_scene, Vector3.ZERO, Vector3.ZERO)
+	if not gun.carrying_spin or absf(gun.angular_velocity.length() - 12.0) > 0.5:
+		_fail("spin-throw: toss did not keep the hinge speed (%s)" % gun.angular_velocity)
+		return false
+	player._attach_gun_to_hand(&"right_hand")
+	if not gun.is_spin_active() or gun.carrying_spin or absf(gun.spin_omega) < 11.0:
+		_fail("spin-throw: catch did not resume the hinge (omega=%s)" % gun.spin_omega)
+		return false
+	gun.pain_jerk_into_world(get_tree().current_scene)
+	if gun.carrying_spin:
+		_fail("spin-throw: arm hit kept the hinge")
+		return false
+	player._attach_gun_to_hand(&"right_hand")
+	if gun.is_spin_active():
+		_fail("spin-throw: a plain toss resumed the hinge")
+		return false
+	print("AUTOTEST: spin throw and catch ok")
 	return true
 
 
@@ -785,6 +811,16 @@ func _main_menu_split_ok() -> bool:
 
 ## Radial wedge picking plus the cigarette's hold → throw → catch cycle.
 func _props_ok() -> bool:
+	var wheel_font: Font = preload("res://ui/theme_duello.tres").default_font
+	if wheel_font == null:
+		_fail("duello theme has no font for the prop wheel")
+		return false
+	var wheel := PropRadialOverlay.new()
+	add_child(wheel)
+	wheel.show_wheel(PackedStringArray(["Empty Hand", "Cigarette", "Coin", "Ace of Spades", "Bottle"]))
+	wheel.notification(CanvasItem.NOTIFICATION_DRAW)
+	wheel.free()
+
 	var count := PropController.ITEMS.size()
 	if PropController.highlight_index(Vector2.ZERO, count) != -1:
 		_fail("centered stick should cancel, not highlight")

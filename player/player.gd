@@ -62,6 +62,8 @@ var _reload_event := ""
 var _reload_event_timer := 0.0
 var _vr_reload_label: Label3D
 var _prev_gate_open := false
+var _trick_down_hands := {}
+var _trick_release_ignored := false
 var _dump_armed := true
 var _close_armed := true
 var _dump_hold_accum := 0.0
@@ -661,6 +663,8 @@ func _attach_gun_to_hand(hand: StringName) -> void:
 	revolver.use_aim_steady = use_vr
 	revolver.attach_to(_gun_attach_node(hand), hand)
 	_holding_hand = GunHand.LEFT if hand == HAND_LEFT else GunHand.RIGHT
+	# A trick-shot bind already down at a spinning catch must not relock when it lifts.
+	_trick_release_ignored = revolver.is_spin_active() and _trick_shot_held(hand)
 	_dump_armed = true
 	_close_armed = true
 	_dump_hold_accum = 0.0
@@ -698,7 +702,9 @@ func _on_trick_shot_changed(hand: StringName, pressed: bool) -> void:
 		return
 	if not use_vr:
 		return
+	_trick_down_hands[hand] = pressed
 	if not revolver.held or _holding_hand == GunHand.NONE:
+		_trick_release_ignored = false
 		if revolver.is_spin_active():
 			revolver.end_spin(true)
 		return
@@ -706,8 +712,17 @@ func _on_trick_shot_changed(hand: StringName, pressed: bool) -> void:
 		return
 	if pressed:
 		revolver.begin_spin()
+	elif _trick_release_ignored:
+		_trick_release_ignored = false
 	else:
 		revolver.end_spin(false)
+
+
+func _trick_shot_held(hand: StringName) -> bool:
+	if PlayerSettings.get_vr_bind(&"trick_shot") == "stick_down":
+		return rig is VRRig and (rig as VRRig).get_stick(hand).y <= -float(
+				GameManager.tuning.get("spin_stick_threshold", 0.55))
+	return _trick_down_hands.get(hand, false)
 
 
 ## Hip side from Settings. Right unless Holster Side is Left.

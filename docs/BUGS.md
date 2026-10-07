@@ -17,6 +17,26 @@ None.
 
 ## Fixed
 
+### BUG-016 — Mannequin knees bend backward
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-07 |
+| Fixed | 2026-10-07 |
+| Platforms | Flat (own body), AI, remote avatar, mesh lab. VR hides the local body, so the other player is who sees the step. |
+| Areas | `characters/dummy_body.gd` `_apply_legs` |
+
+**What:** On the in-place step, the knee bowed backward. The shin swung toward the face instead of folding behind the thigh.
+
+**Repro:**
+1. Flat free duel, or F3 mesh lab with Walk on.
+2. Walk and watch the legs.
+3. The knee breaks the wrong way while the trailing leg swings.
+
+**Fix:** The knee uses the opposite rotation from the thigh swing, so a positive step toward the face flexes the shin backward. The foot still cancels the thigh and that signed knee so it stays level.
+
 ### BUG-015 — Replay freezes the dead player's body
 
 | | |

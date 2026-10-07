@@ -9,4 +9,4 @@ script = ExtResource("1")
 [node name="Model" parent="." unique_id=489335641 instance=ExtResource("2")]
 
 [node name="GripAnchor" type="Marker3D" parent="." unique_id=1148795974]
-transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, -0.028862193, 0.037712976, -0.020531058)
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, -0.033864327, 0.0012185946, -0.02321665)

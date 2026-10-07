@@ -6,6 +6,7 @@ extends Node3D
 ## Pose writes live here. `set_pose_driven(false)` leaves the last bone poses so a
 ## later ragdoll can take the skeleton without this writer fighting it.
 ## Legs take an in-place step from `follow_travel`. Hips stay planted.
+## The knee folds the shin back.
 
 const MODEL := preload("res://assets/models/characters/dummy.glb")
 ## Pull the wrist back from a grip so the palm, not the bone origin, meets it.
@@ -336,8 +337,9 @@ func _apply_legs(weight: float) -> void:
 			continue
 		var swing := sin(_walk_phase + float(leg["phase"]))
 		var thigh := swing * THIGH_SWING * weight
-		# Bend only while this leg is behind the hips.
-		var knee := maxf(0.0, -swing) * KNEE_BEND * weight
+		# Positive swing steps a bone toward the face. The knee flexes the other
+		# way, so the shin folds back while this leg is behind the hips.
+		var knee := -maxf(0.0, -swing) * KNEE_BEND * weight
 		# Godot 4 pose rotation includes the rest. A bare swing replaces the
 		# 127° thigh rest and kicks both legs out in front.
 		_set_swing(upper, leg["upper_axis"] as Vector3, thigh)
