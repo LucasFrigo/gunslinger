@@ -82,6 +82,8 @@ Persisted under `user://`: `settings.cfg` (volume, voice volume / mute / push-to
 
 Build identity is `VERSION` (mirrored in `project.godot` → `application/config/version`). `python dev/bump_version.py patch|minor` updates both; pushes to `main` that change code also auto-bump via `.github/workflows/bump-version.yml` if `VERSION` was not already updated.
 
+Agent workflows are instructions, not runtime. Cursor reads `.cursor/rules/` and `.cursor/mcp.json`. Claude Code reads `CLAUDE.md`, `.claude/rules/`, `.mcp.json`, and `.claude/skills/gunslinger-gameplay/` when gameplay code changes. Keep each pair in step when a workflow changes.
+
 ## Menus / pause
 
 - Main menu and pause share `ui/settings_menu.tscn` (scrollable; Controls remapping). Back from Settings (or Esc) returns to the landing page or the pause root. Esc on the SP / MP pages also returns to landing.

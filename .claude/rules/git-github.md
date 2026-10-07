@@ -1,13 +1,8 @@
----
-description: Commit and manage GitHub branches only when the user explicitly confirms
-alwaysApply: true
----
-
 # Git and GitHub (explicit confirmation required)
 
 Agents **may and should** commit, branch, push, and open PRs for this repo **when the user explicitly asks**. Do not refuse git/GitHub work that was requested.
 
-Keep this file in step with `.claude/rules/git-github.md` when the workflow changes.
+Keep this file in step with `.cursor/rules/git-github.mdc` when the workflow changes.
 
 ## Hard gate
 
@@ -35,7 +30,7 @@ Do not treat silence, “looks good”, implementing a feature, or finishing a t
 - Never commit secrets (`.env`, credentials, keys).
 - Never run interactive git (`-i`).
 - After a commit or remote change, verify with `git status`.
-- If the commit lands **code** on `main` (direct commit or merge), include a version bump per `.cursor/rules/version-bump.mdc` (`python dev/bump_version.py patch|minor`) unless `VERSION` was already updated or the user said `[skip bump]`.
+- If the commit lands **code** on `main` (direct commit or merge), include a version bump per `.claude/rules/version-bump.md` (`python dev/bump_version.py patch|minor`) unless `VERSION` was already updated or the user said `[skip bump]`.
 
 ## Safety
 

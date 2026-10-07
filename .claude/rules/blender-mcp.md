@@ -1,7 +1,6 @@
 ---
-description: Blender MCP workflow for character and mesh work in this Godot project
-globs: assets/models/**/*
-alwaysApply: false
+paths:
+  - "assets/models/**/*"
 ---
 
 # Blender MCP
@@ -9,16 +8,16 @@ alwaysApply: false
 The MCP client talks stdio to `uvx blender-mcp`. That process connects to the **Blender addon TCP socket** on `localhost:9876`. Port 9876 is not an HTTP MCP URL.
 
 - Cursor: `.cursor/mcp.json`
-- Claude Code: `.mcp.json` (workflow: `.claude/rules/blender-mcp.md`)
+- Claude Code: `.mcp.json`
 
-Keep this file in step with `.claude/rules/blender-mcp.md` when the workflow changes.
+Keep this file in step with `.cursor/rules/blender-mcp.mdc` when the workflow changes.
 
 ## Before modeling
 
 - Blender must have **Interface: Blender MCP** enabled.
 - In the 3D Viewport: `N` → **BlenderMCP** → **Start MCP Server** / Connect.
 - Only one MCP client should own that socket.
-- If tools fail with `spawn uvx ENOENT`, set `command` in the MCP config for the client you are using to the full `uvx.exe` path (`where uvx`).
+- If tools fail with `spawn uvx ENOENT`, set `command` in `.mcp.json` to the full `uvx.exe` path (`where uvx`).
 
 ## Assets
 

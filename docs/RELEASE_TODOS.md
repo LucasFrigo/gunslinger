@@ -79,4 +79,4 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 - Host Steam overlay invite is opt-in (pause **Invite friends** or Shift+Tab); it no-ops if overlay is disabled or the GodotSteam method is missing. Do not auto-open it on HOST — that steals the click and can stick the overlay.
 - Flat `--flat` ships inside the Steam app (launch option next to PCVR). It is not a second full-price store page.
 - Confirm the first shot after a fresh launch no longer hitchs (boot loading screen in `ImpactFeedback`; [BUG-010](BUGS.md)). VR and flat; editor and export. The hitch should land on Loading, not the first round.
-- Drop `-alpha` from `VERSION` only when cutting a named release (see `.cursor/rules/version-bump.mdc`).
+- Drop `-alpha` from `VERSION` only when cutting a named release (see `.cursor/rules/version-bump.mdc` / `.claude/rules/version-bump.md`).
