@@ -18,3 +18,6 @@ __pycache__/
 
 # Windows lock copies (Godot/Steam DLLs in use)
 addons/godotsteam/**/~*
+
+# Blender autosave backups
+*.blend1
