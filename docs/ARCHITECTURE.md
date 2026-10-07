@@ -85,6 +85,7 @@ Build identity is `VERSION` (mirrored in `project.godot` → `application/config
 ## Menus / pause
 
 - Main menu and pause share `ui/settings_menu.tscn` (scrollable; Controls remapping). Back from Settings (or Esc) returns to the landing page or the pause root. Esc on the SP / MP pages also returns to landing.
+- Menus and the flat HUD use `ui/theme_duello.tres` (Silkscreen, `assets/fonts/`). The F3 panel does not. World panels (`ui/ui_panel_3d.gd`) sample the viewport nearest.
 - `Hud` (`PROCESS_MODE_ALWAYS`) owns both Controls. VR reparents them into a world `UIPanel3D` (`Player.show_menu_panel`); `reclaim_menu` returns each to `MenuHolder` / `PauseHolder`. While a control is on that quad, each scroll view (`ScrollContainer`, server `ItemList`) gets a scrollbar at twice the theme thickness. The laser drags that bar. The right stick scrolls the view under the ray (or the only view on the panel) and does not turn; the left stick still walks. Flat keeps the default bars. The F3 wrist panel uses the same path and sits 0.4 m off the hand, away from the headset (`DebugMenu.VR_PANEL_HEAD_CLEARANCE`).
 - SP pause: `get_tree().paused`. `TimeManager` / `KillCam` skip ticks while paused. `VRRig` stays `PROCESS_MODE_ALWAYS` so the laser can hit the overlay; locomotion is skipped while paused or the overlay is open.
 - MP overlay: title **Menu**, tree not paused, restart disabled for clients. Quit calls `GameManager.go_to_menu()` (`NetworkManager.leave()`).
