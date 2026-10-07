@@ -11,6 +11,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Added
 
+- Menus, the HUD, and the prop wheel use the Duello theme: ink, paper, rust, and gold, with the Silkscreen pixel font.
 - Mannequin legs take an in-place step while a player, remote avatar, or NPC moves, and settle when they stop. In VR the local body stays hidden, so the other player is the one who sees the step.
 - Mannequin fingers curl when a hand closes. In VR the grab button closes that hand (a fist if it caught nothing, otherwise the pose for the revolver, bottle, pinch prop, or belt round) and the index follows the trigger. Flat stays open until that hand is holding something. The wrist eases onto a grip marker on the object.
 

@@ -1,11 +1,8 @@
----
-description: Auto-bump VERSION when code lands on main
-alwaysApply: true
----
-
 # Version bump (main)
 
 Canonical: one line in `VERSION`, mirrored in `project.godot` → `application/config/version`. The HUD and main menu read that setting (`v0.1.0-alpha`). Keep the `-alpha` suffix until the user asks to drop it or cut a named release.
+
+Keep this file in step with `.cursor/rules/version-bump.mdc` when the workflow changes.
 
 ## When to bump
 
@@ -19,8 +16,6 @@ python dev/bump_version.py patch
 Stage `VERSION` + `project.godot`. Still wait for an explicit commit/push ask.
 
 Do **not** bump for docs-only / comments / `.cursor/` / `.claude/` / `.mcp.json` / changelog-only work, feature-branch commits that are not merging to `main`, a commit that already changed `VERSION`, or when the message contains `[skip bump]`.
-
-Keep this file in step with `.claude/rules/version-bump.md` when the workflow changes.
 
 CI (`.github/workflows/bump-version.yml`) patch-bumps on push to `main` if code landed and `VERSION` was not already updated.
 

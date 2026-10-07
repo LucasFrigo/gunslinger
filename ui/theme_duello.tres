@@ -1,0 +1,87 @@
+[gd_resource type="Theme" format=3 uid="uid://dvt0tr3eu2cwp"]
+
+[sub_resource type="StyleBoxFlat" id="button"]
+content_margin_left = 10.0
+content_margin_top = 6.0
+content_margin_right = 10.0
+content_margin_bottom = 6.0
+bg_color = Color(0.16, 0.09, 0.05, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.55, 0.28, 0.14, 1)
+
+[sub_resource type="StyleBoxFlat" id="hover"]
+content_margin_left = 10.0
+content_margin_top = 6.0
+content_margin_right = 10.0
+content_margin_bottom = 6.0
+bg_color = Color(0.28, 0.14, 0.07, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.78, 0.62, 0.28, 1)
+
+[sub_resource type="StyleBoxFlat" id="pressed"]
+content_margin_left = 10.0
+content_margin_top = 6.0
+content_margin_right = 10.0
+content_margin_bottom = 6.0
+bg_color = Color(0.4, 0.2, 0.08, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.93, 0.86, 0.72, 1)
+
+[sub_resource type="StyleBoxFlat" id="track"]
+content_margin_left = 2.0
+content_margin_top = 4.0
+content_margin_right = 2.0
+content_margin_bottom = 4.0
+bg_color = Color(0.12, 0.07, 0.04, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.55, 0.28, 0.14, 1)
+
+[sub_resource type="StyleBoxFlat" id="panel"]
+content_margin_left = 12.0
+content_margin_top = 10.0
+content_margin_right = 12.0
+content_margin_bottom = 10.0
+bg_color = Color(0.09, 0.06, 0.04, 0.96)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.78, 0.62, 0.28, 1)
+
+[resource]
+default_font_size = 16
+Button/colors/font_color = Color(0.93, 0.86, 0.72, 1)
+Button/colors/font_focus_color = Color(0.98, 0.94, 0.84, 1)
+Button/colors/font_hover_color = Color(0.98, 0.94, 0.84, 1)
+Button/colors/font_pressed_color = Color(0.78, 0.62, 0.28, 1)
+Button/styles/disabled = SubResource("button")
+Button/styles/focus = SubResource("hover")
+Button/styles/hover = SubResource("hover")
+Button/styles/normal = SubResource("button")
+Button/styles/pressed = SubResource("pressed")
+CheckButton/colors/font_color = Color(0.93, 0.86, 0.72, 1)
+CheckButton/colors/font_hover_color = Color(0.98, 0.94, 0.84, 1)
+CheckButton/colors/font_pressed_color = Color(0.78, 0.62, 0.28, 1)
+HSlider/styles/grabber_area = SubResource("track")
+HSlider/styles/grabber_area_highlight = SubResource("hover")
+HSlider/styles/slider = SubResource("track")
+Label/colors/font_color = Color(0.93, 0.86, 0.72, 1)
+OptionButton/colors/font_color = Color(0.93, 0.86, 0.72, 1)
+OptionButton/colors/font_hover_color = Color(0.98, 0.94, 0.84, 1)
+OptionButton/styles/focus = SubResource("hover")
+OptionButton/styles/hover = SubResource("hover")
+OptionButton/styles/normal = SubResource("button")
+OptionButton/styles/pressed = SubResource("pressed")
+PanelContainer/styles/panel = SubResource("panel")

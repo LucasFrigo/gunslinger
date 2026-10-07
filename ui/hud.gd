@@ -22,6 +22,7 @@ var _message_timer: SceneTreeTimer
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_pixelate_theme()
 	_menu = $MenuHolder/MainMenu
 	pause_menu = $PauseHolder/PauseMenu
 	replay_tag.visible = false
@@ -36,6 +37,19 @@ func _ready() -> void:
 	if loading_screen != null:
 		loading_screen.hide_screen()
 	version_tag.text = "v%s" % str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
+
+
+func _pixelate_theme() -> void:
+	var theme := preload("res://ui/theme_duello.tres")
+	var font: Font = theme.default_font
+	if font is FontFile:
+		var face := font as FontFile
+		face.antialiasing = TextServer.FONT_ANTIALIASING_NONE
+		face.hinting = TextServer.HINTING_NONE
+		face.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+	for node in [message_label, reload_status, health_status, practice_status, version_tag, replay_tag, prop_radial]:
+		if node is Control and (node as Control).theme == null:
+			(node as Control).theme = theme
 
 
 func get_menu_control() -> Control:

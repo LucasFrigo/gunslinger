@@ -43,7 +43,7 @@ jobs:
           code=false
           for f in "${files[@]}"; do
             case "$f" in
-              docs/*|*.md|.cursor/*|.github/*|dev/bump_version.py|CHANGELOG.md|Roadmap.md|VERSION|LICENSE)
+              docs/*|*.md|.cursor/*|.claude/*|.mcp.json|.github/*|dev/bump_version.py|CHANGELOG.md|Roadmap.md|VERSION|LICENSE)
                 ;;
               *.gd|*.tscn|*.tres|*.shader|*.cfg|project.godot|export_presets.cfg|assets/*)
                 code=true

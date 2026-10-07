@@ -1,6 +1,7 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://ui/loading_screen.gd" id="1"]
+[ext_resource type="Theme" path="res://ui/theme_duello.tres" id="2"]
 
 [sub_resource type="LabelSettings" id="title_settings"]
 font_size = 48
@@ -14,6 +15,7 @@ font_size = 14
 font_color = Color(0.72, 0.62, 0.48, 0.9)
 
 [node name="LoadingScreen" type="Control"]
+theme = ExtResource("2")
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

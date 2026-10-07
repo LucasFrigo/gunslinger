@@ -1,8 +1,3 @@
----
-description: Keep FEATURES, ARCHITECTURE, BUGS, Roadmap, CHANGELOG, and RELEASE_TODOS in sync when code changes
-alwaysApply: true
----
-
 # Project documentation (mandatory)
 
 Agents must keep these files accurate when shipping meaningful work. Do not invent features that are not in code.
@@ -29,12 +24,12 @@ Also sync `project.godot` → `application/config/version` with `VERSION`.
 - **Ideas** on `Roadmap.md` is a parking lot for concepts that are not ready to build. Add or move an item there only when the user asks. Do not implement from that list, and do not treat it as the active queue.
 - **Player-visible or shippable change** → add a `CHANGELOG.md` entry under `[Unreleased]`.
 - **New confirmed bug** → add `BUG-NNN` under Open in `docs/BUGS.md`. **Fixing a tracked bug** → move it to Fixed in the same session; changelog `Fixed` if player-visible.
-- **Code landing on `main`** → bump `VERSION` + `config/version` in that commit (see `version-bump.mdc`). Do not wait for the user to ask.
+- **Code landing on `main`** → bump `VERSION` + `config/version` in that commit (see `.claude/rules/version-bump.md`). Do not wait for the user to ask.
 - **Named release** (only when the user asks to release) → move `[Unreleased]` into a dated `## [X.Y.Z]` section; drop `-alpha` only if they asked.
 
 Skip doc churn for typos, formatting-only edits, or purely internal renames with no behavior change.
 
-Keep this file in step with `.claude/rules/project-docs.md` when the workflow changes.
+Keep this file in step with `.cursor/rules/project-docs.mdc` when the workflow changes.
 
 ## Changelog & SemVer
 

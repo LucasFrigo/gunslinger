@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "blender": {
+      "type": "stdio",
+      "command": "C:\\Users\\lukeg\\.local\\bin\\uvx.exe",
+      "args": ["--python", "3.11", "blender-mcp"],
+      "env": {
+        "BLENDER_HOST": "localhost",
+        "BLENDER_PORT": "9876",
+        "DISABLE_TELEMETRY": "true",
+        "UV_PYTHON_PREFERENCE": "only-managed"
+      }
+    }
+  }
+}

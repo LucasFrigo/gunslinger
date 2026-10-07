@@ -4,8 +4,9 @@ extends Control
 ## world-space `PropRadial` wedges in front of the off hand instead.
 
 const RADIUS := 130.0
-const COLOR_IDLE := Color(0.85, 0.82, 0.75, 0.8)
-const COLOR_HIGHLIGHT := Color(1.0, 0.78, 0.3)
+const COLOR_IDLE := Color(0.93, 0.86, 0.72, 0.85)
+const COLOR_HIGHLIGHT := Color(0.78, 0.62, 0.28, 1)
+const THEME := preload("res://ui/theme_duello.tres")
 
 var _labels := PackedStringArray()
 var _highlight := -1
@@ -33,7 +34,7 @@ func hide_wheel() -> void:
 func _draw() -> void:
 	if _labels.is_empty():
 		return
-	var font := ThemeDB.fallback_font
+	var font: Font = THEME.default_font
 	var center := size * 0.5
 	draw_circle(center, RADIUS + 40.0, Color(0.0, 0.0, 0.0, 0.35))
 	draw_arc(center, RADIUS, 0.0, TAU, 64, Color(0.0, 0.0, 0.0, 0.55), 3.0)
