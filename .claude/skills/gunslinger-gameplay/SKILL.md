@@ -53,7 +53,7 @@ Name VR, flat, AI, and multiplayer before editing. If the spec leaves one unchan
 
 - **Low:** the named file only. Do not explore the repo.
 - **Moderate:** the writeup is the plan. Edit the files it names.
-- **High / Very high:** list the files and what must stay put, and ask the design questions, before editing. Hitboxes-follow-mesh comes before ragdoll; ragdoll comes before dismemberment.
+- **High / Very high:** list the files and what must stay put, and ask the design questions, before editing. Hitboxes-follow-mesh comes before ragdoll; ragdoll comes before hit chunks; severing (Ideas) would build on both.
 
 ## After the edit
 
@@ -63,4 +63,4 @@ Update `docs/FEATURES.md`. Move a finished roadmap bullet to **Completed**. Add 
 godot --headless --path . -- --autotest=duel
 ```
 
-Suites: `duel`, `gauntlet`, `load`, `props`, `practice`, `host`, `join`, `steam`, `steamcycle`. Start `host` before `join`.
+Suites: `duel`, `gauntlet`, `multi`, `horde`, `load`, `props`, `practice`, `ragdoll`, `chunks`, `host`, `join`, `steam`, `steamcycle`. Start `host` before `join`.

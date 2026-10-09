@@ -1,11 +1,13 @@
 class_name MeshLabMotionMenu
 extends CanvasLayer
-## Flat overlay for the mesh lab. Three independent switches, all on at
-## entry. In VR this layer is parented to the spectator window, not the headset.
+## Flat overlay for the mesh lab. Three independent switches, all on at entry, and a
+## drop test (ragdoll) that starts off. In VR this layer is parented to the spectator
+## window, not the headset.
 
 var _head: CheckBox
 var _walk: CheckBox
 var _hands: CheckBox
+var _drop: CheckBox
 
 
 func _ready() -> void:
@@ -29,6 +31,12 @@ func _ready() -> void:
 	_head = _add_check(box, "Head (1)")
 	_walk = _add_check(box, "Walk (2)")
 	_hands = _add_check(box, "Hands (3)")
+	_drop = _add_check(box, "Drop test (4)", false)
+	var chunk := Button.new()
+	chunk.text = "Knock chunk (5)"
+	chunk.focus_mode = Control.FOCUS_NONE
+	chunk.pressed.connect(_knock)
+	box.add_child(chunk)
 	_sync()
 
 
@@ -60,6 +68,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			_flip(_walk)
 		KEY_3:
 			_flip(_hands)
+		KEY_4:
+			_flip(_drop)
+		KEY_5:
+			_knock()
+			get_viewport().set_input_as_handled()
+
+
+func _knock() -> void:
+	MeshLabMotion.chunk_step += 1
 
 
 func _flip(box: CheckBox) -> void:
@@ -69,10 +86,10 @@ func _flip(box: CheckBox) -> void:
 	get_viewport().set_input_as_handled()
 
 
-func _add_check(parent: Node, text: String) -> CheckBox:
+func _add_check(parent: Node, text: String, pressed := true) -> CheckBox:
 	var box := CheckBox.new()
 	box.text = text
-	box.button_pressed = true
+	box.button_pressed = pressed
 	box.focus_mode = Control.FOCUS_NONE
 	box.toggled.connect(func(_on: bool) -> void:
 		_sync())
@@ -86,3 +103,4 @@ func _sync() -> void:
 	MeshLabMotion.head = _head.button_pressed
 	MeshLabMotion.walk = _walk.button_pressed
 	MeshLabMotion.hands = _hands.button_pressed
+	MeshLabMotion.drop = _drop.button_pressed

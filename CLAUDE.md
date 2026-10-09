@@ -24,6 +24,6 @@ Headless smoke tests (`dev/autotest.gd`). Each prints `AUTOTEST PASS` or `AUTOTE
 & "C:\Users\lukeg\Downloads\Godot_v4.7-stable_win64.exe\Godot_v4.7-stable_win64_console.exe" --headless --path . -- --autotest=duel
 ```
 
-Suites: `duel`, `gauntlet`, `load`, `props`, `practice`, `host`, `join`, `steam`, `steamcycle`. For multiplayer, start `host` before `join`.
+Suites: `duel`, `gauntlet`, `multi`, `horde`, `load`, `props`, `practice`, `ragdoll`, `chunks`, `i18n`, `host`, `join`, `steam`, `steamcycle`. For multiplayer, start `host` before `join`.
 
 Blender mesh work uses the `blender` MCP server (`.mcp.json` → addon socket `localhost:9876`). The workflow loads with `assets/models/**`.

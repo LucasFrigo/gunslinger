@@ -214,7 +214,7 @@ func _on_voice_settings_changed() -> void:
 	# The mute bind is a bare keypress, so confirm it somewhere the player is
 	# already looking. The peer gets the X over the mouth instead.
 	if NetworkManager.is_active():
-		GameManager.show_message("Mic muted" if _local_muted else "Mic live", 1.2)
+		GameManager.show_message(tr("MSG_MIC_MUTED") if _local_muted else tr("MSG_MIC_LIVE"), 1.2)
 
 
 func _on_tuning_changed(key: String, _value: Variant) -> void:

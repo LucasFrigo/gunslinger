@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://ai/duelist_ai.gd" id="1"]
 [ext_resource type="Script" path="res://player/hitbox.gd" id="2"]
@@ -15,18 +15,6 @@ size = Vector3(0.22, 0.26, 0.24)
 top_radius = 0.24
 bottom_radius = 0.24
 height = 0.02
-
-[sub_resource type="SphereShape3D" id="shape_head"]
-radius = 0.15
-
-[sub_resource type="BoxShape3D" id="shape_torso"]
-size = Vector3(0.45, 0.9, 0.3)
-
-[sub_resource type="BoxShape3D" id="shape_arm"]
-size = Vector3(0.14, 0.14, 0.45)
-
-[sub_resource type="BoxShape3D" id="shape_leg"]
-size = Vector3(0.4, 0.5, 0.25)
 
 [node name="DuelistAI" type="Node3D"]
 script = ExtResource("1")
@@ -45,41 +33,34 @@ mesh = SubResource("mesh_head")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, 0)
 mesh = SubResource("mesh_hat")
 
-[node name="HeadHitbox" type="Area3D" parent="Head"]
+[node name="HeadHitbox" type="Area3D" parent="."]
 script = ExtResource("2")
 damage_mult = 2.0
 region = &"head"
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Head/HeadHitbox"]
-shape = SubResource("shape_head")
-
 [node name="TorsoHitbox" type="Area3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
 script = ExtResource("2")
 damage_mult = 1.0
 region = &"torso"
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="TorsoHitbox"]
-shape = SubResource("shape_torso")
+[node name="ArmHitboxL" type="Area3D" parent="."]
+script = ExtResource("2")
+region = &"arm"
+
+[node name="ArmHitboxR" type="Area3D" parent="."]
+script = ExtResource("2")
+region = &"arm"
+
+[node name="LegHitboxL" type="Area3D" parent="."]
+script = ExtResource("2")
+region = &"leg"
+
+[node name="LegHitboxR" type="Area3D" parent="."]
+script = ExtResource("2")
+region = &"leg"
 
 [node name="Arm" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.258819, 0.965926, 0, -0.965926, 0.258819, 0.28, 1.35, 0)
 
-[node name="ArmHitbox" type="Area3D" parent="Arm"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.2)
-script = ExtResource("2")
-region = &"arm"
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Arm/ArmHitbox"]
-shape = SubResource("shape_arm")
-
 [node name="Revolver" parent="Arm" instance=ExtResource("3")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.12)
-
-[node name="LegHitbox" type="Area3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.28, 0)
-script = ExtResource("2")
-region = &"leg"
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="LegHitbox"]
-shape = SubResource("shape_leg")

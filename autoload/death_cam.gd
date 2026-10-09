@@ -13,6 +13,8 @@ const ORBIT_RADIUS := 3.2
 const ORBIT_PITCH := 0.28
 const CLIP_WAIT := 8.0
 const WORLD_MASK := 0b1000101
+const REPLAY_SHADOW_COLOR := Color(0.55, 0.28, 0.14)
+const REPLAY_SHADOW_PX := 4.0
 
 var phase: int = Phase.IDLE
 
@@ -42,6 +44,9 @@ var _stashed: Array = []
 var _sting: AudioStreamPlayer
 var _sting_played := false
 var _replay_label: Label3D
+## Actor ids whose body retraces its own fall in the clip: the victim, plus every NPC
+## that died inside the clip (SP with several NPCs).
+var _retraced: Array[int] = []
 
 
 func _ready() -> void:
@@ -211,6 +216,7 @@ func stop() -> void:
 	_trailing_emitted = false
 	_orbit_saved = false
 	_stashed.clear()
+	_retraced.clear()
 	set_process(false)
 	_drop_listeners()
 
@@ -263,6 +269,13 @@ func _begin_playback() -> void:
 	_saved_radius = _radius
 	_orbit_saved = true
 	_stash_live()
+	_retraced = _corpse_ids()
+	for actor_id in _retraced:
+		var body := _body_of(actor_id)
+		if body != null:
+			body.corpse_replay_begin()
+	for body in _actor_bodies():
+		body.chunks_replay_begin(ReplayBuffer.clip_begin())
 	Bullet.clear_all()
 	_sting_played = false
 	phase = Phase.PLAYBACK
@@ -308,6 +321,12 @@ func _enter_trailing() -> void:
 		_yaw = 0.6
 	# After this frame's IK, so the stashed death pose is the one that sticks.
 	_freeze_replay_bodies()
+	for actor_id in _corpse_ids():
+		var body := _body_of(actor_id)
+		if body != null:
+			body.corpse_hold_final.call_deferred()
+	for body in _actor_bodies():
+		body.chunks_hold_final()
 	phase = Phase.TRAILING
 	if _local_is_victim():
 		_ensure_camera()
@@ -326,9 +345,22 @@ func _apply_playback_frame(t: float) -> void:
 		var pose: Dictionary = actors[i]
 		if int(pose.get("flags", 0)) & ReplayBuffer.PRESENT == 0:
 			continue
+		# An NPC that died before the clip began stays the corpse it is.
+		if i != ReplayBuffer.victim_id and not _retraced.has(i) and ReplayBuffer.death_time_of(i) >= 0.0:
+			continue
 		var node := ReplayBuffer.actor_node(i)
 		if is_instance_valid(node) and node.has_method("apply_replay_pose"):
 			node.apply_replay_pose(pose)
+	# From each death on, that body's recorded fall plays on the clip clock.
+	for actor_id in _retraced:
+		var died_at := _death_time_of(actor_id)
+		if died_at >= 0.0 and t >= died_at:
+			var body := _body_of(actor_id)
+			if body != null:
+				body.corpse_replay_at(t - died_at)
+	# Every actor's chunks pop on the clip clock, the killer's included.
+	for body in _actor_bodies():
+		body.chunks_replay_at(t)
 
 
 ## Killer's eyes through the shot, then the corpse orbit for the rest of the clip.
@@ -356,7 +388,7 @@ func _local_is_victim() -> bool:
 
 func _stash_live() -> void:
 	_stashed.clear()
-	for actor_id in [ReplayBuffer.ACTOR_HOST, ReplayBuffer.ACTOR_OTHER]:
+	for actor_id in ReplayBuffer.actor_count():
 		var node := ReplayBuffer.actor_node(actor_id)
 		if node is Player:
 			_stashed.append((node as Player).capture_live_replay_pose())
@@ -379,7 +411,7 @@ func _restore_stash() -> void:
 
 
 func _freeze_replay_bodies() -> void:
-	for actor_id in [ReplayBuffer.ACTOR_HOST, ReplayBuffer.ACTOR_OTHER]:
+	for actor_id in ReplayBuffer.actor_count():
 		var node := ReplayBuffer.actor_node(actor_id)
 		if is_instance_valid(node) and node is Player:
 			(node as Player).freeze_replay_body.call_deferred()
@@ -388,11 +420,28 @@ func _freeze_replay_bodies() -> void:
 func _unlock_winner() -> void:
 	if ReplayBuffer.killer_id == ReplayBuffer.victim_id:
 		return
+	if ReplayBuffer.actor_count() > 2:
+		_unlock_survivors()
+		return
 	var winner_id := ReplayBuffer.ACTOR_OTHER if ReplayBuffer.victim_id == ReplayBuffer.ACTOR_HOST \
 			else ReplayBuffer.ACTOR_HOST
 	var winner := ReplayBuffer.actor_node(winner_id)
 	if is_instance_valid(winner) and winner.has_method("clear_replay_pose"):
 		winner.clear_replay_pose()
+
+
+## Several actors: everyone still alive but the victim gets control of their gun back.
+## Dead NPCs keep their held guns until `stop()`, like the victim.
+func _unlock_survivors() -> void:
+	for actor_id in ReplayBuffer.actor_count():
+		var node := ReplayBuffer.actor_node(actor_id)
+		if actor_id == ReplayBuffer.victim_id or not is_instance_valid(node) 				or not node.has_method("clear_replay_pose"):
+			continue
+		if node is DuelistAI and not (node as DuelistAI).is_alive():
+			continue
+		if node is Player and not (node as Player).alive:
+			continue
+		node.clear_replay_pose()
 
 
 ## Same full-speed sting as the live kill. Replay slow-mo does not drag it.
@@ -427,7 +476,8 @@ func _show_vr_replay_tag() -> void:
 		return
 	_hide_vr_replay_tag()
 	_replay_label = Label3D.new()
-	_replay_label.text = "REPLAY"
+	_replay_label.text = tr("HUD_REPLAY")
+	_replay_label.font = UiFonts.TITLE
 	_replay_label.font_size = 48
 	_replay_label.pixel_size = 0.0018
 	_replay_label.outline_size = 12
@@ -437,6 +487,14 @@ func _show_vr_replay_tag() -> void:
 	_replay_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	# Upper right of the headset view, same idea as the flat HUD corner.
 	_replay_label.position = Vector3(0.55, 0.28, -1.4)
+	# Label3D has no drop shadow: a rust copy offset down-right and drawn first.
+	var shadow := _replay_label.duplicate() as Label3D
+	shadow.modulate = REPLAY_SHADOW_COLOR
+	shadow.outline_modulate = REPLAY_SHADOW_COLOR
+	shadow.render_priority = -2
+	shadow.outline_render_priority = -3
+	shadow.position = Vector3(REPLAY_SHADOW_PX, -REPLAY_SHADOW_PX, -1.0) * _replay_label.pixel_size
+	_replay_label.add_child(shadow)
 	view.add_child(_replay_label)
 
 
@@ -535,8 +593,49 @@ func _apply_orbit() -> void:
 	_place_locked(xf)
 
 
+## The victim's mannequin, if its owner has one.
+func _victim_body() -> DummyBody:
+	return _body_of(ReplayBuffer.victim_id)
+
+
+## Every recorded actor's mannequin.
+func _actor_bodies() -> Array[DummyBody]:
+	var bodies: Array[DummyBody] = []
+	for actor_id in ReplayBuffer.actor_count():
+		var body := _body_of(actor_id)
+		if body != null:
+			bodies.append(body)
+	return bodies
+
+
+func _body_of(actor_id: int) -> DummyBody:
+	var node := ReplayBuffer.actor_node(actor_id)
+	if is_instance_valid(node) and node.has_method("corpse_body"):
+		return node.corpse_body()
+	return null
+
+
+## Clip time `actor_id` died at, or -1. The victim's time also arrives over the wire in MP.
+func _death_time_of(actor_id: int) -> float:
+	if actor_id == ReplayBuffer.victim_id:
+		return ReplayBuffer.death_time
+	return ReplayBuffer.death_time_of(actor_id)
+
+
+## The victim, then every other actor that died inside the clip.
+func _corpse_ids() -> Array[int]:
+	var ids: Array[int] = [ReplayBuffer.victim_id]
+	for actor_id in ReplayBuffer.death_times:
+		if actor_id != ReplayBuffer.victim_id and ReplayBuffer.death_time_of(actor_id) >= ReplayBuffer.clip_begin():
+			ids.append(actor_id)
+	return ids
+
+
 func _chest() -> Vector3:
 	var node := ReplayBuffer.actor_node(ReplayBuffer.victim_id)
+	var body := _victim_body()
+	if body != null and body.has_corpse():
+		return body.corpse_pivot()
 	if node is Player:
 		return (node as Player).get_head_position() + Vector3.DOWN * 0.45
 	if node is RemoteAvatar:
@@ -622,10 +721,12 @@ func _teardown_camera() -> void:
 
 
 func _release_actors() -> void:
-	for actor_id in [ReplayBuffer.ACTOR_HOST, ReplayBuffer.ACTOR_OTHER]:
+	for actor_id in ReplayBuffer.actor_count():
 		var node := ReplayBuffer.actor_node(actor_id)
 		if is_instance_valid(node) and node.has_method("clear_replay_pose"):
 			node.clear_replay_pose()
+	for body in _actor_bodies():
+		body.chunks_hold_final()
 
 
 func _clear_replay_fx() -> void:

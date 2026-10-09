@@ -95,9 +95,9 @@ func versions_match(host_version: String, local_version: String) -> bool:
 
 
 func version_mismatch_message(host_version: String, local_version: String) -> String:
-	var host_label := host_version if not host_version.is_empty() else "unknown (older build)"
-	var local_label := local_version if not local_version.is_empty() else "unknown"
-	return "Cannot join: host is v%s, you are v%s." % [host_label, local_label]
+	var host_label := host_version if not host_version.is_empty() else tr("NET_UNKNOWN_OLD")
+	var local_label := local_version if not local_version.is_empty() else tr("NET_UNKNOWN")
+	return tr("NET_VERSION_MISMATCH") % [host_label, local_label]
 
 
 # -- Session queries ---------------------------------------------------------
@@ -146,7 +146,7 @@ func host_lan() -> Error:
 		var hint := error_string(err)
 		if OS.get_name() == "Android" and err == ERR_CANT_CREATE:
 			hint += " — APK missing INTERNET (re-export Quest 3 after enabling LAN permissions)"
-		network_error.emit("Could not host LAN game: %s" % hint)
+		network_error.emit(tr("NET_HOST_FAILED") % hint)
 		transport = null
 		return err
 	discovery.start_beacon(_local_host_name(), game_version())
@@ -168,7 +168,7 @@ func join_lan(ip: String) -> Error:
 	transport = ENetTransport.new(multiplayer)
 	var err := transport.join(address)
 	if err != OK:
-		network_error.emit("Could not join %s: %s" % [address, error_string(err)])
+		network_error.emit(tr("NET_JOIN_FAILED") % [address, error_string(err)])
 		transport = null
 	return err  # session starts after version handshake
 
@@ -190,7 +190,7 @@ func lan_addresses() -> PackedStringArray:
 
 func host_steam() -> Error:
 	if _steam == null:
-		network_error.emit("GodotSteam extension not found. See README.")
+		network_error.emit(tr("NET_NO_STEAM"))
 		return ERR_UNAVAILABLE
 	leave("switching session")
 	transport = _steam
@@ -202,7 +202,7 @@ func host_steam() -> Error:
 
 func join_steam(lobby_id: int) -> Error:
 	if _steam == null:
-		network_error.emit("GodotSteam extension not found. See README.")
+		network_error.emit(tr("NET_NO_STEAM"))
 		return ERR_UNAVAILABLE
 	for lobby in _last_steam_lobbies:
 		if int(lobby.get("id", 0)) != lobby_id:
@@ -246,7 +246,7 @@ func _on_steam_failed(reason: String) -> void:
 
 func invite_steam_friends() -> void:
 	if _steam == null or not session_active or transport != _steam or not _steam.is_lobby_host:
-		network_error.emit("Host a Steam lobby first, then invite.")
+		network_error.emit(tr("NET_HOST_FIRST"))
 		return
 	_steam.open_invite_overlay()
 
@@ -344,7 +344,7 @@ func _on_connected_to_server() -> void:
 
 
 func _on_connection_failed() -> void:
-	network_error.emit("Connection failed.")
+	network_error.emit(tr("NET_CONN_FAILED"))
 	leave("connection failed")
 
 
@@ -357,7 +357,7 @@ func _on_server_disconnected() -> void:
 		return
 	if not session_active and transport == null:
 		return  # already cleaned up (e.g. version reject)
-	network_error.emit("Host disconnected.")
+	network_error.emit(tr("NET_HOST_DISCONNECTED"))
 	leave("host disconnected")
 
 
@@ -392,8 +392,7 @@ func _tick_handshake(delta: float) -> void:
 		_version_reject.rpc_id(peer_id, game_version())
 		_kick_peer_id = peer_id
 		GameManager.show_message(
-				"Rejected challenger: version mismatch (host v%s, peer unknown / older build)."
-				% game_version(), 6.0)
+				tr("NET_REJECT_UNKNOWN") % game_version(), 6.0)
 	elif _awaiting_version_ok:
 		_awaiting_version_ok = false
 		network_error.emit(version_mismatch_message("", game_version()))
@@ -418,10 +417,9 @@ func _version_hello(client_version: String) -> void:
 		return
 	_version_reject.rpc_id(peer_id, game_version())
 	_kick_peer_id = peer_id
-	var peer_label := client_version if not client_version.is_empty() else "unknown (older build)"
+	var peer_label := client_version if not client_version.is_empty() else tr("NET_UNKNOWN_OLD")
 	GameManager.show_message(
-			"Rejected challenger: version mismatch (host v%s, peer v%s)."
-			% [game_version(), peer_label], 6.0)
+			tr("NET_REJECT_VERSION") % [game_version(), peer_label], 6.0)
 
 
 @rpc("authority", "call_remote", "reliable")

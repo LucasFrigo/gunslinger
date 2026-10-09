@@ -28,6 +28,7 @@ Do **not** call `PlaceholderAudio.*` from gameplay code — use `AudioCatalog.ge
 | `bell` | Draw signal | `bell.ogg` |
 | `whizz` | Near-miss pass-by | `whizz.ogg` |
 | `impact_flesh` | Body hit | `impact_flesh.ogg` |
+| `flesh_chunk` | Chunk knocked out of a body | `flesh_chunk.ogg` |
 | `impact_world` | Environment hit | `impact_world.ogg` |
 | `ricochet` | Occasional world tick | `ricochet.ogg` |
 | `hurt` | Local player hurt/death | `hurt.ogg` |

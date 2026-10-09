@@ -3,8 +3,8 @@ extends Node3D
 ## Skinned mannequin (`assets/models/characters/dummy.glb`).
 ## The glTF faces +Z; this node yaws 180° so the mesh faces -Z like every combatant.
 ## `drive_arm(true, …)` is the arm that ends up on +X after that yaw.
-## Pose writes live here. `set_pose_driven(false)` leaves the last bone poses so a
-## later ragdoll can take the skeleton without this writer fighting it.
+## Pose writes live here. `set_pose_driven(false)` leaves the last bone poses so the
+## ragdoll (`collapse`) takes the skeleton without this writer fighting it.
 ## Legs take an in-place step from `follow_travel`. Hips stay planted.
 ## The knee folds the shin back.
 
@@ -23,7 +23,15 @@ const FP_CLIP_RADIUS := 0.18
 const WRIST_PRIORITY := 10
 const IK_PRIORITY := 20
 const FINGER_PRIORITY := 30
+## The ragdoll writes the fallen bones before the hit volumes read them.
+const RAGDOLL_PRIORITY := 35
+## Hit volumes read the bones last, after IK, fingers, and the ragdoll.
+const HITBOX_PRIORITY := 40
 const WRIST_BLEND_SEC := 0.1
+## m/s of upward kick on a gun dropped by a dying duelist.
+const GUN_FLING_LIFT := 0.4
+## Tumble (rad/s) per m/s of fling, about the axis across the shot.
+const GUN_TUMBLE := 1.6
 ## Visual layer 20. Mesh lab draws the body here so the headset camera can skip it.
 const SPECTATOR_BODY_LAYER := 1 << 19
 ## Local VR hands. Same size as the imported mesh.
@@ -38,20 +46,15 @@ const WALK_TELEPORT := 1.5
 const WALK_EASE := 0.12
 const THIGH_SWING := deg_to_rad(28.0)
 const KNEE_BEND := deg_to_rad(40.0)
-
-const FP_SHADER_CODE := """shader_type spatial;
-render_mode cull_back;
-uniform vec4 albedo : source_color = vec4(0.62, 0.60, 0.58, 1.0);
-uniform float clip_radius = 0.18;
-uniform float roughness_amount = 0.9;
-void fragment() {
-	if (length(VERTEX) < clip_radius) {
-		discard;
-	}
-	ALBEDO = albedo.rgb;
-	ROUGHNESS = roughness_amount;
-}
-"""
+const PART_BODY := &"body"
+const PART_HEAD := &"head"
+const PART_HAND := &"hand"
+const SKIN_ROUGHNESS := 0.9
+## The skin snap casts the shot from this far before the hit volume's point, up to this
+## far past it. Hit volumes sit off the skin (the torso by up to its radius).
+const SNAP_BACK := 0.15
+const SNAP_REACH := 0.3
+const SNAP_NUDGE := 0.001
 
 var _skeleton: Skeleton3D
 var _mesh: MeshInstance3D
@@ -63,6 +66,9 @@ var _body_shelved := false
 var _head_hidden := false
 var _ik: Dictionary = {}
 var _fingers: HandFingers
+var _hitboxes: BodyHitboxes
+var _ragdoll: BodyRagdoll
+var _face := Vector3.BACK
 var _spine := -1
 var _chest := -1
 var _neck := -1
@@ -71,7 +77,14 @@ var _look_pitch := 0.0
 var _pose_driven := true
 var _albedo := Color(0.62, 0.60, 0.58)
 var _fp_clip := false
-var _fp_shader: Shader
+## Body and head share one skin; the cavity is its `next_pass` while there are holes.
+var _skin_material: ShaderMaterial
+var _cavity_material: ShaderMaterial
+## Parsed `Reto` per mesh resource: the intact part meshes every body shares and each
+## skin bind's rest triangles for the skin snap.
+static var _split_cache := {}
+var _split: Dictionary = {}
+var _chunks: BodyChunks
 var _legs: Array[Dictionary] = []
 var _travel: Node3D
 var _travel_ready := false
@@ -114,8 +127,11 @@ func set_first_person_clip(enabled: bool) -> void:
 
 
 ## Stop or resume neck, arm, and leg writes. The last poses stay when this turns off.
-## Turning it back on clears the step so a respawn stands.
+## Turning it back on clears the step so a respawn stands. A corpse keeps the skeleton:
+## only `release_corpse` and `corpse_replay_begin` give it back.
 func set_pose_driven(enabled: bool) -> void:
+	if enabled and _ragdoll != null and _ragdoll.owns_skeleton():
+		return
 	var resume := enabled and not _pose_driven
 	_pose_driven = enabled
 	set_process(enabled)
@@ -127,6 +143,216 @@ func set_pose_driven(enabled: bool) -> void:
 		_clear_walk()
 
 
+## Whether corpses fall under physics (`ragdoll_enabled`).
+static func ragdoll_on() -> bool:
+	return float(GameManager.tuning.get("ragdoll_enabled", 1.0)) >= 0.5
+
+
+## Direction of the last segment of a bullet's `trail`, or zero with fewer than two points.
+static func shot_dir(trail: PackedVector3Array) -> Vector3:
+	if trail.size() < 2:
+		return Vector3.ZERO
+	return (trail[trail.size() - 1] - trail[trail.size() - 2]).normalized()
+
+
+## Velocity a dying duelist's gun leaves with: along the shot, plus a little lift.
+static func gun_fling(trail: PackedVector3Array) -> Vector3:
+	return shot_dir(trail) * float(GameManager.tuning.get("ragdoll_gun_fling", 7.0)) + Vector3.UP * GUN_FLING_LIFT
+
+
+## Spin a dying duelist's gun leaves with: it tumbles across the shot as it is flung.
+static func gun_spin(trail: PackedVector3Array) -> Vector3:
+	var along := gun_fling(trail) - Vector3.UP * GUN_FLING_LIFT
+	var axis := along.cross(Vector3.UP)
+	return axis.normalized() * along.length() * GUN_TUMBLE if axis.length_squared() > 0.0001 else Vector3.ZERO
+
+
+## Lethal hit: stop the writers and drop the body under physics, kicked along the last
+## segment of `trail`. With `ragdoll_enabled` off the last pose is simply held.
+func collapse(trail: PackedVector3Array) -> void:
+	set_pose_driven(false)
+	if _ragdoll != null and ragdoll_on():
+		_ragdoll.collapse(trail)
+
+
+func has_corpse() -> bool:
+	return _ragdoll != null and _ragdoll.state != BodyRagdoll.State.NONE
+
+
+func corpse_state() -> BodyRagdoll.State:
+	return _ragdoll.state if _ragdoll != null else BodyRagdoll.State.NONE
+
+
+## The orbit pivot: the fallen chest.
+func corpse_pivot() -> Vector3:
+	return bone_global(&"Chest").origin
+
+
+## Replay start. A fall still running is cut short, the track stays, and the writers
+## stand the body up for the clip before the death.
+func corpse_replay_begin() -> void:
+	if _ragdoll != null:
+		_ragdoll.begin_retrace()
+
+
+## Replay after the death: `since_death` seconds into the recorded fall.
+func corpse_replay_at(since_death: float) -> void:
+	if _ragdoll == null or not _ragdoll.has_track() or _ragdoll.state == BodyRagdoll.State.SIMULATING:
+		return
+	set_pose_driven(false)
+	_ragdoll.play_track(since_death)
+
+
+## The replay ended: keep the settled pose. A fall that never stopped keeps running.
+func corpse_hold_final() -> void:
+	if not has_corpse() or _ragdoll.state == BodyRagdoll.State.SIMULATING:
+		return
+	set_pose_driven(false)
+	_ragdoll.hold_final()
+
+
+## A new duel: drop the corpse, reset every bone (nothing else resets `Hips`), and unlock.
+func release_corpse() -> void:
+	if _ragdoll == null or _ragdoll.state == BodyRagdoll.State.NONE:
+		return
+	_ragdoll.release()
+	_skeleton.reset_bone_poses()
+
+
+## Cut `cut` (`cut_at`) out of the skin (cosmetic): a hole and a gib along `dir` unless the
+## body is shelved and the hit is not `lethal`. An empty cut, or Gore off, does nothing.
+## `clip_t` is `ReplayBuffer.clip_time()` (the host's in MP).
+func knock_chunk(cut: Dictionary, dir: Vector3, clip_t: float, lethal: bool) -> void:
+	if _chunks != null and int(cut.get("bone", -1)) >= 0:
+		_chunks.knock(cut, dir, clip_t, lethal)
+
+
+## Holes showing now (at this point of a replay), at most `BodyChunks.HOLE_CAP`.
+func chunk_count() -> int:
+	return _chunks.hole_count() if _chunks != null else 0
+
+
+## Every hole healed. Thrown gibs stay where they lie.
+func reset_chunks() -> void:
+	if _chunks != null:
+		_chunks.reset()
+
+
+## Replay start: holes cut inside the clip heal until their clip time.
+func chunks_replay_begin(clip_begin: float) -> void:
+	if _chunks != null:
+		_chunks.replay_begin(clip_begin)
+
+
+## Replay at clip time `t`: holes open and their gibs re-fly.
+func chunks_replay_at(t: float) -> void:
+	if _chunks != null:
+		_chunks.replay_at(t)
+
+
+## The replay ended: every hole open, every gib settled. No-op outside a replay.
+func chunks_hold_final() -> void:
+	if _chunks != null:
+		_chunks.hold_final()
+
+
+func is_body_shelved() -> bool:
+	return _body_shelved
+
+
+## World pose of skeleton bone `bone`, scale included (arm IK stretches it).
+func bone_pose_world(bone: int) -> Transform3D:
+	if _skeleton == null or bone < 0 or bone >= _skeleton.get_bone_count():
+		return global_transform
+	return _skeleton.global_transform * _skeleton.get_bone_global_pose(bone)
+
+
+## World center of a cut's sphere on the current pose.
+func cut_world_center(cut: Dictionary) -> Vector3:
+	return bone_pose_world(int(cut.get("bone", -1))) * (cut.get("local", Vector3.ZERO) as Vector3)
+
+
+## Face direction in the world (`+Z` of the glTF after this node's yaw).
+func front_dir() -> Vector3:
+	return global_transform.basis.z.normalized()
+
+
+## The cut a bullet along `shot` makes where it struck hit volume `shape` at `world_point`,
+## or `{}` when the shape is not one of this body's. See `cut_on_bone`.
+func cut_at(shape: Object, world_point: Vector3, shot: Vector3, region: StringName) -> Dictionary:
+	if _hitboxes == null or _skeleton == null:
+		return {}
+	var bone_name := _hitboxes.bone_of(shape, world_point)
+	if bone_name == &"":
+		return {}
+	return cut_on_bone(_skeleton.find_bone(bone_name), world_point, shot, region)
+
+
+## A cut on `bone`: `{bone, local, radius}`. The shot is snapped from `world_point` onto the
+## skin, the radius rolled from `cut_min..cut_max` (arms and legs capped at `cut_limb_max`),
+## and the sphere center lifted `BodyChunks.CUT_LIFT` of it out of the skin against the
+## shot, stored in the bone's pose space. `{}` when the bone is missing.
+func cut_on_bone(bone: int, world_point: Vector3, shot: Vector3, region: StringName) -> Dictionary:
+	if _skeleton == null or bone < 0:
+		return {}
+	var dir := shot.normalized() if shot.length_squared() > 0.000001 else -front_dir()
+	var radius := randf_range(_tune("cut_min", 0.05), _tune("cut_max", 0.10))
+	if region == CombatRules.REGION_ARM or region == CombatRules.REGION_LEG:
+		radius = minf(radius, _tune("cut_limb_max", 0.06))
+	var center := skin_entry(bone, world_point, dir) - dir * BodyChunks.CUT_LIFT * radius
+	return {"bone": bone, "local": bone_pose_world(bone).affine_inverse() * center, "radius": radius}
+
+
+## Where a shot along `dir` through `world_point` enters the posed skin of `bone` or its
+## parent: the rest triangles each bind dominates, cast in that bind's space. The nearest
+## entry from `SNAP_BACK` before the point to `SNAP_REACH` past it, else `world_point`.
+## A cast down a shared edge (the mirror seam) can slip between both triangles, so a miss
+## is cast again `SNAP_NUDGE` to the side.
+func skin_entry(bone: int, world_point: Vector3, dir: Vector3) -> Vector3:
+	var bind_tris: Dictionary = _split.get("bind_tris", {})
+	if bind_tris.is_empty() or _mesh == null or _mesh.skin == null:
+		return world_point
+	var side := dir.cross(Vector3.UP if absf(dir.y) < 0.9 else Vector3.RIGHT).normalized()
+	for nudge: Vector3 in [Vector3.ZERO, side * SNAP_NUDGE]:
+		var entry: Variant = _cast_skin(bone, world_point + nudge, dir, bind_tris)
+		if entry != null:
+			return (entry as Vector3) - nudge
+	return world_point
+
+
+## `skin_entry` for one cast, or null.
+func _cast_skin(bone: int, world_point: Vector3, dir: Vector3, bind_tris: Dictionary) -> Variant:
+	var from := world_point - dir * SNAP_BACK
+	var best := SNAP_BACK + SNAP_REACH
+	var entry: Variant = null
+	for b: int in [bone, _skeleton.get_bone_parent(bone)]:
+		if b < 0:
+			continue
+		var bind := _skin_bind(_mesh.skin, _skeleton, _skeleton.get_bone_name(b))
+		if bind < 0 or not bind_tris.has(bind):
+			continue
+		var tris: PackedVector3Array = bind_tris[bind]
+		var m := bone_pose_world(b) * _mesh.skin.get_bind_pose(bind)
+		var inv := m.affine_inverse()
+		var o := inv * from
+		var d := inv.basis * dir
+		for i in range(0, tris.size(), 3):
+			var hit: Variant = Geometry3D.ray_intersects_triangle(o, d, tris[i], tris[i + 1], tris[i + 2])
+			if hit == null:
+				continue
+			var world: Vector3 = m * (hit as Vector3)
+			var t := (world - from).dot(dir)
+			if t < best:
+				best = t
+				entry = world
+	return entry
+
+
+## The body's solid skin material, for a gib's outer surface.
+func skin_material() -> StandardMaterial3D:
+	return _solid_material()
+
+
 ## Horizontal travel of `source` drives the in-place step. The local rig origin,
 ## the duelist, the remote head, or the mesh-lab puppet.
 func follow_travel(source: Node3D) -> void:
@@ -134,8 +360,8 @@ func follow_travel(source: Node3D) -> void:
 	_travel_ready = false
 
 
-## View-only. Hides triangles weighted to `Head` on this instance. The source
-## glTF stays one surface; this is not a dismemberment cut.
+## View-only. Hides the head part (triangles weighted only to `Head`) on this
+## instance, and the head holes with it.
 func set_head_hidden(hidden: bool) -> void:
 	_head_hidden = hidden
 	_apply_part_visibility()
@@ -236,43 +462,93 @@ func set_arm_target(positive_x: bool, target: Node3D, match_twist: bool, wrist_i
 	ik.set("target_path", ik.get_path_to(target))
 
 
+## World transform of a skeleton bone. Joint origin plus its posed basis.
+func bone_global(bone_name: StringName) -> Transform3D:
+	if _skeleton == null:
+		return global_transform
+	var idx := _skeleton.find_bone(bone_name)
+	if idx < 0:
+		return global_transform
+	return _skeleton.global_transform * _skeleton.get_bone_global_pose(idx)
+
+
+## World-space axis that swings this bone's +Y toward the face. A positive hinge angle
+## about it bends the elbow; the knee folds the other way (see `_swing_axis`).
+func hinge_axis(bone_name: StringName) -> Vector3:
+	var idx := _skeleton.find_bone(bone_name)
+	if idx < 0:
+		return Vector3.RIGHT
+	return (bone_global(bone_name).basis * _swing_axis(idx, _face)).normalized()
+
+
+func has_bone(bone_name: StringName) -> bool:
+	return _skeleton != null and _skeleton.find_bone(bone_name) >= 0
+
+
+## Skeleton index of `bone_name`, or -1.
+func bone_index(bone_name: StringName) -> int:
+	return _skeleton.find_bone(bone_name) if _skeleton != null else -1
+
+
+## Put the combatant's six hit volumes on the posed bones. `arm_l` / `arm_r` are the
+## sides of the mannequin (`.L` / `.R` bones); the leg pair is the same.
+func attach_hitboxes(head: Hitbox, torso: Hitbox, arm_l: Hitbox, arm_r: Hitbox,
+		leg_l: Hitbox, leg_r: Hitbox) -> BodyHitboxes:
+	if _hitboxes != null:
+		_hitboxes.queue_free()
+	_hitboxes = BodyHitboxes.new()
+	_hitboxes.name = "BodyHitboxes"
+	_hitboxes.process_priority = HITBOX_PRIORITY
+	add_child(_hitboxes)
+	_hitboxes.setup(self, head, torso, {&"L": arm_l, &"R": arm_r}, {&"L": leg_l, &"R": leg_r})
+	return _hitboxes
+
+
+## `&"L"`, `&"R"`, or `&""`. The gun arm's forearm is thinner and stops short of the grip.
+func set_gun_arm(side: StringName) -> void:
+	if _hitboxes != null:
+		_hitboxes.set_gun_arm(side)
+
+
 func _process(delta: float) -> void:
 	_apply_look()
 	_apply_walk(delta)
 
 
+## Body and head wear the shared skin (holes, first-person clip); hands stay solid.
 func _apply_material() -> void:
+	if _skin_material == null:
+		_skin_material = BodyChunks.skin_material_new()
+		_cavity_material = BodyChunks.cavity_material_new()
+	var clip := FP_CLIP_RADIUS if _fp_clip else 0.0
+	_skin_material.set_shader_parameter("albedo", _albedo)
+	_skin_material.set_shader_parameter("roughness_amount", SKIN_ROUGHNESS)
+	_skin_material.set_shader_parameter("clip_radius", clip)
+	_cavity_material.set_shader_parameter("clip_radius", clip)
 	var targets: Array[MeshInstance3D] = _parts
 	if targets.is_empty() and _mesh != null:
 		targets = [_mesh]
-	var material: Material = _solid_material()
-	if _fp_clip:
-		material = _clip_material()
 	for mesh in targets:
 		if _hand_meshes.has(mesh):
 			mesh.material_override = _solid_material()
-		else:
-			mesh.material_override = material
+		elif mesh.material_override != _skin_material:
+			mesh.material_override = _skin_material
 
 
 func _solid_material() -> StandardMaterial3D:
+	return solid_material(_albedo)
+
+
+static func solid_material(albedo: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
-	material.albedo_color = _albedo
-	material.roughness = 0.9
+	material.albedo_color = albedo
+	material.roughness = SKIN_ROUGHNESS
 	material.cull_mode = BaseMaterial3D.CULL_BACK
 	return material
 
 
-func _clip_material() -> ShaderMaterial:
-	if _fp_shader == null:
-		_fp_shader = Shader.new()
-		_fp_shader.code = FP_SHADER_CODE
-	var material := ShaderMaterial.new()
-	material.shader = _fp_shader
-	material.set_shader_parameter("albedo", _albedo)
-	material.set_shader_parameter("clip_radius", FP_CLIP_RADIUS)
-	material.set_shader_parameter("roughness_amount", 0.9)
-	return material
+func _tune(key: String, fallback: float) -> float:
+	return float(GameManager.tuning.get(key, fallback))
 
 
 func _apply_look() -> void:
@@ -375,6 +651,7 @@ func _bind_legs(visual: Node3D) -> void:
 		face = Vector3(0.0, 0.0, 1.0)
 	else:
 		face = face.normalized()
+	_face = face
 	_bind_leg("L", 0.0, face)
 	_bind_leg("R", PI, face)
 
@@ -411,75 +688,39 @@ func _bind(visual: Node) -> void:
 	_fingers.name = "HandFingers"
 	_fingers.setup(_skeleton, visual)
 	_skeleton.add_child(_fingers)
-	_split_head()
+	_ragdoll = BodyRagdoll.new()
+	_ragdoll.name = "BodyRagdoll"
+	_ragdoll.process_priority = RAGDOLL_PRIORITY
+	add_child(_ragdoll)
+	_ragdoll.setup(self, _skeleton)
+	_split_parts()
 
 
-func _split_head() -> void:
+## Split `Reto` into body, head, and hand parts over all of its surfaces. Every body that
+## wears the mesh shares the part meshes; holes are the skin shader's (`BodyChunks`).
+func _split_parts() -> void:
 	if _mesh == null or _mesh.mesh == null or _mesh.skin == null:
 		return
-	if _mesh.mesh.get_surface_count() < 1:
-		return
-	var head_bind := _skin_bind("Head")
-	var hand_binds := _collect_hand_binds()
-	if head_bind < 0:
-		return
-	var arrays: Array = _mesh.mesh.surface_get_arrays(0)
-	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
-	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
-	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-	if bones.is_empty() or weights.is_empty() or indices.is_empty():
-		return
-	var format: int = _mesh.mesh.surface_get_format(0)
-	var stride := 4
-	if format & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS:
-		stride = 8
-	var head_idx := PackedInt32Array()
-	var hand_idx := PackedInt32Array()
-	var body_idx := PackedInt32Array()
-	var i := 0
-	while i + 2 < indices.size():
-		var a := indices[i]
-		var b := indices[i + 1]
-		var c := indices[i + 2]
-		if _vertex_is_bone(bones, weights, a, head_bind, stride) \
-				and _vertex_is_bone(bones, weights, b, head_bind, stride) \
-				and _vertex_is_bone(bones, weights, c, head_bind, stride):
-			head_idx.append(a)
-			head_idx.append(b)
-			head_idx.append(c)
-		elif _vertex_in_binds(bones, weights, a, hand_binds, stride) \
-				and _vertex_in_binds(bones, weights, b, hand_binds, stride) \
-				and _vertex_in_binds(bones, weights, c, hand_binds, stride):
-			hand_idx.append(a)
-			hand_idx.append(b)
-			hand_idx.append(c)
-		else:
-			body_idx.append(a)
-			body_idx.append(b)
-			body_idx.append(c)
-		i += 3
-	if head_idx.is_empty() or body_idx.is_empty():
-		return
-	var body_arrays := arrays.duplicate(true)
-	body_arrays[Mesh.ARRAY_INDEX] = body_idx
-	var head_arrays := arrays.duplicate(true)
-	head_arrays[Mesh.ARRAY_INDEX] = head_idx
-	_body_mesh = _make_part("BodyMesh", body_arrays)
-	_head_mesh = _make_part("HeadMesh", head_arrays)
-	if not hand_idx.is_empty():
-		var hand_arrays := arrays.duplicate(true)
-		hand_arrays[Mesh.ARRAY_INDEX] = hand_idx
-		_hand_meshes.append(_make_part("HandMesh", hand_arrays))
-	_mesh.visible = false
+	_split = _split_of(_mesh, _skeleton)
+	if not _split.is_empty():
+		var intact: Dictionary = _split["intact"]
+		_body_mesh = _make_part("BodyMesh", intact[PART_BODY])
+		_head_mesh = _make_part("HeadMesh", intact[PART_HEAD])
+		if intact.has(PART_HAND):
+			_hand_meshes.append(_make_part("HandMesh", intact[PART_HAND]))
+		_mesh.visible = false
+	_apply_material()
+	_chunks = BodyChunks.new()
+	_chunks.name = "BodyChunks"
+	add_child(_chunks)
+	_chunks.setup(self, _skin_material, _cavity_material)
 	_apply_part_visibility()
 
 
-func _make_part(part_name: String, arrays: Array) -> MeshInstance3D:
-	var array_mesh := ArrayMesh.new()
-	array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+func _make_part(part_name: String, mesh: ArrayMesh) -> MeshInstance3D:
 	var part := MeshInstance3D.new()
 	part.name = part_name
-	part.mesh = array_mesh
+	part.mesh = mesh
 	part.skin = _mesh.skin
 	var host := _mesh.get_parent()
 	host.add_child(part)
@@ -491,66 +732,164 @@ func _make_part(part_name: String, arrays: Array) -> MeshInstance3D:
 	return part
 
 
-func _skin_bind(bone_name: String) -> int:
-	var skin := _mesh.skin
+## The parse of `source`'s mesh, shared by every body that wears it. Empty when it
+## cannot be split (no Head bind, no skin weights, or no head or body triangles).
+static func _split_of(source: MeshInstance3D, skeleton: Skeleton3D) -> Dictionary:
+	var mesh := source.mesh as ArrayMesh
+	if mesh == null:
+		return {}
+	if not _split_cache.has(mesh):
+		_split_cache[mesh] = _parse_split(mesh, source.skin, skeleton)
+	return _split_cache[mesh]
+
+
+static func _parse_split(mesh: ArrayMesh, skin: Skin, skeleton: Skeleton3D) -> Dictionary:
+	var head_bind := _skin_bind(skin, skeleton, "Head")
+	if head_bind < 0:
+		return {}
+	var hand_binds := _collect_hand_binds(skin, skeleton)
+	var merged := _merge_surfaces(mesh)
+	if merged.is_empty():
+		return {}
+	var arrays: Array = merged["arrays"]
+	var stride: int = merged["stride"]
+	var flags: int = merged["flags"]
+	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var dominant := _dominant_binds(arrays, stride)
+	var lists := {PART_BODY: [], PART_HEAD: [], PART_HAND: []}
+	var corners := {}
+	for t in indices.size() / 3:
+		var tri: Array[int] = [indices[t * 3], indices[t * 3 + 1], indices[t * 3 + 2]]
+		var a := dominant[tri[0]]
+		var b := dominant[tri[1]]
+		var c := dominant[tri[2]]
+		var part := PART_BODY
+		if a == head_bind and b == head_bind and c == head_bind:
+			part = PART_HEAD
+		elif hand_binds.has(a) and hand_binds.has(b) and hand_binds.has(c):
+			part = PART_HAND
+		(lists[part] as Array).append_array(tri)
+		if part == PART_HAND:
+			continue
+		# Each bind its corners lean on casts this triangle in the skin snap.
+		for bind: int in {a: true, b: true, c: true}:
+			if bind < 0:
+				continue
+			if not corners.has(bind):
+				corners[bind] = []
+			(corners[bind] as Array).append_array([verts[tri[0]], verts[tri[1]], verts[tri[2]]])
+	if (lists[PART_HEAD] as Array).is_empty() or (lists[PART_BODY] as Array).is_empty():
+		return {}
+	var bind_tris := {}
+	for bind: int in corners:
+		bind_tris[bind] = PackedVector3Array(corners[bind])
+	var intact := {}
+	for part: StringName in lists:
+		var all := PackedInt32Array(lists[part])
+		if all.is_empty():
+			continue
+		var part_arrays := arrays.duplicate()
+		part_arrays[Mesh.ARRAY_INDEX] = all
+		var part_mesh := ArrayMesh.new()
+		part_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, part_arrays, [], {}, flags)
+		intact[part] = part_mesh
+	return {"intact": intact, "bind_tris": bind_tris}
+
+
+## Every surface's arrays end to end, indices offset.
+static func _merge_surfaces(mesh: ArrayMesh) -> Dictionary:
+	var merged: Array = []
+	var stride := 4
+	for s in mesh.get_surface_count():
+		var arrays := mesh.surface_get_arrays(s)
+		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		var eight := mesh.surface_get_format(s) & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS != 0
+		if merged.is_empty():
+			if indices.is_empty() or arrays[Mesh.ARRAY_BONES] == null or arrays[Mesh.ARRAY_WEIGHTS] == null:
+				return {}
+			if (arrays[Mesh.ARRAY_BONES] as PackedInt32Array).is_empty():
+				return {}
+			merged = arrays.duplicate()
+			stride = 8 if eight else 4
+		else:
+			if indices.is_empty() or eight != (stride == 8) or not _same_layout(merged, arrays):
+				push_warning("DummyBody: Reto surface %d does not match surface 0 and is dropped" % s)
+				continue
+			var base := (merged[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+			for slot in Mesh.ARRAY_MAX:
+				if slot == Mesh.ARRAY_INDEX or merged[slot] == null:
+					continue
+				var joined: Variant = merged[slot]
+				joined.append_array(arrays[slot])
+				merged[slot] = joined
+			for i in indices.size():
+				indices[i] += base
+			var all: PackedInt32Array = merged[Mesh.ARRAY_INDEX]
+			all.append_array(indices)
+			merged[Mesh.ARRAY_INDEX] = all
+	return {
+		"arrays": merged,
+		"stride": stride,
+		"flags": Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS if stride == 8 else 0,
+	}
+
+
+static func _same_layout(a: Array, b: Array) -> bool:
+	for slot in Mesh.ARRAY_MAX:
+		if (a[slot] == null) != (b[slot] == null):
+			return false
+	return true
+
+
+## The heaviest bind of each vertex, or -1 when it has no weight.
+static func _dominant_binds(arrays: Array, stride: int) -> PackedInt32Array:
+	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+	var out := PackedInt32Array()
+	out.resize((arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size())
+	for v in out.size():
+		var base := v * stride
+		var best := -1
+		var best_w := 0.0
+		if base + stride <= bones.size() and base + stride <= weights.size():
+			for slot in stride:
+				if weights[base + slot] > best_w:
+					best_w = weights[base + slot]
+					best = bones[base + slot]
+		out[v] = best
+	return out
+
+
+static func _skin_bind(skin: Skin, skeleton: Skeleton3D, bone_name: String) -> int:
 	for i in skin.get_bind_count():
 		if skin.get_bind_name(i) == bone_name:
 			return i
 		var bone := skin.get_bind_bone(i)
-		if bone >= 0 and _skeleton.get_bone_name(bone) == bone_name:
+		if bone >= 0 and skeleton.get_bone_name(bone) == bone_name:
 			return i
 	return -1
 
 
-func _vertex_is_bone(bones: PackedInt32Array, weights: PackedFloat32Array, vertex: int,
-		bind: int, stride: int) -> bool:
-	var base := vertex * stride
-	if base + stride > bones.size() or base + stride > weights.size():
-		return false
-	var best_slot := 0
-	var best_w := -1.0
-	for slot in stride:
-		var w := weights[base + slot]
-		if w > best_w:
-			best_w = w
-			best_slot = slot
-	return best_w > 0.0 and bones[base + best_slot] == bind
-
-
 ## Hand.L / Hand.R and every finger bone under them. A fingertip weighted only
 ## to Index1 would otherwise fall into the shelved body and vanish in VR.
-func _collect_hand_binds() -> Dictionary:
+static func _collect_hand_binds(skin: Skin, skeleton: Skeleton3D) -> Dictionary:
 	var binds := {}
-	for i in _skeleton.get_bone_count():
-		if not _bone_is_hand(i):
+	for i in skeleton.get_bone_count():
+		if not _bone_is_hand(skeleton, i):
 			continue
-		var bind := _skin_bind(_skeleton.get_bone_name(i))
+		var bind := _skin_bind(skin, skeleton, skeleton.get_bone_name(i))
 		if bind >= 0:
 			binds[bind] = true
 	return binds
 
 
-func _bone_is_hand(bone: int) -> bool:
+static func _bone_is_hand(skeleton: Skeleton3D, bone: int) -> bool:
 	var guard := 0
 	while bone >= 0 and guard < 12:
-		var bone_name := _skeleton.get_bone_name(bone)
+		var bone_name := skeleton.get_bone_name(bone)
 		if bone_name == "Hand.L" or bone_name == "Hand.R":
 			return true
-		bone = _skeleton.get_bone_parent(bone)
+		bone = skeleton.get_bone_parent(bone)
 		guard += 1
 	return false
-
-
-func _vertex_in_binds(bones: PackedInt32Array, weights: PackedFloat32Array, vertex: int,
-		binds: Dictionary, stride: int) -> bool:
-	var base := vertex * stride
-	if base + stride > bones.size() or base + stride > weights.size():
-		return false
-	var best_slot := 0
-	var best_w := -1.0
-	for slot in stride:
-		var w := weights[base + slot]
-		if w > best_w:
-			best_w = w
-			best_slot = slot
-	return best_w > 0.0 and binds.has(bones[base + best_slot])

@@ -24,6 +24,7 @@ driver/enable_input=true
 
 [autoload]
 
+ScriptKeepalive="*res://autoload/script_keepalive.gd"
 TimeManager="*res://autoload/time_manager.gd"
 NetworkManager="*res://autoload/network_manager.gd"
 GameManager="*res://autoload/game_manager.gd"
@@ -140,6 +141,7 @@ interact={
 3d_physics/layer_5="reload"
 3d_physics/layer_6="weapon"
 3d_physics/layer_7="practice_prop"
+3d_physics/layer_8="ragdoll"
 
 [physics]
 
@@ -160,3 +162,8 @@ initialization/app_data/app_id=480
 openxr/enabled=true
 openxr/startup_alert=false
 shaders/enabled=true
+
+[internationalization]
+
+locale/fallback="en"
+locale/translations=PackedStringArray("res://translations/translations.en.translation")

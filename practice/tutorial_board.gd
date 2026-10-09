@@ -52,16 +52,16 @@ func _flat_copy() -> String:
 	var throw := _flat(&"prop_fire")
 	var use := _mapped(&"interact")
 	return "\n".join([
-		"THE PRACTICE RANGE",
+		tr("BOARD_TITLE"),
 		"",
-		"DRAW — %s to draw or holster" % draw,
-		"FIRE — %s" % fire,
-		"COCK — %s" % cock,
-		"RELOAD — %s" % reload,
-		"JAM — look down, hold %s" % cock,
-		"PROPS — %s for the wheel; hold %s to throw" % [wheel, throw],
-		"BOTTLES — %s to grab, %s again to throw" % [use, use],
-		"SLOTS — %s while looking at the lever" % use,
+		tr("BOARD_FLAT_DRAW") % draw,
+		tr("BOARD_FLAT_FIRE") % fire,
+		tr("BOARD_FLAT_COCK") % cock,
+		tr("BOARD_FLAT_RELOAD") % reload,
+		tr("BOARD_FLAT_JAM") % cock,
+		tr("BOARD_FLAT_PROPS") % [wheel, throw],
+		tr("BOARD_FLAT_BOTTLES") % [use, use],
+		tr("BOARD_FLAT_SLOTS") % use,
 	])
 
 
@@ -73,14 +73,14 @@ func _vr_copy() -> String:
 	var wheel := _vr(&"prop_radial")
 	var pause := _vr(&"pause")
 	return "\n".join([
-		"THE PRACTICE RANGE",
+		tr("BOARD_TITLE"),
 		"",
-		"MENU — gun-hand %s" % pause,
-		"DRAW — %s, hold" % grip,
-		"FIRE — %s" % fire,
-		"COCK — %s" % cock,
-		"RELOAD — %s opens the gate; shake to dump, off hand seats, bump or swing closes" % gate,
-		"PROPS — off-hand %s for the wheel; off-hand %s throws" % [wheel, fire],
-		"BOTTLES — off-hand %s, release to throw" % grip,
-		"SLOTS — %s with a hand on the knob" % fire,
+		tr("BOARD_VR_MENU") % pause,
+		tr("BOARD_VR_DRAW") % grip,
+		tr("BOARD_VR_FIRE") % fire,
+		tr("BOARD_VR_COCK") % cock,
+		tr("BOARD_VR_RELOAD") % gate,
+		tr("BOARD_VR_PROPS") % [wheel, fire],
+		tr("BOARD_VR_BOTTLES") % grip,
+		tr("BOARD_VR_SLOTS") % fire,
 	])

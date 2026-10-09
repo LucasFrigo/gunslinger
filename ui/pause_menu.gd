@@ -82,7 +82,7 @@ func toggle() -> void:
 
 func _refresh_buttons() -> void:
 	var networked := NetworkManager.is_active()
-	title_label.text = "MENU" if networked else "PAUSED"
+	title_label.text = tr("PAUSE_TITLE_MP") if networked else tr("PAUSE_TITLE")
 	var steam_host := (
 			networked
 			and NetworkManager.is_host()
@@ -91,23 +91,27 @@ func _refresh_buttons() -> void:
 	%InviteButton.visible = steam_host
 	match GameManager.mode:
 		GameManager.GameMode.GAUNTLET:
-			restart_button.text = "RESTART GAUNTLET"
+			restart_button.text = tr("PAUSE_RESTART_GAUNTLET")
 			restart_button.disabled = false
 			host_note.visible = false
 		GameManager.GameMode.MULTIPLAYER:
-			restart_button.text = "RESTART DUEL"
+			restart_button.text = tr("PAUSE_RESTART_DUEL")
 			restart_button.disabled = not NetworkManager.is_host()
 			host_note.visible = restart_button.disabled
 		GameManager.GameMode.PRACTICE:
-			restart_button.text = "RESET RANGE"
+			restart_button.text = tr("PAUSE_RESET_RANGE")
 			restart_button.disabled = false
 			host_note.visible = false
 		GameManager.GameMode.MESH_LAB:
-			restart_button.text = "RESTART DUEL"
+			restart_button.text = tr("PAUSE_RESTART_DUEL")
 			restart_button.disabled = true
 			host_note.visible = false
+		GameManager.GameMode.HORDE:
+			restart_button.text = tr("PAUSE_RESTART_HORDE")
+			restart_button.disabled = false
+			host_note.visible = false
 		_:
-			restart_button.text = "RESTART DUEL"
+			restart_button.text = tr("PAUSE_RESTART_DUEL")
 			restart_button.disabled = false
 			host_note.visible = false
 
@@ -118,7 +122,7 @@ func _on_invite() -> void:
 
 func _on_restart() -> void:
 	if GameManager.mode == GameManager.GameMode.MULTIPLAYER and not NetworkManager.is_host():
-		GameManager.show_message("Only the host can reset the duel.", 2.0)
+		GameManager.show_message(tr("MSG_HOST_ONLY_RESET"), 2.0)
 		return
 	var gauntlet := GameManager.mode == GameManager.GameMode.GAUNTLET
 	close()
@@ -140,4 +144,5 @@ func _in_match() -> bool:
 		GameManager.GameMode.MULTIPLAYER,
 		GameManager.GameMode.PRACTICE,
 		GameManager.GameMode.MESH_LAB,
+		GameManager.GameMode.HORDE,
 	]

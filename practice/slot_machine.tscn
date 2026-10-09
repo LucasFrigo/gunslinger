@@ -1,6 +1,7 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://practice/slot_machine.gd" id="1"]
+[ext_resource type="FontFile" uid="uid://dsduftx1pb1ii" path="res://assets/fonts/Ultra-Regular.ttf" id="font_title"]
 
 [sub_resource type="BoxShape3D" id="shape"]
 size = Vector3(0.62, 1.58, 0.5)
@@ -83,6 +84,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.33, 0.165)
 mesh = SubResource("mesh_window")
 
 [node name="Reel0" type="Label3D" parent="."]
+font = ExtResource("font_title")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.145, 1.33, 0.18)
 pixel_size = 0.0015
 modulate = Color(0.12, 0.06, 0.04, 1)
@@ -91,6 +93,7 @@ font_size = 64
 text = "7"
 
 [node name="Reel1" type="Label3D" parent="."]
+font = ExtResource("font_title")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.33, 0.18)
 pixel_size = 0.0015
 modulate = Color(0.12, 0.06, 0.04, 1)
@@ -99,6 +102,7 @@ font_size = 64
 text = "$"
 
 [node name="Reel2" type="Label3D" parent="."]
+font = ExtResource("font_title")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.145, 1.33, 0.18)
 pixel_size = 0.0015
 modulate = Color(0.12, 0.06, 0.04, 1)
@@ -111,11 +115,12 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.62, 0.1)
 mesh = SubResource("mesh_sign")
 
 [node name="Topper" type="Label3D" parent="."]
+font = ExtResource("font_title")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.62, 0.135)
 pixel_size = 0.0012
 font_size = 72
 outline_size = 8
-text = "LUCKY 7"
+text = "SLOT_TOPPER_IDLE"
 
 [node name="Tray" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.62, 0.28)

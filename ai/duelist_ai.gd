@@ -3,24 +3,38 @@ extends Node3D
 ## AI opponent. Mirrors the duel FSM: waits for the bell, reacts after its
 ## archetype-defined reaction time, draws over draw_time, then fires with an
 ## accuracy cone. A spent cylinder opens a RELOADING window (reload_time).
-## All behavior comes from an AIArchetype .tres file.
+## Aims at one live duelist (the player or another NPC) and retaliates against
+## whoever wounds it. All behavior comes from an AIArchetype .tres file.
 
 signal died(trail_points: PackedVector3Array)
 
 enum AIState { IDLE, REACTING, DRAWING, SHOOTING, RELOADING, DISARMED, DEAD }
 
 const RELOAD_ARM_BLEND := 0.3
+const STRAFE_RANGE := 1.5
 
 var archetype: AIArchetype
 var health := CombatRules.DEFAULT_HEALTH
 var state: int = AIState.IDLE
 var move_speed_mult := 1.0
+## ReplayBuffer actor id. SP: NPC slot i is actor i + 1.
+var actor_id := ReplayBuffer.ACTOR_OTHER
+## Actor id of the shooter whose bullet killed this NPC, or -1 while alive.
+var killed_by := -1
+## Hit region that killed this NPC, set alongside killed_by before _die.
+var killed_region: StringName = &""
+## Horde: always aims at the player and never retaliates against another NPC.
+var focus_player := false
+## Horde: per-wave speed multiplier (loop promotion), on top of ai_speed_mult. Set by setup().
+var speed_mult := 1.0
 
-var _target: Player
+var _target: Node3D
 var _timer := 0.0
 var _draw_progress := 0.0
 var _rest_arm_basis: Basis
 var _spawn_position := Vector3.ZERO
+## Fixed at placement: the strafe line must not swing with the facing or a retarget teleports.
+var _strafe_axis := Vector3.RIGHT
 var _strafe_phase := 0.0
 var _disarm_remaining := 0.0
 var _leg_remaining := 0.0
@@ -28,30 +42,35 @@ var _death_tween: Tween
 
 @onready var arm: Node3D = $Arm
 @onready var revolver: Revolver = $Arm/Revolver
-@onready var head_hitbox: Hitbox = $Head/HeadHitbox
+@onready var head_hitbox: Hitbox = $HeadHitbox
 @onready var torso_hitbox: Hitbox = $TorsoHitbox
-@onready var arm_hitbox: Hitbox = $Arm/ArmHitbox
-@onready var leg_hitbox: Hitbox = $LegHitbox
+@onready var arm_hitbox_l: Hitbox = $ArmHitboxL
+@onready var arm_hitbox_r: Hitbox = $ArmHitboxR
+@onready var leg_hitbox_l: Hitbox = $LegHitboxL
+@onready var leg_hitbox_r: Hitbox = $LegHitboxR
 
 var _dummy: DummyBody
 var _grip_target: Marker3D
 var _index_pull := 0.0
 
 
-func setup(new_archetype: AIArchetype, health_mult: float, target: Player) -> void:
+func setup(new_archetype: AIArchetype, health_mult: float, shade := 0.0, speed := 1.0) -> void:
 	archetype = new_archetype
 	health = archetype.health * health_mult
-	_target = target
-	_tint(archetype.body_color)
+	speed_mult = speed
+	_tint(archetype.body_color.lightened(shade) if shade >= 0.0 else archetype.body_color.darkened(-shade))
 	capture_spawn()
-	GameManager.show_message(archetype.display_name, 2.0)
+
+
+## Combined global tuning speed and this NPC's own (horde loop) multiplier.
+func _speed() -> float:
+	return maxf(float(GameManager.tuning["ai_speed_mult"]) * speed_mult, 0.05)
 
 
 func _ready() -> void:
-	head_hitbox.owner_entity = self
-	torso_hitbox.owner_entity = self
-	arm_hitbox.owner_entity = self
-	leg_hitbox.owner_entity = self
+	for hitbox in _hitboxes():
+		hitbox.owner_entity = self
+	revolver.shooting_hand = &""  # BUG-017: an NPC shot must not buzz the player's controller
 	revolver.fired.connect(_on_fired)
 	revolver.drawn = false
 	revolver.held = false
@@ -62,17 +81,30 @@ func _ready() -> void:
 ## Store current world position as the strafe origin. Call after placing on the marker.
 func capture_spawn() -> void:
 	_spawn_position = global_position
+	_strafe_axis = global_transform.basis.x
+
+
+func is_alive() -> bool:
+	return state != AIState.DEAD
+
+
+func get_head_position() -> Vector3:
+	return ($Head as Node3D).global_position
+
+
+func set_target(node: Node3D) -> void:
+	_target = node
 
 
 ## Called by the DuelManager when the bell rings.
 func begin_draw() -> void:
 	if state != AIState.IDLE or archetype == null:
 		return
-	capture_spawn()
+	if not _is_live(_target):
+		_pick_target()
 	state = AIState.REACTING
-	var speed_mult: float = maxf(GameManager.tuning["ai_speed_mult"], 0.05)
 	_timer = (archetype.reaction_time
-			+ randf_range(-1.0, 1.0) * archetype.reaction_variance) / speed_mult
+			+ randf_range(-1.0, 1.0) * archetype.reaction_variance) / _speed()
 	_timer = maxf(_timer, 0.05)
 
 
@@ -86,12 +118,19 @@ func on_duel_over(_player_won: bool) -> void:
 
 
 func _process(delta: float) -> void:
-	if state == AIState.DEAD or _target == null:
+	if state == AIState.DEAD:
 		return
-	if DeathCam.blocks_combat():
+	if DeathCam.blocks_combat() and not GameManager.duel.survivors_fighting():
 		return
-	_face_target()
-	_strafe(delta)
+	if state != AIState.IDLE and not _is_live(_target):
+		_pick_target()
+		if _target == null:
+			on_duel_over(false)
+			return
+	# Several NPCs have no target before the bell: hold the marker yaw.
+	if is_instance_valid(_target):
+		_face_target()
+		_strafe(delta)
 	_tick_wounds(delta)
 	match state:
 		AIState.REACTING:
@@ -99,8 +138,7 @@ func _process(delta: float) -> void:
 			if _timer <= 0.0:
 				_start_drawing()
 		AIState.DRAWING:
-			var speed_mult: float = maxf(GameManager.tuning["ai_speed_mult"], 0.05)
-			_draw_progress += delta * speed_mult / maxf(archetype.draw_time, 0.05)
+			_draw_progress += delta * _speed() / maxf(archetype.draw_time, 0.05)
 			_animate_arm(clampf(_draw_progress, 0.0, 1.0))
 			if _draw_progress >= 1.0:
 				if revolver.rounds <= 0:
@@ -132,11 +170,53 @@ func _start_drawing() -> void:
 	_draw_progress = 0.0
 	revolver.drawn = true
 	revolver.held = true
-	TimeManager.notify_enemy_draw()
+	if not _other_npc_drawn():
+		TimeManager.notify_enemy_draw()
+
+
+## One slow-mo burst per bell: only the first NPC to draw triggers it.
+func _other_npc_drawn() -> bool:
+	for ai in GameManager.current_ais:
+		if ai != self and is_instance_valid(ai) and ai.is_alive() and ai.revolver.drawn:
+			return true
+	return false
+
+
+func _is_live(node: Node) -> bool:
+	if not is_instance_valid(node):
+		return false
+	if node is Player:
+		return (node as Player).alive
+	if node is DuelistAI:
+		return (node as DuelistAI).is_alive()
+	return false
+
+
+## Horde: this NPC always aims at the player while the player is alive.
+func _focused() -> bool:
+	return focus_player and _is_live(GameManager.local_player)
+
+
+## A random live duelist other than this NPC, or null when none is left.
+## Horde NPCs always pick the player while focused; once the player is dead
+## (or outside horde) they fall back to the shipped free-for-all pick.
+func _pick_target() -> void:
+	if _focused():
+		_target = GameManager.local_player
+		return
+	var rivals := GameManager.live_duelists()
+	rivals.erase(self)
+	_target = rivals.pick_random() if not rivals.is_empty() else null
+
+
+func _target_head() -> Vector3:
+	if _target is DuelistAI:
+		return (_target as DuelistAI).get_head_position()
+	return (_target as Player).get_head_position()
 
 
 func _face_target() -> void:
-	var to_target := _target.get_head_position() - global_position
+	var to_target := _target_head() - global_position
 	to_target.y = 0.0
 	if to_target.length_squared() > 0.01:
 		# Orient so the model's -Z (forward) points at the player.
@@ -147,26 +227,31 @@ func _strafe(delta: float) -> void:
 	if archetype.move_style != AIArchetype.MoveStyle.STRAFE or state == AIState.IDLE:
 		return
 	_strafe_phase += delta * archetype.strafe_speed * move_speed_mult
-	var right := global_transform.basis.x
-	global_position = _spawn_position + right * sin(_strafe_phase) * 1.5
+	var pos := _spawn_position + _strafe_axis * sin(_strafe_phase) * STRAFE_RANGE
+	var half_width := GameManager.current_scenario.strafe_half_width if GameManager.current_scenario != null else 0.0
+	if half_width > 0.0:
+		pos.x = clampf(pos.x, -half_width, half_width)
+	global_position = pos
 
 
 func _animate_arm(progress: float) -> void:
 	# Blend the arm from resting (gun at the hip) to aiming at the player's chest.
-	var aim_point := _target.get_head_position() + Vector3.DOWN * 0.25
+	var aim_point := _target_head() + Vector3.DOWN * 0.25
 	var aimed := arm.global_transform.looking_at(aim_point, Vector3.UP).basis
 	var rest := global_transform.basis * _rest_arm_basis
 	arm.global_transform.basis = rest.slerp(aimed, ease(progress, 0.4))
 
 
 func _fire() -> void:
-	if not is_instance_valid(_target) or not _target.alive:
-		return
+	if not _is_live(_target):
+		_pick_target()
+		if _target == null:
+			return
 	if revolver.rounds <= 0:
 		_begin_reload()
 		return
 	var muzzle := revolver.get_muzzle().global_position
-	var direction := (_target.get_head_position() + Vector3.DOWN * 0.2 - muzzle).normalized()
+	var direction := (_target_head() + Vector3.DOWN * 0.2 - muzzle).normalized()
 	direction = _apply_accuracy_cone(direction)
 	revolver.try_fire(true, direction)
 	_index_pull = 1.0
@@ -179,8 +264,7 @@ func _begin_reload() -> void:
 		return
 	state = AIState.RELOADING
 	revolver.open_gate()
-	var speed_mult: float = maxf(GameManager.tuning["ai_speed_mult"], 0.05)
-	_timer = maxf(archetype.reload_time / speed_mult, 0.05)
+	_timer = maxf(archetype.reload_time / _speed(), 0.05)
 
 
 func _finish_reload() -> void:
@@ -205,9 +289,9 @@ func _apply_accuracy_cone(direction: Vector3) -> Vector3:
 
 
 func _on_fired(origin: Vector3, direction: Vector3) -> void:
-	ReplayBuffer.record_shot(origin, direction, ReplayBuffer.ACTOR_OTHER)
+	ReplayBuffer.record_shot(origin, direction, actor_id)
 	Bullet.spawn(get_tree().current_scene, origin, direction,
-			archetype.bullet_speed, true, hitbox_rids(), false)
+			archetype.bullet_speed, true, hitbox_rids(), false, 0.0, [], actor_id)
 
 
 func capture_replay_pose() -> Dictionary:
@@ -234,6 +318,8 @@ func apply_replay_pose(pose: Dictionary) -> void:
 		_death_tween.kill()
 	global_transform = pose["root"]
 	arm.global_transform = pose["right"]
+	# A corpse stands for the clip before the death; its fall takes over from there.
+	_dummy.set_pose_driven(true)
 	revolver.hold_replay_pose(pose["gun"], int(pose.get("flags", 0)))
 
 
@@ -243,14 +329,22 @@ func clear_replay_pose() -> void:
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 		region: StringName = CombatRules.REGION_TORSO, _self_inflicted := false,
-		_shooter_is_local := false) -> void:
+		_shooter_is_local := false, shooter := -1, cut := {}) -> void:
 	if state == AIState.DEAD:
 		return
 	var result := CombatRules.resolve(region, health, damage_mult)
 	health = result["health"]
+	# Before `_die`: the gib leaves from the live pose, not the one `collapse` rescales.
+	_dummy.knock_chunk(cut, DummyBody.shot_dir(trail_points), ReplayBuffer.clip_time(), result["died"])
 	if result["died"]:
+		killed_by = shooter if shooter >= 0 else ReplayBuffer.ACTOR_HOST
+		killed_region = region
 		_die(trail_points)
 		return
+	if not _focused():
+		var attacker := ReplayBuffer.actor_node(shooter) if shooter >= 0 else null
+		if attacker != self and _is_live(attacker):
+			_target = attacker as Node3D
 	if result["disarm"]:
 		_disarm()
 	if result["slow"]:
@@ -289,7 +383,7 @@ func _tick_wounds(delta: float) -> void:
 	_disarm_remaining = 0.0
 	_snatch_gun()
 	state = AIState.IDLE
-	if GameManager.duel != null and GameManager.duel.state == DuelManager.State.DRAW:
+	if GameManager.duel != null and GameManager.duel.npcs_in_combat():
 		begin_draw()
 
 
@@ -305,26 +399,36 @@ func _exit_tree() -> void:
 func _die(trail_points: PackedVector3Array) -> void:
 	state = AIState.DEAD
 	revolver.close_gate()
-	revolver.drawn = false
-	revolver.held = false
-	head_hitbox.set_deferred("monitorable", false)
-	torso_hitbox.set_deferred("monitorable", false)
-	arm_hitbox.set_deferred("monitorable", false)
-	leg_hitbox.set_deferred("monitorable", false)
-	_death_tween = create_tween()
-	_death_tween.set_ignore_time_scale(true)
-	_death_tween.tween_property(self, "rotation:x", -PI / 2.0, 0.6) \
-			.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	for hitbox in _hitboxes():
+		hitbox.set_deferred("monitorable", false)
+	if DummyBody.ragdoll_on():
+		revolver.release_into_world(get_tree().current_scene, DummyBody.gun_fling(trail_points),
+				DummyBody.gun_spin(trail_points), false)
+		_dummy.collapse(trail_points)
+	else:
+		revolver.drawn = false
+		revolver.held = false
+		_death_tween = create_tween()
+		_death_tween.set_ignore_time_scale(true)
+		_death_tween.tween_property(self, "rotation:x", -PI / 2.0, 0.6) \
+				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 	died.emit(trail_points)
 
 
+## The mannequin that falls on death. `DeathCam` orbits its chest.
+func corpse_body() -> DummyBody:
+	return _dummy
+
+
+func _hitboxes() -> Array[Hitbox]:
+	return [head_hitbox, torso_hitbox, arm_hitbox_l, arm_hitbox_r, leg_hitbox_l, leg_hitbox_r]
+
+
 func hitbox_rids() -> Array[RID]:
-	return [
-		head_hitbox.get_rid(),
-		torso_hitbox.get_rid(),
-		arm_hitbox.get_rid(),
-		leg_hitbox.get_rid(),
-	]
+	var rids: Array[RID] = []
+	for hitbox in _hitboxes():
+		rids.append(hitbox.get_rid())
+	return rids
 
 
 func _attach_dummy() -> void:
@@ -341,12 +445,15 @@ func _attach_dummy() -> void:
 	_grip_target = grip
 	# The gun arm is on +X.
 	_dummy.drive_arm(true, grip)
+	_dummy.attach_hitboxes(head_hitbox, torso_hitbox, arm_hitbox_l, arm_hitbox_r,
+			leg_hitbox_l, leg_hitbox_r)
 
 
 func _drive_gun_hand(delta: float) -> void:
 	if _dummy == null:
 		return
 	_index_pull = maxf(_index_pull - delta / 0.15, 0.0)
+	_dummy.set_gun_arm(&"R" if revolver.held else &"")
 	if revolver.held:
 		var anchor := revolver.get_node_or_null("GripAnchor") as Node3D
 		_dummy.set_arm_target(true, anchor if anchor != null else _grip_target, true, DummyBody.WRIST_INSET)

@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://2x060ntjghtb" path="res://scenarios/practice_hub/practice_hub.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://cw1k51fgxlnce" path="res://assets/models/scenarios/practice_hub/practice_hub.glb" id="2"]
 [ext_resource type="PackedScene" path="res://practice/tutorial_board.tscn" id="3"]
+[ext_resource type="FontFile" uid="uid://dsduftx1pb1ii" path="res://assets/fonts/Ultra-Regular.ttf" id="font_title"]
 
 [sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
 sky_top_color = Color(0.28, 0.55, 0.92, 1)
@@ -53,6 +54,7 @@ environment = SubResource("env")
 [node name="Model" parent="." unique_id=715514111 instance=ExtResource("2")]
 
 [node name="Scoreboard" type="Label3D" parent="." unique_id=982957346]
+font = ExtResource("font_title")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, -13.72)
 pixel_size = 0.003
 modulate = Color(0.98, 0.9, 0.7, 1)

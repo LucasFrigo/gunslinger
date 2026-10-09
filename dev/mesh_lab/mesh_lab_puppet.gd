@@ -2,12 +2,31 @@ class_name MeshLabPuppet
 extends Node3D
 ## Flat mesh-lab stand-in. Same mannequin path as a VR player: head pose into
 ## DummyBody.place_toward_head, hands as IK targets. Walks a small circle.
-## Each channel holds its last pose while MeshLabMotion turns it off.
+## Each channel holds its last pose while MeshLabMotion turns it off. The drop test
+## shoots the puppet's chest from the fly camera and lets it fall; turning it off stands it up.
+## The chunk key cuts the next bone (head to right shin) with a shot from in front, then
+## heals them all.
 
 const RADIUS := 1.25
 const WALK_SPEED := 1.2
 const EYE_HEIGHT := 1.7
 const APPROACH := 3.0
+## Chunk key targets, head to shins: [bone, toward bone, region]. The shot aims at the
+## middle of the two joints; the head aims a little above its joint.
+const CUT_TARGETS := [
+	[&"Head", &"", &"head"],
+	[&"Chest", &"Neck", &"torso"],
+	[&"Spine", &"Chest", &"torso"],
+	[&"UpperArm.L", &"Forearm.L", &"arm"],
+	[&"UpperArm.R", &"Forearm.R", &"arm"],
+	[&"Forearm.L", &"Hand.L", &"arm"],
+	[&"Forearm.R", &"Hand.R", &"arm"],
+	[&"UpperLeg.L", &"LowerLeg.L", &"leg"],
+	[&"UpperLeg.R", &"LowerLeg.R", &"leg"],
+	[&"LowerLeg.L", &"Foot.L", &"leg"],
+	[&"LowerLeg.R", &"Foot.R", &"leg"],
+]
+const HEAD_AIM := Vector3(0.0, 0.1, 0.0)
 
 var _angle := 0.0
 var _head: Marker3D
@@ -26,6 +45,8 @@ var _right_pos := Vector3(0.28, 1.05, 0.05)
 var _left_target := Vector3(-0.28, 1.05, 0.05)
 var _right_target := Vector3(0.28, 1.05, 0.05)
 var _hand_timer := 0.6
+var _dropped := false
+var _chunk_seen := 0
 
 
 func _ready() -> void:
@@ -44,6 +65,13 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	while _chunk_seen < MeshLabMotion.chunk_step:
+		_chunk_seen += 1
+		_knock_next(_chunk_seen)
+	if MeshLabMotion.drop != _dropped:
+		_set_dropped(MeshLabMotion.drop)
+	if _dropped:
+		return
 	if MeshLabMotion.walk:
 		_angle += (WALK_SPEED / RADIUS) * delta
 		_layout(delta)
@@ -69,6 +97,37 @@ func _process(delta: float) -> void:
 		_left.position = _left_pos
 		_right.position = _right_pos
 	_pose_dummy()
+
+
+## Press n cuts target (n - 1) mod 12. Presses 9 to 11 heal the oldest holes
+## (`BodyChunks.HOLE_CAP`); the 12th press of each cycle heals them all.
+func _knock_next(press: int) -> void:
+	var step := (press - 1) % (CUT_TARGETS.size() + 1)
+	if step >= CUT_TARGETS.size():
+		_dummy.reset_chunks()
+		return
+	var target: Array = CUT_TARGETS[step]
+	var joint := _dummy.bone_global(target[0])
+	var aim := joint.origin + joint.basis.orthonormalized() * HEAD_AIM
+	if target[1] != &"":
+		aim = joint.origin.lerp(_dummy.bone_global(target[1]).origin, 0.5)
+	var dir := -_dummy.front_dir()
+	var bone := _dummy.bone_index(target[0])
+	var cut := _dummy.cut_on_bone(bone, aim - dir * DummyBody.SNAP_BACK, dir, target[2])
+	_dummy.knock_chunk(cut, dir, -1.0, false)
+
+
+func _set_dropped(dropped: bool) -> void:
+	_dropped = dropped
+	if not dropped:
+		_dummy.release_corpse()
+		_dummy.set_pose_driven(true)
+		return
+	var chest := _dummy.bone_global(&"Chest").origin
+	var camera := get_viewport().get_camera_3d()
+	var from := camera.global_position if camera != null else chest + Vector3(0.0, 0.0, 3.5)
+	var dir := (chest - from).normalized()
+	_dummy.collapse(PackedVector3Array([chest - dir * 0.5, chest]))
 
 
 func _layout(_delta: float) -> void:

@@ -4,6 +4,7 @@ extends Node
 ## `replay_post_death` seconds, seals, and the host sends that clip to the
 ## joiner so both peers play the same frames.
 ## Actor 0 is the host (or the local player in SP). Actor 1 is the AI or the joiner.
+## SP with several NPCs records one actor per NPC (slot i is actor i + 1); MP stays at ACTORS.
 
 const HZ := 30.0
 const ACTOR_HOST := 0
@@ -35,6 +36,8 @@ var is_sealed := false
 var death_time := -1.0
 var killer_id := ACTOR_HOST
 var victim_id := ACTOR_OTHER
+## Actor id -> clip time of its death, for NPCs that fall mid-fight (SP only).
+var death_times := {}
 
 var _recording := false
 var _serial := 0
@@ -72,6 +75,12 @@ func is_recording() -> bool:
 	return _recording
 
 
+## Clip clock now, for stamping events the replay re-plays. -1 when not recording
+## (an MP client, or after the clip sealed).
+func clip_time() -> float:
+	return _elapsed if _recording else -1.0
+
+
 func ready_to_play() -> bool:
 	return is_sealed and not _samples.is_empty()
 
@@ -79,6 +88,7 @@ func ready_to_play() -> bool:
 func mark_death(killer: int, victim: int) -> void:
 	killer_id = killer
 	victim_id = victim
+	note_death(victim)
 	# Start the sequence first so the death-frame sample latches a frozen pose.
 	DeathCam.start_sequence()
 	if _recording and death_time < 0.0:
@@ -88,6 +98,17 @@ func mark_death(killer: int, victim: int) -> void:
 		_post_left = maxf(_tune("replay_post_death", 2.0), 0.0)
 		if _post_left <= 0.0:
 			_seal()
+
+
+## Clip time `actor_id` died at; the first call wins. Only while recording.
+func note_death(actor_id: int) -> void:
+	if _recording and not death_times.has(actor_id):
+		death_times[actor_id] = _elapsed
+
+
+## -1 when `actor_id` did not die inside the recording.
+func death_time_of(actor_id: int) -> float:
+	return float(death_times.get(actor_id, -1.0))
 
 
 func record_shot(origin: Vector3, direction: Vector3, shooter: int) -> void:
@@ -150,6 +171,11 @@ func shots_between(t0: float, t1: float) -> Array:
 	return out
 
 
+## Recorded actors: the two duelists, or the player plus every SP NPC.
+func actor_count() -> int:
+	return maxi(ACTORS, 1 + GameManager.current_ais.size())
+
+
 ## Host body, AI, or the peer avatar — whichever this machine is showing for `actor_id`.
 func actor_node(actor_id: int) -> Node:
 	var host_side := not NetworkManager.is_active() or NetworkManager.is_host()
@@ -157,8 +183,9 @@ func actor_node(actor_id: int) -> Node:
 		if host_side:
 			return GameManager.local_player
 		return GameManager.remote_avatar
-	if is_instance_valid(GameManager.current_ai):
-		return GameManager.current_ai
+	var ais := GameManager.current_ais
+	if actor_id >= 1 and actor_id <= ais.size() and is_instance_valid(ais[actor_id - 1]):
+		return ais[actor_id - 1]
 	if host_side:
 		return GameManager.remote_avatar
 	return GameManager.local_player
@@ -184,8 +211,8 @@ func _process(delta: float) -> void:
 
 func _capture_sample() -> void:
 	var actors: Array = []
-	actors.append(_capture_node(actor_node(ACTOR_HOST)))
-	actors.append(_capture_node(actor_node(ACTOR_OTHER)))
+	for actor_id in actor_count():
+		actors.append(_capture_node(actor_node(actor_id)))
 	_samples.append({"t": _elapsed, "actors": actors})
 
 
@@ -268,6 +295,7 @@ func _reset_clip() -> void:
 	death_time = -1.0
 	killer_id = ACTOR_HOST
 	victim_id = ACTOR_OTHER
+	death_times.clear()
 	_elapsed = 0.0
 	_accum = 0.0
 	_post_left = -1.0
@@ -281,9 +309,7 @@ func _tune(key: String, fallback: float) -> float:
 
 func _blend_actors(a_actors: Array, b_actors: Array, u: float) -> Array:
 	var blended: Array = []
-	for i in ACTORS:
-		if i >= a_actors.size() or i >= b_actors.size():
-			break
+	for i in mini(a_actors.size(), b_actors.size()):
 		var a: Dictionary = a_actors[i]
 		var b: Dictionary = b_actors[i]
 		var flags_a := int(a.get("flags", 0))

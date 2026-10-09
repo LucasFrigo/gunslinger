@@ -8,6 +8,8 @@ extends Node3D
 const LERP_SPEED := 18.0
 const ARM_MESH_HEIGHT := 1.0
 const SHOULDER_LOCAL := Vector3(0.18, 0.22, 0.0)
+## Hidden greybox arms and torso mesh hang off the streamed head.
+const TORSO_BELOW_HEAD := 0.55
 const HOLSTER_LOCAL := Vector3(0.25, 0.0, 0.05)
 
 @onready var head: Node3D = $Head
@@ -20,11 +22,12 @@ const HOLSTER_LOCAL := Vector3(0.25, 0.0, 0.05)
 @onready var right_arm: MeshInstance3D = $RightArm
 @onready var holster: Node3D = $Holster
 @onready var gun: Node3D = $Holster/Revolver
-@onready var head_hitbox: Hitbox = $Head/HeadHitbox
+@onready var head_hitbox: Hitbox = $HeadHitbox
 @onready var torso_hitbox: Hitbox = $TorsoHitbox
 @onready var arm_hitbox_l: Hitbox = $ArmHitboxL
 @onready var arm_hitbox_r: Hitbox = $ArmHitboxR
-@onready var leg_hitbox: Hitbox = $LegHitbox
+@onready var leg_hitbox_l: Hitbox = $LegHitboxL
+@onready var leg_hitbox_r: Hitbox = $LegHitboxR
 
 var _target_head: Transform3D
 var _target_left: Transform3D
@@ -49,6 +52,8 @@ var _replay_objects: ReplayObjects
 var _objects := 0
 var _prop_xf := Transform3D.IDENTITY
 var _round_xf := Transform3D.IDENTITY
+## Shot dead: the body falls on its own and the pose stream no longer drives it.
+var _collapsed := false
 
 
 func _ready() -> void:
@@ -56,7 +61,8 @@ func _ready() -> void:
 	torso_hitbox.owner_entity = self
 	arm_hitbox_l.owner_entity = self
 	arm_hitbox_r.owner_entity = self
-	leg_hitbox.owner_entity = self
+	leg_hitbox_l.owner_entity = self
+	leg_hitbox_r.owner_entity = self
 	gun.visible = true
 	_freeze_gun()
 	_attach_dummy()
@@ -72,12 +78,14 @@ func _ready() -> void:
 func _attach_dummy() -> void:
 	_dummy = DummyBody.spawn(self)
 	_dummy.follow_travel(head)
+	_dummy.attach_hitboxes(head_hitbox, torso_hitbox, arm_hitbox_l, arm_hitbox_r,
+			leg_hitbox_l, leg_hitbox_r)
 	_dummy.set_tint(Color(0.30, 0.25, 0.35))
 	for path in [
 		"Head/HeadMesh", "Head/HatBrim",
 		"LeftHand/HandMesh", "RightHand/HandMesh",
 		"LeftArm", "RightArm",
-		"TorsoHitbox/TorsoMesh", "LegHitbox/LegMesh",
+		"TorsoHitbox/TorsoMesh",
 	]:
 		var mesh: MeshInstance3D = get_node_or_null(path) as MeshInstance3D
 		if mesh != null:
@@ -101,6 +109,28 @@ func _make_snap(snap_name: String) -> Marker3D:
 	marker.name = snap_name
 	add_child(marker)
 	return marker
+
+
+## A killing shot with a trail: the body falls along it and the gun drops loose.
+func collapse(trail: PackedVector3Array) -> void:
+	if _dummy == null or _collapsed or not DummyBody.ragdoll_on():
+		return
+	_collapsed = true
+	_dummy.collapse(trail)
+	if gun is Revolver:
+		(gun as Revolver).release_into_world(get_tree().current_scene, DummyBody.gun_fling(trail),
+				DummyBody.gun_spin(trail), false)
+
+
+## The mannequin that falls on death. `DeathCam` orbits its chest.
+func corpse_body() -> DummyBody:
+	return _dummy
+
+
+func _exit_tree() -> void:
+	# The dropped gun lives in the scene, not under this node.
+	if _collapsed and is_instance_valid(gun) and not is_ancestor_of(gun):
+		gun.queue_free()
 
 
 func capture_replay_pose() -> Dictionary:
@@ -133,6 +163,9 @@ func capture_replay_pose() -> Dictionary:
 
 func apply_replay_pose(pose: Dictionary) -> void:
 	replay_locked = true
+	# A corpse stands for the clip before the death; its fall takes over from there.
+	if _dummy != null:
+		_dummy.set_pose_driven(true)
 	var objects := int(pose.get("objects", 0))
 	var prop_xf: Transform3D = pose.get("prop", Transform3D.IDENTITY)
 	var round_xf: Transform3D = pose.get("round", Transform3D.IDENTITY)
@@ -157,6 +190,8 @@ func clear_replay_pose() -> void:
 func apply_pose(head_t: Transform3D, left_t: Transform3D, right_t: Transform3D, flags: int,
 		gun_t := Transform3D.IDENTITY, hands := 0, objects := 0,
 		prop_t := Transform3D.IDENTITY, round_t := Transform3D.IDENTITY) -> void:
+	if _collapsed and not replay_locked:
+		return
 	_target_head = head_t
 	_target_left = left_t
 	_target_right = right_t
@@ -228,6 +263,8 @@ func _apply_gun_parent(drawn: bool) -> void:
 
 
 func _process(delta: float) -> void:
+	if _collapsed and not replay_locked:
+		return
 	var weight := 1.0 if replay_locked else clampf(LERP_SPEED * delta / maxf(Engine.time_scale, 0.001), 0.0, 1.0)
 	head.global_transform = head.global_transform.interpolate_with(_target_head, weight)
 	left_hand.global_transform = left_hand.global_transform.interpolate_with(_target_left, weight)
@@ -242,27 +279,19 @@ func _process(delta: float) -> void:
 			head.global_position, body_yaw, DummyBody.pitch_from_basis(head_basis),
 			head.global_position, DummyBody.roll_from_basis(head_basis))
 	var head_pos := head.global_position
-	torso_hitbox.global_transform = Transform3D(
-		yaw, head_pos + Vector3.DOWN * 0.55)
-	leg_hitbox.global_transform = Transform3D(
-		yaw, head_pos + Vector3.DOWN * 1.3)
 	var hip := HOLSTER_LOCAL
 	hip.x = -absf(hip.x) if _holster_left else absf(hip.x)
 	holster.global_transform = Transform3D(
 		yaw, Vector3(head_pos.x, global_position.y + 1.0, head_pos.z) + yaw * hip)
-	var torso_pos := torso_hitbox.global_position
+	var torso_pos := head_pos + Vector3.DOWN * TORSO_BELOW_HEAD
 	var left_shoulder := torso_pos + yaw * Vector3(-SHOULDER_LOCAL.x, SHOULDER_LOCAL.y, 0.0)
 	var right_shoulder := torso_pos + yaw * Vector3(SHOULDER_LOCAL.x, SHOULDER_LOCAL.y, 0.0)
 	_place_limb(left_arm, left_shoulder, left_hand.global_position)
 	_place_limb(right_arm, right_shoulder, right_hand.global_position)
 	var gun_left := _gun_drawn and not _gun_free and _gun_held_left
 	var gun_right := _gun_drawn and not _gun_free and not _gun_held_left
-	arm_hitbox_l.place_along_limb(left_shoulder, left_hand.global_position,
-			Hitbox.ARM_GUN_HAND_WRIST_INSET if gun_left else Hitbox.ARM_WRIST_INSET,
-			Hitbox.ARM_GUN_HAND_RADIUS_SCALE if gun_left else Hitbox.ARM_RADIUS_SCALE)
-	arm_hitbox_r.place_along_limb(right_shoulder, right_hand.global_position,
-			Hitbox.ARM_GUN_HAND_WRIST_INSET if gun_right else Hitbox.ARM_WRIST_INSET,
-			Hitbox.ARM_GUN_HAND_RADIUS_SCALE if gun_right else Hitbox.ARM_RADIUS_SCALE)
+	if _dummy != null:
+		_dummy.set_gun_arm(&"L" if gun_left else (&"R" if gun_right else &""))
 	if _gun_free or _gun_spinning or _gun_steadied:
 		gun.global_transform = gun.global_transform.interpolate_with(_target_gun, weight)
 	if replay_locked:
@@ -321,9 +350,9 @@ func _place_limb(node: Node3D, from: Vector3, to: Vector3) -> void:
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 		region: StringName = CombatRules.REGION_TORSO, _self_inflicted := false,
-		shooter_is_local := false) -> void:
+		shooter_is_local := false, _shooter := -1, cut := {}) -> void:
 	if NetworkManager.is_host():
-		GameManager.duel.mp_report_hit(false, trail_points, region, damage_mult, shooter_is_local)
+		GameManager.duel.mp_report_hit(false, trail_points, region, damage_mult, shooter_is_local, cut)
 
 
 func hitbox_rids() -> Array[RID]:
@@ -332,7 +361,8 @@ func hitbox_rids() -> Array[RID]:
 		torso_hitbox.get_rid(),
 		arm_hitbox_l.get_rid(),
 		arm_hitbox_r.get_rid(),
-		leg_hitbox.get_rid(),
+		leg_hitbox_l.get_rid(),
+		leg_hitbox_r.get_rid(),
 	]
 
 

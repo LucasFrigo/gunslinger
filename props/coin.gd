@@ -14,6 +14,7 @@ const LOST_Y := -10.0
 const LAYER := 1 << 6
 const LAYER_WORLD := 1
 const AIRBORNE_SPEED := 0.35
+const DEAD_CATCH_LOCK_MS := 3600000
 
 var state: int = State.HELD
 
@@ -184,6 +185,22 @@ func cancel_charge() -> void:
 	if state != State.CHARGING:
 		return
 	hold_at(_attach)
+
+
+## The holder died: fall from where the coin is, and never snap back to a palm.
+func drop_loose(world: Node, velocity: Vector3) -> void:
+	if state == State.LOOSE:
+		return
+	var pose := global_transform
+	reparent(world, true)
+	global_transform = pose
+	_release_body()
+	linear_velocity = velocity
+	angular_velocity = Vector3.ZERO
+	_has_pending_launch = false
+	_catch_locked_until_ms = Time.get_ticks_msec() + DEAD_CATCH_LOCK_MS
+	state = State.LOOSE
+	reset_physics_interpolation()
 
 
 func recall() -> void:

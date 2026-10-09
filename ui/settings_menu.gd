@@ -19,16 +19,16 @@ var _monitoring := false
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	if %HolsterOption.item_count == 0:
-		%HolsterOption.add_item("Right")
-		%HolsterOption.add_item("Left")
+		%HolsterOption.add_item(tr("SETTINGS_SIDE_RIGHT"))
+		%HolsterOption.add_item(tr("SETTINGS_SIDE_LEFT"))
 	if %TurnModeOption.item_count == 0:
-		%TurnModeOption.add_item("Off")
-		%TurnModeOption.add_item("Smooth")
-		%TurnModeOption.add_item("Snap")
+		%TurnModeOption.add_item(tr("SETTINGS_TURN_OFF"))
+		%TurnModeOption.add_item(tr("SETTINGS_TURN_SMOOTH"))
+		%TurnModeOption.add_item(tr("SETTINGS_TURN_SNAP"))
 	if %WindowModeOption.item_count == 0:
-		%WindowModeOption.add_item("Windowed")
-		%WindowModeOption.add_item("Borderless Fullscreen")
-		%WindowModeOption.add_item("Exclusive Fullscreen")
+		%WindowModeOption.add_item(tr("SETTINGS_WINDOWED"))
+		%WindowModeOption.add_item(tr("SETTINGS_BORDERLESS"))
+		%WindowModeOption.add_item(tr("SETTINGS_EXCLUSIVE"))
 	%BackButton.pressed.connect(_on_back)
 	%VolumeSlider.value_changed.connect(_on_volume_changed)
 	%VoiceVolumeSlider.value_changed.connect(_on_voice_volume_changed)
@@ -39,6 +39,8 @@ func _ready() -> void:
 	%OutputDeviceOption.item_selected.connect(_on_output_device_selected)
 	PlayerSettings.voice_changed.connect(_refresh_voice_rows)
 	%HolsterOption.item_selected.connect(_on_holster_selected)
+	%GoreCheck.toggled.connect(_on_gore_toggled)
+	PlayerSettings.gore_changed.connect(_refresh_gore)
 	%TurnModeOption.item_selected.connect(_on_turn_mode_selected)
 	%SmoothTurnSlider.value_changed.connect(_on_smooth_turn_changed)
 	%SnapTurnSlider.value_changed.connect(_on_snap_turn_changed)
@@ -118,11 +120,12 @@ func refresh() -> void:
 	_refresh_voice_rows()
 	_fill_device_options()
 	%HolsterOption.selected = int(GameManager.tuning.get("holster_side", 0))
+	_refresh_gore()
 	%TurnModeOption.selected = MovementConfig.turn_mode
 	%SmoothTurnSlider.value = MovementConfig.smooth_turn_speed
-	%SmoothTurnValue.text = "%d°/s" % int(round(MovementConfig.smooth_turn_speed))
+	%SmoothTurnValue.text = tr("SETTINGS_DEG_PER_SEC") % int(round(MovementConfig.smooth_turn_speed))
 	%SnapTurnSlider.value = MovementConfig.snap_turn_angle
-	%SnapTurnValue.text = "%d°" % int(round(MovementConfig.snap_turn_angle))
+	%SnapTurnValue.text = tr("SETTINGS_DEG") % int(round(MovementConfig.snap_turn_angle))
 	%AimSteadySlider.value = PlayerSettings.aim_steady * 100.0
 	%AimSteadyValue.text = _aim_steady_text(%AimSteadySlider.value)
 	var mouse_t := inverse_lerp(MOUSE_MIN, MOUSE_MAX, MovementConfig.mouse_sensitivity)
@@ -157,7 +160,7 @@ func _add_bind_row(action: StringName, is_vr: bool) -> void:
 	value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var rebind_btn := Button.new()
-	rebind_btn.text = "Rebind"
+	rebind_btn.text = tr("SETTINGS_REBIND")
 	rebind_btn.custom_minimum_size = Vector2(96, 0)
 	var captured_action := action
 	var captured_vr := is_vr
@@ -190,15 +193,15 @@ func _refresh_bind_labels() -> void:
 		var button: Button = info["button"]
 		if listening and PlayerSettings.listen_action == action \
 				and PlayerSettings.listen_is_vr == is_vr:
-			label.text = "Press a button…"
+			label.text = tr("SETTINGS_PRESS_BUTTON")
 			button.text = "…"
 		elif is_vr:
 			label.text = PlayerSettings.vr_source_label(PlayerSettings.get_vr_bind(action))
-			button.text = "Rebind"
+			button.text = tr("SETTINGS_REBIND")
 		else:
 			label.text = PlayerSettings.flat_event_label(
 					PlayerSettings.get_flat_bind_event(action))
-			button.text = "Rebind"
+			button.text = tr("SETTINGS_REBIND")
 
 
 func _start_rebind(action: StringName, is_vr: bool) -> void:
@@ -247,6 +250,13 @@ func _refresh_voice_rows() -> void:
 	%VoicePttCheck.button_pressed = PlayerSettings.voice_ptt_enabled
 	%VoiceGateSlider.value = PlayerSettings.voice_gate_cutoff
 	%VoiceGateValue.text = "%.2f" % PlayerSettings.voice_gate_cutoff
+	_refreshing = was_refreshing
+
+
+func _refresh_gore() -> void:
+	var was_refreshing := _refreshing
+	_refreshing = true
+	%GoreCheck.button_pressed = PlayerSettings.gore_enabled
 	_refreshing = was_refreshing
 
 
@@ -318,6 +328,12 @@ func _on_voice_ptt_toggled(pressed: bool) -> void:
 	PlayerSettings.set_voice_ptt_enabled(pressed)
 
 
+func _on_gore_toggled(pressed: bool) -> void:
+	if _refreshing:
+		return
+	PlayerSettings.set_gore_enabled(pressed)
+
+
 func _on_voice_gate_changed(value: float) -> void:
 	%VoiceGateValue.text = "%.2f" % value
 	if _refreshing:
@@ -347,8 +363,8 @@ func _refresh_height_rows() -> void:
 	%HeightFeetLabel.visible = imperial
 	%HeightInchesSpin.visible = imperial
 	%HeightInchesLabel.visible = imperial
-	%HeightUnitButton.text = "cm" if imperial else "ft"
-	%HeightUnitButton.tooltip_text = "Show centimeters" if imperial else "Show feet and inches"
+	%HeightUnitButton.text = tr("SETTINGS_UNIT_CM") if imperial else tr("SETTINGS_UNIT_FT")
+	%HeightUnitButton.tooltip_text = tr("SETTINGS_SHOW_CM") if imperial else tr("SETTINGS_SHOW_FTIN")
 	%HeightCmSpin.value = cm
 	var feet_in := PlayerSettings.cm_to_feet_inches(cm)
 	%HeightFeetSpin.value = feet_in.x
@@ -407,14 +423,14 @@ func _on_turn_mode_selected(index: int) -> void:
 
 
 func _on_smooth_turn_changed(value: float) -> void:
-	%SmoothTurnValue.text = "%d°/s" % int(round(value))
+	%SmoothTurnValue.text = tr("SETTINGS_DEG_PER_SEC") % int(round(value))
 	if _refreshing:
 		return
 	MovementConfig.set_value("smooth_turn_speed", value)
 
 
 func _on_snap_turn_changed(value: float) -> void:
-	%SnapTurnValue.text = "%d°" % int(round(value))
+	%SnapTurnValue.text = tr("SETTINGS_DEG") % int(round(value))
 	if _refreshing:
 		return
 	MovementConfig.set_value("snap_turn_angle", value)
@@ -429,7 +445,7 @@ func _on_aim_steady_changed(value: float) -> void:
 
 func _aim_steady_text(value: float) -> String:
 	if value <= 0.0:
-		return "Raw"
+		return tr("SETTINGS_AIM_RAW")
 	return "%d%%" % int(round(value))
 
 

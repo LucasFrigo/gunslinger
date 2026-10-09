@@ -1,11 +1,15 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://ui/pause_menu.gd" id="1"]
 [ext_resource type="PackedScene" path="res://ui/settings_menu.tscn" id="2"]
 [ext_resource type="Theme" path="res://ui/theme_duello.tres" id="3"]
+[ext_resource type="FontFile" uid="uid://dsduftx1pb1ii" path="res://assets/fonts/Ultra-Regular.ttf" id="font_title"]
 
 [sub_resource type="LabelSettings" id="title_settings"]
+font = ExtResource("font_title")
 font_size = 32
+shadow_color = Color(0.55, 0.28, 0.14, 1)
+shadow_offset = Vector2(3, 3)
 
 [node name="PauseMenu" type="Control"]
 theme = ExtResource("3")
@@ -48,7 +52,7 @@ theme_override_constants/separation = 10
 unique_name_in_owner = true
 layout_mode = 2
 label_settings = SubResource("title_settings")
-text = "PAUSED"
+text = "PAUSE_TITLE"
 horizontal_alignment = 1
 
 [node name="Sep" type="HSeparator" parent="Center/Panel/Margin/PauseRoot"]
@@ -57,36 +61,36 @@ layout_mode = 2
 [node name="ResumeButton" type="Button" parent="Center/Panel/Margin/PauseRoot"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "RESUME"
+text = "PAUSE_RESUME"
 
 [node name="SettingsButton" type="Button" parent="Center/Panel/Margin/PauseRoot"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "SETTINGS"
+text = "MENU_SETTINGS"
 
 [node name="InviteButton" type="Button" parent="Center/Panel/Margin/PauseRoot"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
-text = "INVITE FRIENDS"
+text = "PAUSE_INVITE"
 
 [node name="RestartButton" type="Button" parent="Center/Panel/Margin/PauseRoot"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "RESTART DUEL"
+text = "PAUSE_RESTART_DUEL"
 
 [node name="HostNote" type="Label" parent="Center/Panel/Margin/PauseRoot"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
-text = "Only the host can restart the duel."
+text = "PAUSE_HOST_NOTE"
 horizontal_alignment = 1
 autowrap_mode = 2
 
 [node name="QuitButton" type="Button" parent="Center/Panel/Margin/PauseRoot"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "QUIT TO MAIN MENU"
+text = "PAUSE_QUIT"
 
 [node name="SettingsMenu" parent="Center/Panel/Margin" instance=ExtResource("2")]
 unique_name_in_owner = true

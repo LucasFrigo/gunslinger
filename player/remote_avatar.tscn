@@ -1,8 +1,9 @@
-[gd_scene load_steps=15 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://player/remote_avatar.gd" id="1"]
 [ext_resource type="Script" path="res://player/hitbox.gd" id="2"]
 [ext_resource type="PackedScene" path="res://weapons/revolver/revolver.tscn" id="3"]
+[ext_resource type="FontFile" uid="uid://chn3xwt75qspp" path="res://assets/fonts/Bitter-SemiBold.ttf" id="font_bold"]
 
 [sub_resource type="StandardMaterial3D" id="mat_body"]
 albedo_color = Color(0.3, 0.25, 0.35, 1)
@@ -22,26 +23,10 @@ size = Vector3(0.07, 0.11, 0.13)
 [sub_resource type="BoxMesh" id="mesh_torso"]
 size = Vector3(0.4, 0.6, 0.28)
 
-[sub_resource type="BoxMesh" id="mesh_leg"]
-size = Vector3(0.35, 0.7, 0.22)
-
 [sub_resource type="CylinderMesh" id="mesh_arm"]
 top_radius = 0.045
 bottom_radius = 0.045
 height = 1.0
-
-[sub_resource type="SphereShape3D" id="shape_head"]
-radius = 0.14
-
-[sub_resource type="BoxShape3D" id="shape_torso"]
-size = Vector3(0.4, 0.6, 0.28)
-
-[sub_resource type="CapsuleShape3D" id="shape_arm"]
-radius = 0.05
-height = 1.0
-
-[sub_resource type="BoxShape3D" id="shape_leg"]
-size = Vector3(0.35, 0.7, 0.22)
 
 [node name="RemoteAvatar" type="Node3D"]
 script = ExtResource("1")
@@ -68,6 +53,7 @@ max_distance = 26.0
 bus = &"Voice"
 
 [node name="MuteX" type="Label3D" parent="Head/MouthMarker"]
+font = ExtResource("font_bold")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.01)
 visible = false
 billboard = 1
@@ -80,13 +66,11 @@ outline_size = 14
 font_size = 72
 text = "X"
 
-[node name="HeadHitbox" type="Area3D" parent="Head"]
+[node name="HeadHitbox" type="Area3D" parent="."]
+top_level = true
 script = ExtResource("2")
 damage_mult = 2.0
 region = &"head"
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Head/HeadHitbox"]
-shape = SubResource("shape_head")
 
 [node name="LeftHand" type="Node3D" parent="."]
 top_level = true
@@ -117,16 +101,10 @@ top_level = true
 script = ExtResource("2")
 region = &"arm"
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="ArmHitboxL"]
-shape = SubResource("shape_arm")
-
 [node name="ArmHitboxR" type="Area3D" parent="."]
 top_level = true
 script = ExtResource("2")
 region = &"arm"
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="ArmHitboxR"]
-shape = SubResource("shape_arm")
 
 [node name="TorsoHitbox" type="Area3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
@@ -135,25 +113,20 @@ script = ExtResource("2")
 damage_mult = 1.0
 region = &"torso"
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="TorsoHitbox"]
-shape = SubResource("shape_torso")
-
 [node name="TorsoMesh" type="MeshInstance3D" parent="TorsoHitbox"]
 mesh = SubResource("mesh_torso")
 surface_material_override/0 = SubResource("mat_body")
 
-[node name="LegHitbox" type="Area3D" parent="."]
+[node name="LegHitboxL" type="Area3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
 top_level = true
 script = ExtResource("2")
 region = &"leg"
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="LegHitbox"]
-shape = SubResource("shape_leg")
-
-[node name="LegMesh" type="MeshInstance3D" parent="LegHitbox"]
-mesh = SubResource("mesh_leg")
-surface_material_override/0 = SubResource("mat_body")
+[node name="LegHitboxR" type="Area3D" parent="."]
+top_level = true
+script = ExtResource("2")
+region = &"leg"
 
 [node name="Holster" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 1.0, 0.05)

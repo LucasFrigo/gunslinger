@@ -1,14 +1,21 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://ui/main_menu.gd" id="1"]
 [ext_resource type="PackedScene" path="res://ui/settings_menu.tscn" id="2"]
 [ext_resource type="Theme" path="res://ui/theme_duello.tres" id="3"]
+[ext_resource type="FontFile" uid="uid://dsduftx1pb1ii" path="res://assets/fonts/Ultra-Regular.ttf" id="font_title"]
 
 [sub_resource type="LabelSettings" id="title_settings"]
+font = ExtResource("font_title")
 font_size = 40
+shadow_color = Color(0.55, 0.28, 0.14, 1)
+shadow_offset = Vector2(3, 3)
 
 [sub_resource type="LabelSettings" id="section_settings"]
+font = ExtResource("font_title")
 font_size = 20
+shadow_color = Color(0.55, 0.28, 0.14, 1)
+shadow_offset = Vector2(2, 2)
 
 [sub_resource type="LabelSettings" id="version_settings"]
 font_size = 14
@@ -59,7 +66,7 @@ horizontal_alignment = 1
 
 [node name="Subtitle" type="Label" parent="Center/Panel/Margin/Landing"]
 layout_mode = 2
-text = "Wild West VR Duels"
+text = "MENU_SUBTITLE"
 horizontal_alignment = 1
 
 [node name="VersionLabel" type="Label" parent="Center/Panel/Margin/Landing"]
@@ -75,17 +82,17 @@ layout_mode = 2
 [node name="SingleplayerButton" type="Button" parent="Center/Panel/Margin/Landing"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "SINGLEPLAYER"
+text = "MENU_SINGLEPLAYER"
 
 [node name="MultiplayerButton" type="Button" parent="Center/Panel/Margin/Landing"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "MULTIPLAYER"
+text = "MENU_MULTIPLAYER"
 
 [node name="PracticeButton" type="Button" parent="Center/Panel/Margin/Landing"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "TUTORIAL / PRACTICE"
+text = "MENU_PRACTICE"
 
 [node name="Sep2" type="HSeparator" parent="Center/Panel/Margin/Landing"]
 layout_mode = 2
@@ -93,51 +100,42 @@ layout_mode = 2
 [node name="SettingsButton" type="Button" parent="Center/Panel/Margin/Landing"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "SETTINGS"
+text = "MENU_SETTINGS"
 
 [node name="QuitButton" type="Button" parent="Center/Panel/Margin/Landing"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "QUIT"
+text = "MENU_QUIT"
 
 [node name="SingleplayerPage" type="VBoxContainer" parent="Center/Panel/Margin"]
 unique_name_in_owner = true
-visible = false
 layout_mode = 2
+visible = false
 theme_override_constants/separation = 8
 
 [node name="SpTitle" type="Label" parent="Center/Panel/Margin/SingleplayerPage"]
 layout_mode = 2
 label_settings = SubResource("section_settings")
-text = "Singleplayer"
+text = "MENU_SP_TITLE"
 horizontal_alignment = 1
 
 [node name="SpSep" type="HSeparator" parent="Center/Panel/Margin/SingleplayerPage"]
 layout_mode = 2
 
-[node name="GauntletButton" type="Button" parent="Center/Panel/Margin/SingleplayerPage"]
+[node name="GauntletModeButton" type="Button" parent="Center/Panel/Margin/SingleplayerPage" groups=["menu_big_button"]]
 unique_name_in_owner = true
 layout_mode = 2
-text = "START GAUNTLET"
+text = "MENU_GAUNTLET"
 
-[node name="FreeDuelRow" type="HBoxContainer" parent="Center/Panel/Margin/SingleplayerPage"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="ScenarioOption" type="OptionButton" parent="Center/Panel/Margin/SingleplayerPage/FreeDuelRow"]
+[node name="DuelModeButton" type="Button" parent="Center/Panel/Margin/SingleplayerPage" groups=["menu_big_button"]]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 3
+text = "MENU_SINGLE_DUEL"
 
-[node name="EnemyOption" type="OptionButton" parent="Center/Panel/Margin/SingleplayerPage/FreeDuelRow"]
+[node name="HordeModeButton" type="Button" parent="Center/Panel/Margin/SingleplayerPage" groups=["menu_big_button"]]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="FreeDuelButton" type="Button" parent="Center/Panel/Margin/SingleplayerPage/FreeDuelRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "FREE DUEL"
+text = "MENU_HORDE"
 
 [node name="SpSep2" type="HSeparator" parent="Center/Panel/Margin/SingleplayerPage"]
 layout_mode = 2
@@ -145,7 +143,180 @@ layout_mode = 2
 [node name="SpBackButton" type="Button" parent="Center/Panel/Margin/SingleplayerPage"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "BACK"
+text = "UI_BACK"
+
+[node name="GauntletPage" type="VBoxContainer" parent="Center/Panel/Margin"]
+unique_name_in_owner = true
+layout_mode = 2
+visible = false
+theme_override_constants/separation = 8
+
+[node name="GauntletPageTitle" type="Label" parent="Center/Panel/Margin/GauntletPage"]
+layout_mode = 2
+label_settings = SubResource("section_settings")
+text = "MENU_GAUNTLET_TITLE"
+horizontal_alignment = 1
+
+[node name="GauntletPageSep" type="HSeparator" parent="Center/Panel/Margin/GauntletPage"]
+layout_mode = 2
+
+[node name="GauntletBlurb" type="Label" parent="Center/Panel/Margin/GauntletPage"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(420, 0)
+autowrap_mode = 3
+horizontal_alignment = 1
+
+[node name="GauntletBestLabel" type="Label" parent="Center/Panel/Margin/GauntletPage"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+visible = false
+
+[node name="GauntletSep2" type="HSeparator" parent="Center/Panel/Margin/GauntletPage"]
+layout_mode = 2
+
+[node name="GauntletButton" type="Button" parent="Center/Panel/Margin/GauntletPage" groups=["menu_big_button"]]
+unique_name_in_owner = true
+layout_mode = 2
+text = "UI_START"
+
+[node name="GauntletBackButton" type="Button" parent="Center/Panel/Margin/GauntletPage"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "UI_BACK"
+
+[node name="DuelPage" type="VBoxContainer" parent="Center/Panel/Margin"]
+unique_name_in_owner = true
+layout_mode = 2
+visible = false
+theme_override_constants/separation = 8
+
+[node name="DuelPageTitle" type="Label" parent="Center/Panel/Margin/DuelPage"]
+layout_mode = 2
+label_settings = SubResource("section_settings")
+text = "MENU_DUEL_TITLE"
+horizontal_alignment = 1
+
+[node name="DuelPageSep" type="HSeparator" parent="Center/Panel/Margin/DuelPage"]
+layout_mode = 2
+
+[node name="DuelBlurb" type="Label" parent="Center/Panel/Margin/DuelPage"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(420, 0)
+autowrap_mode = 3
+horizontal_alignment = 1
+
+[node name="ScenarioRow" type="HBoxContainer" parent="Center/Panel/Margin/DuelPage"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ScenarioRowLabel" type="Label" parent="Center/Panel/Margin/DuelPage/ScenarioRow"]
+layout_mode = 2
+text = "MENU_TOWN"
+custom_minimum_size = Vector2(110, 0)
+
+[node name="ScenarioOption" type="OptionButton" parent="Center/Panel/Margin/DuelPage/ScenarioRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="EnemyRow" type="HBoxContainer" parent="Center/Panel/Margin/DuelPage"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="EnemyRowLabel" type="Label" parent="Center/Panel/Margin/DuelPage/EnemyRow"]
+layout_mode = 2
+text = "MENU_OPPONENT"
+custom_minimum_size = Vector2(110, 0)
+
+[node name="EnemyOption" type="OptionButton" parent="Center/Panel/Margin/DuelPage/EnemyRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CountRow" type="HBoxContainer" parent="Center/Panel/Margin/DuelPage"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CountRowLabel" type="Label" parent="Center/Panel/Margin/DuelPage/CountRow"]
+layout_mode = 2
+text = "MENU_ODDS"
+custom_minimum_size = Vector2(110, 0)
+
+[node name="CountOption" type="OptionButton" parent="Center/Panel/Margin/DuelPage/CountRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DuelSep2" type="HSeparator" parent="Center/Panel/Margin/DuelPage"]
+layout_mode = 2
+
+[node name="FreeDuelButton" type="Button" parent="Center/Panel/Margin/DuelPage" groups=["menu_big_button"]]
+unique_name_in_owner = true
+layout_mode = 2
+text = "UI_START"
+
+[node name="DuelBackButton" type="Button" parent="Center/Panel/Margin/DuelPage"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "UI_BACK"
+
+[node name="HordePage" type="VBoxContainer" parent="Center/Panel/Margin"]
+unique_name_in_owner = true
+layout_mode = 2
+visible = false
+theme_override_constants/separation = 8
+
+[node name="HordePageTitle" type="Label" parent="Center/Panel/Margin/HordePage"]
+layout_mode = 2
+label_settings = SubResource("section_settings")
+text = "MENU_HORDE_TITLE"
+horizontal_alignment = 1
+
+[node name="HordePageSep" type="HSeparator" parent="Center/Panel/Margin/HordePage"]
+layout_mode = 2
+
+[node name="HordeBlurb" type="Label" parent="Center/Panel/Margin/HordePage"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(420, 0)
+autowrap_mode = 3
+horizontal_alignment = 1
+
+[node name="HordeScenarioRow" type="HBoxContainer" parent="Center/Panel/Margin/HordePage"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HordeScenarioRowLabel" type="Label" parent="Center/Panel/Margin/HordePage/HordeScenarioRow"]
+layout_mode = 2
+text = "MENU_ARENA"
+custom_minimum_size = Vector2(110, 0)
+
+[node name="HordeScenarioOption" type="OptionButton" parent="Center/Panel/Margin/HordePage/HordeScenarioRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HordeBestLabel" type="Label" parent="Center/Panel/Margin/HordePage"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+visible = false
+
+[node name="HordeSep2" type="HSeparator" parent="Center/Panel/Margin/HordePage"]
+layout_mode = 2
+
+[node name="HordeButton" type="Button" parent="Center/Panel/Margin/HordePage" groups=["menu_big_button"]]
+unique_name_in_owner = true
+layout_mode = 2
+text = "UI_START"
+
+[node name="HordeBackButton" type="Button" parent="Center/Panel/Margin/HordePage"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "UI_BACK"
 
 [node name="MultiplayerPage" type="VBoxContainer" parent="Center/Panel/Margin"]
 unique_name_in_owner = true
@@ -156,7 +327,7 @@ theme_override_constants/separation = 8
 [node name="MpTitle" type="Label" parent="Center/Panel/Margin/MultiplayerPage"]
 layout_mode = 2
 label_settings = SubResource("section_settings")
-text = "Multiplayer"
+text = "MENU_MP_TITLE"
 horizontal_alignment = 1
 
 [node name="MpSep" type="HSeparator" parent="Center/Panel/Margin/MultiplayerPage"]
@@ -169,18 +340,18 @@ theme_override_constants/separation = 8
 [node name="HostLanButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/LanRow"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "HOST (LAN)"
+text = "MENU_HOST_LAN"
 
 [node name="IpEdit" type="LineEdit" parent="Center/Panel/Margin/MultiplayerPage/LanRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-placeholder_text = "IP address"
+placeholder_text = "MENU_IP_PLACEHOLDER"
 
 [node name="JoinIpButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/LanRow"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "JOIN IP"
+text = "MENU_JOIN_IP"
 
 [node name="LanList" type="ItemList" parent="Center/Panel/Margin/MultiplayerPage"]
 unique_name_in_owner = true
@@ -190,7 +361,7 @@ custom_minimum_size = Vector2(420, 76)
 [node name="JoinLanButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "JOIN SELECTED LAN HOST"
+text = "MENU_JOIN_LAN"
 
 [node name="SteamRow" type="HBoxContainer" parent="Center/Panel/Margin/MultiplayerPage"]
 unique_name_in_owner = true
@@ -201,13 +372,13 @@ theme_override_constants/separation = 8
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-text = "HOST (STEAM)"
+text = "MENU_HOST_STEAM"
 
 [node name="RefreshSteamButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/SteamRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-text = "REFRESH LOBBIES"
+text = "MENU_REFRESH_LOBBIES"
 
 [node name="SteamList" type="ItemList" parent="Center/Panel/Margin/MultiplayerPage"]
 unique_name_in_owner = true
@@ -217,7 +388,7 @@ custom_minimum_size = Vector2(420, 76)
 [node name="JoinSteamButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "JOIN SELECTED LOBBY"
+text = "MENU_JOIN_LOBBY"
 
 [node name="SteamNote" type="Label" parent="Center/Panel/Margin/MultiplayerPage"]
 unique_name_in_owner = true
@@ -237,7 +408,7 @@ autowrap_mode = 2
 [node name="MpBackButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "BACK"
+text = "UI_BACK"
 
 [node name="SettingsMenu" parent="Center/Panel/Margin" instance=ExtResource("2")]
 unique_name_in_owner = true

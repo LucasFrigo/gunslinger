@@ -12,12 +12,12 @@ func _ready() -> void:
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_version.text = "v%s" % str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
-	set_progress(0.0, "Loading...")
+	set_progress(0.0, tr("LOADING_STATUS"))
 
 
 func show_screen() -> void:
 	visible = true
-	set_progress(0.0, "Loading...")
+	set_progress(0.0, tr("LOADING_STATUS"))
 
 
 func hide_screen() -> void:

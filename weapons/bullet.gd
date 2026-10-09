@@ -15,6 +15,8 @@ const GROUP := "bullets"
 const MAX_RANGE := 120.0
 const NEAR_MISS_RADIUS := 0.45
 const HIT_MASK := 0b1000101  # world + hitbox + practice_prop layers
+## Max volumes one step can skip (self-grace arm, corpse capsules) before it counts as a hit.
+const MAX_PASS_THROUGH := 8
 
 static var _bullet_mesh: SphereMesh
 
@@ -28,6 +30,8 @@ var self_hit_grace := 0.0
 ## back to `exclude`. Torso / head / off-hand are not in this list so a muzzle
 ## into the body still registers.
 var grace_rids: Array[RID] = []
+## ReplayBuffer actor id of whoever fired, or -1 when unknown (MP remote shots).
+var shooter := -1
 
 var _travelled := 0.0
 var _trail: BulletTrail
@@ -37,7 +41,7 @@ var _spawn_origin := Vector3.ZERO
 
 static func spawn(parent: Node, origin: Vector3, dir: Vector3, bullet_speed: float,
 		is_authoritative: bool, exclude_rids: Array[RID], local_shooter: bool,
-		hit_grace := 0.0, self_grace_rids: Array[RID] = []) -> Bullet:
+		hit_grace := 0.0, self_grace_rids: Array[RID] = [], shooter_id := -1) -> Bullet:
 	var bullet := Bullet.new()
 	bullet.direction = dir.normalized()
 	bullet.speed = bullet_speed
@@ -45,6 +49,7 @@ static func spawn(parent: Node, origin: Vector3, dir: Vector3, bullet_speed: flo
 	bullet.exclude = exclude_rids
 	bullet.from_local_player = local_shooter
 	bullet.self_hit_grace = hit_grace
+	bullet.shooter = shooter_id
 	bullet.grace_rids = self_grace_rids.duplicate() if not self_grace_rids.is_empty() \
 			else exclude_rids.duplicate()
 	# Position must be known before `_ready`: that is when the trail records
@@ -100,7 +105,7 @@ func _physics_process(delta: float) -> void:
 	var space := get_world_3d().direct_space_state
 	var remaining_from := from
 	var hit: Dictionary = {}
-	for _retry in 4:
+	for _retry in MAX_PASS_THROUGH:
 		var query_exclude: Array[RID] = []
 		if self_hit_grace <= 0.0:
 			query_exclude = exclude
@@ -108,7 +113,7 @@ func _physics_process(delta: float) -> void:
 		query.collide_with_areas = true
 		query.collide_with_bodies = true
 		hit = space.intersect_ray(query)
-		if hit.is_empty() or not _ignore_self_hit(hit):
+		if hit.is_empty() or not _skip_hit(hit):
 			break
 		remaining_from = hit["position"] + direction * 0.008
 		if remaining_from.distance_squared_to(from) >= step * step:
@@ -139,7 +144,8 @@ func _on_impact(hit: Dictionary) -> void:
 		ImpactFeedback.body_impact(pos, normal, hitbox.region)
 		if authoritative and is_instance_valid(_trail):
 			var self_inflicted := from_local_player and hitbox.owner_entity == GameManager.local_player
-			hitbox.receive_hit(_trail.points.duplicate(), self_inflicted, from_local_player)
+			hitbox.receive_hit(_trail.points.duplicate(), self_inflicted, from_local_player, shooter,
+					int(hit.get("shape", -1)))
 	elif collider != null and collider.has_method("take_bullet"):
 		collider.take_bullet(pos, direction)
 	else:
@@ -173,6 +179,14 @@ func _check_near_miss(from: Vector3, to: Vector3) -> void:
 		_near_miss_done = true
 		TimeManager.notify_near_miss()
 		ImpactFeedback.near_miss(closest)
+
+
+## Corpses do not soak bullets, and the shooter's gun-hand arm is skipped inside the grace.
+func _skip_hit(hit: Dictionary) -> bool:
+	var collider: Object = hit.get("collider")
+	if collider is Hitbox and (collider as Hitbox).is_corpse():
+		return true
+	return _ignore_self_hit(hit)
 
 
 func _ignore_self_hit(hit: Dictionary) -> bool:

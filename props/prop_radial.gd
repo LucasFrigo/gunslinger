@@ -30,7 +30,7 @@ func set_highlight(index: int) -> void:
 		_wedges[i].modulate = COLOR_HIGHLIGHT if active else COLOR_IDLE
 		_wedges[i].scale = Vector3.ONE * (1.25 if active else 1.0)
 	if _hint != null:
-		_hint.text = "release to cancel" if index < 0 else "release to equip"
+		_hint.text = tr("RADIAL_CANCEL") if index < 0 else tr("RADIAL_EQUIP")
 
 
 ## Ride the hand's position but keep the ring square to the headset, so tilting
@@ -52,6 +52,7 @@ func _process(_delta: float) -> void:
 func _make_label(text: String, offset: Vector3, font_size: int) -> Label3D:
 	var label := Label3D.new()
 	label.text = text
+	label.font = UiFonts.BOLD
 	label.font_size = font_size
 	label.pixel_size = 0.0012
 	label.outline_size = 10

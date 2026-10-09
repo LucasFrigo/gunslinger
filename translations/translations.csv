@@ -1,0 +1,251 @@
+keys,en
+UI_BACK,BACK
+UI_START,START
+LOADING_STATUS,Loading...
+LOADING_READY,Ready
+LOADING_SOUNDS,Loading sounds...
+LOADING_WEAPONS,Loading weapons...
+LOADING_EFFECTS,Preparing effects...
+LOADING_SHADERS,Compiling shaders...
+MENU_SUBTITLE,Wild West VR Duels
+MENU_SINGLEPLAYER,SINGLEPLAYER
+MENU_MULTIPLAYER,MULTIPLAYER
+MENU_PRACTICE,TUTORIAL / PRACTICE
+MENU_SETTINGS,SETTINGS
+MENU_QUIT,QUIT
+MENU_SP_TITLE,Singleplayer
+MENU_GAUNTLET,GAUNTLET
+MENU_SINGLE_DUEL,SINGLE DUEL
+MENU_HORDE,HORDE
+MENU_GAUNTLET_TITLE,Gauntlet
+MENU_DUEL_TITLE,Single Duel
+MENU_TOWN,Town
+MENU_OPPONENT,Opponent
+MENU_ODDS,Odds
+MENU_HORDE_TITLE,Horde
+MENU_ARENA,Arena
+MENU_MP_TITLE,Multiplayer
+MENU_HOST_LAN,HOST (LAN)
+MENU_IP_PLACEHOLDER,IP address
+MENU_JOIN_IP,JOIN IP
+MENU_JOIN_LAN,JOIN SELECTED LAN HOST
+MENU_HOST_STEAM,HOST (STEAM)
+MENU_REFRESH_LOBBIES,REFRESH LOBBIES
+MENU_JOIN_LOBBY,JOIN SELECTED LOBBY
+MENU_ENEMY_MIXED,Mixed
+MENU_OPPONENT_ONE,1 opponent
+MENU_OPPONENT_MANY,%d opponents
+MENU_GAUNTLET_BLURB,"%d duels in a row, %d lives. Each win pays score; lose every life and the run ends."
+MENU_DUEL_BLURB,"One showdown on your terms: pick the town, the gunslinger, and how many draw on you."
+MENU_HORDE_BLURB,"Endless waves, one life. Full heal and reload between waves; score climbs with every wave you clear."
+MENU_STEAM_MISSING,Steam: GodotSteam extension not installed (LAN still works).
+MENU_STEAM_NOTE,"Steam lobbies refresh automatically. After hosting, Esc → Invite friends (or Shift+Tab) if you want the Steam overlay."
+MENU_STEAM_SEARCHING,Searching for Steam lobbies...
+MENU_HORDE_BEST,Best: wave %d · %d
+MENU_GAUNTLET_BEST_CLEARED,Best: CLEARED · %d
+MENU_GAUNTLET_BEST,Best: duel %d / %d · %d
+MENU_HOSTING_LAN,Hosting LAN game...
+MENU_CREATING_LOBBY,Creating Steam lobby...
+MENU_SELECT_LAN,Select a LAN host first.
+MENU_SELECT_LOBBY,Select a Steam lobby first.
+MENU_JOINING_HOST,Joining %s...
+MENU_JOINING_LOBBY,Joining lobby %s...
+MENU_LAN_ENTRY,%s  (%s)  v%s
+MENU_LAN_SEARCHING,Searching for LAN hosts...
+MENU_STEAM_ENTRY,%s  (%d/2)  v%s
+MENU_STEAM_EMPTY,No lobbies found. Refresh to retry.
+PAUSE_TITLE,PAUSED
+PAUSE_TITLE_MP,MENU
+PAUSE_RESUME,RESUME
+PAUSE_INVITE,INVITE FRIENDS
+PAUSE_RESTART_DUEL,RESTART DUEL
+PAUSE_RESTART_GAUNTLET,RESTART GAUNTLET
+PAUSE_RESTART_HORDE,RESTART HORDE
+PAUSE_RESET_RANGE,RESET RANGE
+PAUSE_HOST_NOTE,Only the host can restart the duel.
+PAUSE_QUIT,QUIT TO MAIN MENU
+SETTINGS_MASTER_VOLUME,Master Volume
+SETTINGS_VOICE_CHAT,Voice Chat
+SETTINGS_VOICE_VOLUME,Voice Volume
+SETTINGS_MUTE_MIC,Mute My Mic
+SETTINGS_PTT,Push To Talk
+SETTINGS_NOISE_GATE,Noise Gate
+SETTINGS_NOISE_GATE_HINT,Raise until the mic bar stays low when you are quiet. 0 is off.
+SETTINGS_INPUT_DEVICE,Input Device
+SETTINGS_MIC_LEVEL,Mic Level
+SETTINGS_OUTPUT_DEVICE,Output Device
+SETTINGS_DEVICE_HINT,"Output device applies to all game audio, not just voice."
+SETTINGS_HOLSTER_SIDE,Holster Side
+SETTINGS_GORE,Gore
+SETTINGS_HEIGHT,Height
+SETTINGS_STANDING_HEIGHT,Standing Height
+SETTINGS_UNIT_FT,ft
+SETTINGS_UNIT_IN,in
+SETTINGS_UNIT_CM,cm
+SETTINGS_SHOW_CM,Show centimeters
+SETTINGS_SHOW_FTIN,Show feet and inches
+SETTINGS_CALIBRATE,Calibrate
+SETTINGS_RESET_VIEW_HEIGHT,Reset View Height
+SETTINGS_HEIGHT_HINT,"Stand up straight, then Calibrate. Reset view height applies the saved height to this session."
+SETTINGS_AIM_STEADY,Aim Steady
+SETTINGS_AIM_RAW,Raw
+SETTINGS_TURN_MODE,Turn Mode
+SETTINGS_SMOOTH_TURN,Smooth Turn
+SETTINGS_SNAP_ANGLE,Snap Angle
+SETTINGS_MOUSE_SENS,Mouse Sensitivity
+SETTINGS_WINDOW_MODE,Window Mode
+SETTINGS_RESOLUTION,Resolution
+SETTINGS_APPLY_DISPLAY,APPLY DISPLAY
+SETTINGS_CONTROLS,Controls
+SETTINGS_RESET_CONTROLS,RESET CONTROLS
+SETTINGS_SIDE_RIGHT,Right
+SETTINGS_SIDE_LEFT,Left
+SETTINGS_TURN_OFF,Off
+SETTINGS_TURN_SMOOTH,Smooth
+SETTINGS_TURN_SNAP,Snap
+SETTINGS_WINDOWED,Windowed
+SETTINGS_BORDERLESS,Borderless Fullscreen
+SETTINGS_EXCLUSIVE,Exclusive Fullscreen
+SETTINGS_REBIND,Rebind
+SETTINGS_PRESS_BUTTON,Press a button…
+SETTINGS_DEG_PER_SEC,%d°/s
+SETTINGS_DEG,%d°
+BIND_SRC_TRIGGER,Trigger
+BIND_SRC_GRIP,Grip
+BIND_SRC_AX,A / X
+BIND_SRC_BY,B / Y
+BIND_SRC_STICK_CLICK,Stick Click
+BIND_SRC_STICK_DOWN,Stick Down
+BIND_FIRE,Fire
+BIND_DRAW_HOLSTER,Draw / Holster
+BIND_COCK,Cock
+BIND_RELOAD,Reload
+BIND_PROP_RADIAL,Prop Radial
+BIND_PROP_FIRE,Cigarette / Prop
+BIND_VOICE_MUTE,Mute Mic
+BIND_VOICE_PTT,Push To Talk
+BIND_GRIP,Grip
+BIND_TRICK_SHOT,Trick Shot
+BIND_GATE,Gate
+BIND_PAUSE,Pause
+BIND_MOUSE_LEFT,LMB
+BIND_MOUSE_RIGHT,RMB
+BIND_MOUSE_MIDDLE,MMB
+BIND_MOUSE_N,Mouse %d
+HUD_HP,HP %d / %d
+HUD_BOTTLES,Bottles %d
+HUD_HORDE_STATUS,Wave %d · Score %d
+HUD_REPLAY,REPLAY
+RADIAL_CANCEL,release to cancel
+RADIAL_EQUIP,release to equip
+RELOAD_AMMO,AMMO %d / %d
+RELOAD_AMMO_EMPTY,(EMPTY)
+RELOAD_GATE_OPEN,GATE OPEN
+RELOAD_GATE_CLOSED,GATE CLOSED
+RELOAD_HAND_ROUND,ROUND IN HAND
+RELOAD_HAND_EMPTY,HAND EMPTY
+RELOAD_READY,READY TO FIRE
+RELOAD_JAMMED,"JAMMED — look down, hold Space"
+RELOAD_HOLSTERED,HOLSTERED
+RELOAD_IN_AIR_VR,GUN IN AIR — catch to fire
+RELOAD_IN_AIR_FLAT,"GUN IN AIR — look at it, RMB"
+RELOAD_RELOADING_VR,RELOADING — shake dump / belt grab / bump-swing close
+RELOAD_RELOADING_FLAT,RELOADING — R chamber / Space close
+RELOAD_EMPTY_VR,"EMPTY — B open, shake dump, belt load"
+RELOAD_EMPTY_FLAT,"EMPTY — R open+dump, R load, Space close"
+RELOAD_EVT_CLEARED,CLEARED — ready
+RELOAD_EVT_OPEN_DUMP,"GATE OPEN — shake to dump, belt to load"
+RELOAD_EVT_CHAMBERED,CHAMBERED — round seated (%d/%d)
+RELOAD_EVT_OPEN_EMPTY,"GATE OPEN — empty, R to chamber"
+RELOAD_EVT_DUMPED,DUMPED — %d shell(s)
+RELOAD_EVT_CLICK_EMPTY,CLICK — EMPTY
+RELOAD_EVT_GATE_BLOCKS,CAN'T FIRE — gate open
+RELOAD_EVT_NOT_COCKED,CLICK — hammer not cocked
+RELOAD_EVT_NO_SHOT,CLICK — no shot
+RELOAD_EVT_CLOSED_READY,GATE CLOSED — ready (%d/%d)
+RELOAD_EVT_CYLINDER_FULL,CYLINDER FULL — bump/swing to close
+RELOAD_EVT_MISS_BELT,MISS BELT — hand must be near waist belt
+RELOAD_EVT_ROUND_IN_HAND,ROUND IN HAND — release near cylinder
+RELOAD_EVT_DROPPED,DROPPED — release near cylinder to chamber
+RELOAD_EVT_CLOSED_HOW,GATE CLOSED — %s (%d/%d)
+RELOAD_HOW_CLOSED,closed
+RELOAD_HOW_BUMPED,bumped shut
+RELOAD_HOW_SWUNG,swung shut
+MSG_DUEL_RESET,Duel reset
+MSG_ENCOUNTER_RESET,Encounter reset
+MSG_HOST_ONLY_RESET,Only the host can reset the duel.
+MSG_NO_OPPONENT,No opponent connected.
+MSG_RANGE_RESET,Range reset
+MSG_HORDE_RESTARTED,Horde restarted
+MSG_NO_ACTIVE_DUEL,No active duel to reset.
+MSG_HORDE_WAVE,Wave %d: %s
+MSG_WAIT_STEAM,"Waiting for a challenger… Steam lobby (%s). Esc → Invite friends, or Shift+Tab."
+MSG_NO_LAN_IP,(no LAN IPv4)
+MSG_WAIT_LAN,Waiting for a challenger… LAN %s
+MSG_CONNECTED,Connected. Waiting for the host...
+MSG_OPPONENT_LEFT,Opponent left.
+MSG_SESSION_ENDED,Session ended: %s
+MSG_YOU_WIN,YOU WIN
+MSG_YOU_LOSE,YOU LOSE
+MSG_LINEUP_AND,%s & %s
+MSG_HOLSTER,Holster your weapon
+MSG_WAIT_BELL,Wait for the bell...
+MSG_DRAW,DRAW!
+MSG_NPCS_LEFT,%d left
+MSG_REASON_CLEAN_KILL,Clean kill
+MSG_REASON_FOUL_YOU,Foul: you drew early
+MSG_REASON_FOUL_HOST,Foul: host drew early
+MSG_REASON_FOUL_OPPONENT,Foul: opponent drew early
+MSG_REASON_LAST_STANDING,Last one standing
+MSG_REASON_SELF,You shot yourself
+MSG_REASON_SHOT_DOWN,Shot down
+MSG_LIVES_LEFT,%d lives left. Again!
+MSG_DUEL_PROGRESS,Duel %d / %d: %s
+MSG_GAUNTLET_CLEARED,GAUNTLET CLEARED!
+MSG_FINAL_SCORE,Final score: %d
+MSG_GAUNTLET_OVER,GAUNTLET OVER
+MSG_SCORE,Score %d
+MSG_WAVE_CLEARED,WAVE %d CLEARED
+MSG_HORDE_OVER,HORDE OVER
+MSG_HORDE_RESULT,Waves cleared %d · Score %d
+MSG_NEW_BEST,NEW BEST
+MSG_DISARMED,Disarmed!
+MSG_LIMP,Limp!
+MSG_OFFHAND_FULL,Off hand is full
+MSG_OFFHAND_EMPTY,Off hand empty
+MSG_OFFHAND_CIGARETTE,Cigarette in the off hand
+MSG_OFFHAND_COIN,Coin in the off hand
+MSG_OFFHAND_ACE,Ace of spades in the off hand
+MSG_OFFHAND_BOTTLE,Bottle in the off hand
+MSG_MIC_MUTED,Mic muted
+MSG_MIC_LIVE,Mic live
+NET_HOST_FAILED,Could not host LAN game: %s
+NET_JOIN_FAILED,Could not join %s: %s
+NET_NO_STEAM,GodotSteam extension not found. See README.
+NET_HOST_FIRST,"Host a Steam lobby first, then invite."
+NET_CONN_FAILED,Connection failed.
+NET_HOST_DISCONNECTED,Host disconnected.
+NET_REJECT_UNKNOWN,"Rejected challenger: version mismatch (host v%s, peer unknown / older build)."
+NET_REJECT_VERSION,"Rejected challenger: version mismatch (host v%s, peer v%s)."
+NET_UNKNOWN_OLD,unknown (older build)
+NET_UNKNOWN,unknown
+NET_VERSION_MISMATCH,"Cannot join: host is v%s, you are v%s."
+BOARD_TITLE,THE PRACTICE RANGE
+BOARD_FLAT_DRAW,DRAW — %s to draw or holster
+BOARD_FLAT_FIRE,FIRE — %s
+BOARD_FLAT_COCK,COCK — %s
+BOARD_FLAT_RELOAD,RELOAD — %s
+BOARD_FLAT_JAM,"JAM — look down, hold %s"
+BOARD_FLAT_PROPS,PROPS — %s for the wheel; hold %s to throw
+BOARD_FLAT_BOTTLES,"BOTTLES — %s to grab, %s again to throw"
+BOARD_FLAT_SLOTS,SLOTS — %s while looking at the lever
+BOARD_VR_MENU,MENU — gun-hand %s
+BOARD_VR_DRAW,"DRAW — %s, hold"
+BOARD_VR_FIRE,FIRE — %s
+BOARD_VR_COCK,COCK — %s
+BOARD_VR_RELOAD,"RELOAD — %s opens the gate; shake to dump, off hand seats, bump or swing closes"
+BOARD_VR_PROPS,PROPS — off-hand %s for the wheel; off-hand %s throws
+BOARD_VR_BOTTLES,"BOTTLES — off-hand %s, release to throw"
+BOARD_VR_SLOTS,SLOTS — %s with a hand on the knob
+SLOT_TOPPER_IDLE,LUCKY 7
+SLOT_TOPPER_WIN,WINNER!

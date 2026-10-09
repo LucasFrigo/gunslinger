@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="GauntletLadder" load_steps=9 format=3]
+[gd_resource type="Resource" script_class="GauntletLadder" load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://gauntlet/gauntlet_ladder.gd" id="1"]
 [ext_resource type="Script" path="res://gauntlet/duel_encounter.gd" id="2"]
@@ -8,9 +8,10 @@
 [ext_resource type="Resource" path="res://gauntlet/encounters/e4_sheriff_rooftop.tres" id="6"]
 [ext_resource type="Resource" path="res://gauntlet/encounters/e5_ghost_canyon.tres" id="7"]
 [ext_resource type="Resource" path="res://gauntlet/encounters/e6_ghost_saloon.tres" id="8"]
+[ext_resource type="Resource" path="res://gauntlet/encounters/e7_trio_street.tres" id="9"]
 
 [resource]
 script = ExtResource("1")
 display_name = "The Gauntlet"
 lives = 3
-encounters = Array[ExtResource("2")]([ExtResource("3"), ExtResource("4"), ExtResource("5"), ExtResource("6"), ExtResource("7"), ExtResource("8")])
+encounters = Array[ExtResource("2")]([ExtResource("3"), ExtResource("4"), ExtResource("5"), ExtResource("6"), ExtResource("7"), ExtResource("8"), ExtResource("9")])

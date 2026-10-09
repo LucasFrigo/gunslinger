@@ -10,13 +10,15 @@ const VR_RIG := "res://player/vr_rig.tscn"
 const FLAT_RIG := "res://player/flat_rig.tscn"
 const HOLSTER_GRAB_RADIUS := 0.45
 const HOLSTER_HIP := Vector3(0.25, 0.0, 0.05)
-const ARM_SHOULDER_LOCAL := Vector3(0.20, 0.22, 0.0)
 ## Flat rest pose: hanging hand relative to torso center (no tracked controllers).
 const ARM_FLAT_HAND_LOCAL := Vector3(0.28, -0.32, 0.04)
 const POSE_SEND_HZ := 30.0
 const RELOAD_VIZ_NAME := "_ReloadVolumeViz"
 const GUN_RECOVER_Y := -5.0
 const GUN_RECOVER_DIST := 20.0
+## Pose flag bits that describe the body, not the gun. A latched clip keeps them.
+const REPLAY_BODY_FLAGS := NetworkManager.POSE_FLAG_HOLSTER_LEFT | NetworkManager.POSE_FLAG_GUN_HELD_LEFT \
+		| NetworkManager.POSE_FLAG_VOICE_MUTED | NetworkManager.POSE_FLAG_GUN_STEADIED
 const HAND_LEFT := &"left_hand"
 const HAND_RIGHT := &"right_hand"
 ## Practice-hub bottles. VR holds the bottle upright with the fist round its middle.
@@ -39,6 +41,8 @@ var max_health := CombatRules.DEFAULT_HEALTH
 var alive := true
 var move_speed_mult := 1.0
 var killed_by_self := false
+## ReplayBuffer actor id of the SP killer, or -1.
+var killed_by := -1
 
 @onready var rig_holder: Node3D = $RigHolder
 @onready var holster: Node3D = $Holster
@@ -47,7 +51,8 @@ var killed_by_self := false
 @onready var torso_hitbox: Hitbox = $TorsoHitbox
 @onready var arm_hitbox_l: Hitbox = $ArmHitboxL
 @onready var arm_hitbox_r: Hitbox = $ArmHitboxR
-@onready var leg_hitbox: Hitbox = $LegHitbox
+@onready var leg_hitbox_l: Hitbox = $LegHitboxL
+@onready var leg_hitbox_r: Hitbox = $LegHitboxR
 @onready var ammo_belt: Area3D = $AmmoBelt
 
 var _pose_accum := 0.0
@@ -59,6 +64,8 @@ var _boot_label: Label3D
 var _holding_hand: int = GunHand.NONE
 var _held_cartridge: CartridgePhysical = null
 var _reload_event := ""
+## True while the event line is a gate-closed note, so it is not re-flashed.
+var _reload_event_closing := false
 var _reload_event_timer := 0.0
 var _vr_reload_label: Label3D
 var _prev_gate_open := false
@@ -126,7 +133,8 @@ func _ready() -> void:
 	torso_hitbox.owner_entity = self
 	arm_hitbox_l.owner_entity = self
 	arm_hitbox_r.owner_entity = self
-	leg_hitbox.owner_entity = self
+	leg_hitbox_l.owner_entity = self
+	leg_hitbox_r.owner_entity = self
 	revolver.fired.connect(_on_revolver_fired)
 	revolver.shells_ejected.connect(_on_shells_ejected)
 	revolver.state_changed.connect(_on_revolver_state_changed)
@@ -139,6 +147,9 @@ func _ready() -> void:
 	_refresh_reload_status()
 	set_reload_volume_debug(DebugMenu.show_reload_volumes)
 	_dummy = DummyBody.spawn(self)
+	head_hitbox.exclude_debug = true
+	_dummy.attach_hitboxes(head_hitbox, torso_hitbox, arm_hitbox_l, arm_hitbox_r,
+			leg_hitbox_l, leg_hitbox_r)
 	_dummy.follow_travel(rig)
 	_dummy.set_tint(Color(0.62, 0.60, 0.58))
 	_wrist_l = _make_wrist_marker("WristL")
@@ -179,29 +190,16 @@ func _follow_body() -> void:
 	var head: Transform3D = rig.get_head_transform()
 	var yaw := Basis(Vector3.UP, head.basis.get_euler().y)
 
-	head_hitbox.global_transform = Transform3D(yaw, head.origin)
 	# Floor offsets. VR standing height moves the XR origin so the headset
-	# lines up with these; the capsules do not follow the live head Y.
+	# lines up with these. The hit volumes ride the mannequin bones (BodyHitboxes).
 	var torso_pos := Vector3(head.origin.x, global_position.y + 1.1, head.origin.z)
-	torso_hitbox.global_transform = Transform3D(yaw, torso_pos)
-
-	var left_shoulder := torso_pos + yaw * Vector3(-ARM_SHOULDER_LOCAL.x, ARM_SHOULDER_LOCAL.y, 0.0)
-	var right_shoulder := torso_pos + yaw * Vector3(ARM_SHOULDER_LOCAL.x, ARM_SHOULDER_LOCAL.y, 0.0)
-	var left_hand := torso_pos + yaw * Vector3(
-		-ARM_FLAT_HAND_LOCAL.x, ARM_FLAT_HAND_LOCAL.y, ARM_FLAT_HAND_LOCAL.z)
-	var right_hand := torso_pos + yaw * ARM_FLAT_HAND_LOCAL
-	if use_vr:
-		left_hand = rig.get_left_hand_transform().origin
-		right_hand = rig.get_right_hand_transform().origin
-	var gun_hand := held_gun_hand()
-	arm_hitbox_l.place_along_limb(left_shoulder, left_hand,
-			Hitbox.ARM_GUN_HAND_WRIST_INSET if gun_hand == HAND_LEFT else Hitbox.ARM_WRIST_INSET,
-			Hitbox.ARM_GUN_HAND_RADIUS_SCALE if gun_hand == HAND_LEFT else Hitbox.ARM_RADIUS_SCALE)
-	arm_hitbox_r.place_along_limb(right_shoulder, right_hand,
-			Hitbox.ARM_GUN_HAND_WRIST_INSET if gun_hand == HAND_RIGHT else Hitbox.ARM_WRIST_INSET,
-			Hitbox.ARM_GUN_HAND_RADIUS_SCALE if gun_hand == HAND_RIGHT else Hitbox.ARM_RADIUS_SCALE)
-	leg_hitbox.global_transform = Transform3D(
-		yaw, Vector3(head.origin.x, global_position.y + 0.4, head.origin.z))
+	match held_gun_hand():
+		HAND_LEFT:
+			_dummy.set_gun_arm(&"L")
+		HAND_RIGHT:
+			_dummy.set_gun_arm(&"R")
+		_:
+			_dummy.set_gun_arm(&"")
 
 	# Alive: the mannequin stands under the head. Death freezes that pose for the orbit.
 	if _dummy != null and alive:
@@ -487,7 +485,8 @@ func hitbox_rids() -> Array[RID]:
 		torso_hitbox.get_rid(),
 		arm_hitbox_l.get_rid(),
 		arm_hitbox_r.get_rid(),
-		leg_hitbox.get_rid(),
+		leg_hitbox_l.get_rid(),
+		leg_hitbox_r.get_rid(),
 	]
 
 
@@ -505,14 +504,30 @@ func gun_hand_hitbox_rids() -> Array[RID]:
 
 func reset_for_duel(spawn: Transform3D) -> void:
 	global_transform = spawn
+	reset_for_wave()
+	if rig is FlatRig:
+		# World yaw: FlatRig subtracts the Player root's spawn rotation so the
+		# joiner is not spun 180° twice (BUG-004).
+		(rig as FlatRig).face_yaw(spawn.basis.get_euler().y)
+		rig.position = Vector3.ZERO
+	elif rig is VRRig:
+		(rig as VRRig).reset_locomotion()
+
+
+## Horde between-wave reset: full HP, cylinder, props and holster, but the player's
+## position and facing are left untouched (no teleport between waves).
+func reset_for_wave() -> void:
 	max_health = CombatRules.player_max_health()
 	health = max_health
 	alive = true
 	killed_by_self = false
+	killed_by = -1
 	_replay_body_driven = false
 	_end_replay_loadout()
 	if _dummy != null:
 		_dummy.follow_travel(rig)
+		_dummy.release_corpse()
+		_dummy.reset_chunks()
 		_dummy.set_pose_driven(true)
 		_dummy.set_head_hidden(true)
 		_dummy.set_body_shelved(use_vr)
@@ -534,31 +549,28 @@ func reset_for_duel(spawn: Transform3D) -> void:
 	_reload_event_timer = 0.0
 	_prev_gate_open = revolver.gate_open
 	_refresh_reload_status()
-	if rig is FlatRig:
-		# World yaw: FlatRig subtracts the Player root's spawn rotation so the
-		# joiner is not spun 180° twice (BUG-004).
-		(rig as FlatRig).face_yaw(spawn.basis.get_euler().y)
-		rig.position = Vector3.ZERO
-	elif rig is VRRig:
-		(rig as VRRig).reset_locomotion()
 
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 		region: StringName = CombatRules.REGION_TORSO, self_inflicted := false,
-		shooter_is_local := false) -> void:
+		shooter_is_local := false, shooter := -1, cut := {}) -> void:
 	if not alive or GameManager.in_practice():
 		return
 	if NetworkManager.is_active():
 		# MP: host resolves HP/status; application arrives via _mp_wound / _mp_finish.
 		if NetworkManager.is_host():
-			GameManager.duel.mp_report_hit(true, trail_points, region, damage_mult, shooter_is_local)
+			GameManager.duel.mp_report_hit(true, trail_points, region, damage_mult, shooter_is_local, cut)
 		return
 	var result := CombatRules.resolve(region, health, damage_mult)
 	health = result["health"]
 	_refresh_health_hud()
+	if _dummy != null:
+		_dummy.knock_chunk(cut, DummyBody.shot_dir(trail_points), ReplayBuffer.clip_time(), result["died"])
 	if result["died"]:
 		killed_by_self = self_inflicted
+		killed_by = shooter
 		play_death_feedback()
+		collapse(trail_points)
 		died.emit(trail_points)
 		return
 	_apply_nonfatal(region)
@@ -585,6 +597,26 @@ func play_death_feedback() -> void:
 	ImpactFeedback.player_hurt(true)
 	GameManager.hud.flash_red()
 	_refresh_health_hud()
+
+
+## A killing shot: the gun and the off-hand prop drop loose, a round in hand is lost, and
+## the body falls along the shot. A foul only calls `play_death_feedback` and stays frozen.
+func collapse(trail: PackedVector3Array) -> void:
+	if _dummy == null or not DummyBody.ragdoll_on():
+		return
+	var world := get_tree().current_scene
+	var fling := DummyBody.gun_fling(trail)
+	revolver.release_into_world(world, fling, DummyBody.gun_spin(trail), false)
+	_holding_hand = GunHand.NONE
+	props.drop_on_death(world, fling)
+	_clear_held_cartridge(true)
+	_refresh_reload_status()
+	_dummy.collapse(trail)
+
+
+## The mannequin that falls on death. `DeathCam` orbits its chest.
+func corpse_body() -> DummyBody:
+	return _dummy
 
 
 # -- Gun handling -----------------------------------------------------------------
@@ -820,11 +852,11 @@ func _apply_nonfatal(region: StringName) -> void:
 	if region == CombatRules.REGION_ARM:
 		if revolver.held:
 			_pain_toss_gun()
-			GameManager.show_message("Disarmed!", 1.5)
+			GameManager.show_message(tr("MSG_DISARMED"), 1.5)
 	elif region == CombatRules.REGION_LEG:
 		_leg_remaining = float(GameManager.tuning["leg_slow_duration"])
 		move_speed_mult = float(GameManager.tuning["leg_speed_mult"])
-		GameManager.show_message("Limp!", 1.5)
+		GameManager.show_message(tr("MSG_LIMP"), 1.5)
 
 
 func _update_wound_status(delta: float) -> void:
@@ -852,7 +884,7 @@ func _update_jam_clear(delta: float) -> void:
 		if _jam_clear_accum >= float(GameManager.tuning["jam_clear_hold"]):
 			revolver.clear_jam()
 			_jam_clear_accum = 0.0
-			_flash_reload_event("CLEARED — ready")
+			_flash_reload_event(tr("RELOAD_EVT_CLEARED"))
 	elif _jam_clear_accum > 0.0:
 		_jam_clear_accum = 0.0
 		_refresh_reload_status()
@@ -1057,7 +1089,7 @@ func _on_interact_pressed() -> void:
 		return
 	if bottle != null:
 		if props.is_prop_in_hand():
-			GameManager.show_message("Off hand is full", 1.2)
+			GameManager.show_message(tr("MSG_OFFHAND_FULL"), 1.2)
 			return
 		_grab_bottle(bottle, off_hand_name(), Transform3D.IDENTITY)
 		return
@@ -1071,7 +1103,7 @@ func _on_cock_pressed(hand: StringName) -> void:
 	if use_vr and (not revolver.held or hand != _holding_hand_name()):
 		return
 	if revolver.gate_open:
-		_close_gate_from_player("closed")
+		_close_gate_from_player("RELOAD_HOW_CLOSED")
 	elif not revolver.jammed:
 		revolver.cock()
 
@@ -1090,7 +1122,7 @@ func _on_gate_pressed(hand: StringName) -> void:
 			_dump_armed = true
 			_close_armed = true
 			_dump_hold_accum = 0.0
-			_flash_reload_event("GATE OPEN — shake to dump, belt to load")
+			_flash_reload_event(tr("RELOAD_EVT_OPEN_DUMP"))
 
 
 func _on_reload_pressed() -> void:
@@ -1099,42 +1131,42 @@ func _on_reload_pressed() -> void:
 		return
 	if revolver.gate_open:
 		if revolver.try_chamber():
-			_flash_reload_event("CHAMBERED — round seated (%d/%d)" % [
+			_flash_reload_event(tr("RELOAD_EVT_CHAMBERED") % [
 				revolver.rounds, revolver.max_rounds])
 	else:
 		if revolver.open_gate():
 			var ejected := revolver.dump_rounds()
 			if ejected <= 0:
-				_flash_reload_event("GATE OPEN — empty, R to chamber")
+				_flash_reload_event(tr("RELOAD_EVT_OPEN_EMPTY"))
 
 
 func _on_shells_ejected(ejected: int) -> void:
 	var origin := revolver.get_chamber_point()
 	ShellCasingPlaceholder.spawn(get_tree().current_scene, origin, ejected)
-	_flash_reload_event("DUMPED — %d shell(s)" % ejected)
+	_flash_reload_event(tr("RELOAD_EVT_DUMPED") % ejected)
 
 
 func _on_revolver_dry_fired(reason: StringName) -> void:
 	match reason:
 		&"empty":
-			_flash_reload_event("CLICK — EMPTY")
+			_flash_reload_event(tr("RELOAD_EVT_CLICK_EMPTY"))
 		&"gate_open":
-			_flash_reload_event("CAN'T FIRE — gate open")
+			_flash_reload_event(tr("RELOAD_EVT_GATE_BLOCKS"))
 		&"uncocked":
-			_flash_reload_event("CLICK — hammer not cocked")
+			_flash_reload_event(tr("RELOAD_EVT_NOT_COCKED"))
 		&"jammed":
-			_flash_reload_event("JAMMED — look down, hold Space")
+			_flash_reload_event(tr("RELOAD_JAMMED"))
 		_:
-			_flash_reload_event("CLICK — no shot")
+			_flash_reload_event(tr("RELOAD_EVT_NO_SHOT"))
 
 
 func _on_revolver_state_changed() -> void:
 	if _prev_gate_open and not revolver.gate_open:
-		if _reload_event.is_empty() or not _reload_event.begins_with("GATE CLOSED"):
-			_flash_reload_event("GATE CLOSED — ready (%d/%d)" % [
-				revolver.rounds, revolver.max_rounds])
+		if _reload_event.is_empty() or not _reload_event_closing:
+			_flash_reload_event(tr("RELOAD_EVT_CLOSED_READY") % [
+				revolver.rounds, revolver.max_rounds], true)
 	elif (not _prev_gate_open) and revolver.gate_open and _reload_event.is_empty():
-		_flash_reload_event("GATE OPEN")
+		_flash_reload_event(tr("RELOAD_GATE_OPEN"))
 	_prev_gate_open = revolver.gate_open
 	_refresh_reload_status()
 
@@ -1147,7 +1179,7 @@ func _on_revolver_fired(origin: Vector3, direction: Vector3) -> void:
 	var authoritative := not NetworkManager.is_active() or NetworkManager.is_host()
 	Bullet.spawn(get_tree().current_scene, origin, direction,
 			GameManager.tuning["bullet_speed"], authoritative, hitbox_rids(), true,
-			float(GameManager.tuning.get("self_hit_grace", 0.28)), gun_hand_hitbox_rids())
+			float(GameManager.tuning.get("self_hit_grace", 0.28)), gun_hand_hitbox_rids(), shooter)
 	NetworkManager.send_shot(origin, direction)
 	_refresh_reload_status()
 
@@ -1160,16 +1192,16 @@ func _try_grab_from_belt() -> void:
 	if _holding_cartridge():
 		return
 	if revolver.rounds >= revolver.max_rounds:
-		_flash_reload_event("CYLINDER FULL — bump/swing to close")
+		_flash_reload_event(tr("RELOAD_EVT_CYLINDER_FULL"))
 		return
 	if not _hand_in_ammo_belt():
-		_flash_reload_event("MISS BELT — hand must be near waist belt")
+		_flash_reload_event(tr("RELOAD_EVT_MISS_BELT"))
 		return
 	var attach := _cartridge_attach()
 	if attach == null:
 		return
 	_held_cartridge = CartridgePhysical.spawn_held(attach)
-	_flash_reload_event("ROUND IN HAND — release near cylinder")
+	_flash_reload_event(tr("RELOAD_EVT_ROUND_IN_HAND"))
 	_refresh_reload_status()
 
 
@@ -1182,11 +1214,11 @@ func _release_held_cartridge() -> void:
 	if chambered:
 		_held_cartridge.queue_free()
 		_held_cartridge = null
-		_flash_reload_event("CHAMBERED — round seated (%d/%d)" % [
+		_flash_reload_event(tr("RELOAD_EVT_CHAMBERED") % [
 			revolver.rounds, revolver.max_rounds])
 	else:
 		_drop_held_cartridge()
-		_flash_reload_event("DROPPED — release near cylinder to chamber")
+		_flash_reload_event(tr("RELOAD_EVT_DROPPED"))
 	_refresh_reload_status()
 
 
@@ -1235,7 +1267,7 @@ func _update_vr_reload(delta: float) -> void:
 	var bump := _probe_overlaps(revolver.bump_area) and off_speed >= bump_close
 	var swing := gun_speed >= swing_close
 	if (bump or swing) and _close_armed:
-		var how := "bumped shut" if bump else "swung shut"
+		var how := "RELOAD_HOW_BUMPED" if bump else "RELOAD_HOW_SWUNG"
 		_close_gate_from_player(how)
 		_close_armed = false
 	elif gun_speed < swing_close * 0.35 and off_speed < bump_close * 0.35:
@@ -1247,8 +1279,8 @@ func _close_gate_from_player(how: String) -> void:
 		return
 	_clear_held_cartridge(false)
 	revolver.close_gate()
-	_flash_reload_event("GATE CLOSED — %s (%d/%d)" % [
-		how, revolver.rounds, revolver.max_rounds])
+	_flash_reload_event(tr("RELOAD_EVT_CLOSED_HOW") % [
+		tr(how), revolver.rounds, revolver.max_rounds], true)
 
 
 func _hand_in_ammo_belt() -> bool:
@@ -1303,7 +1335,7 @@ func _set_reload_shape_viz(shape_node: CollisionShape3D, show: bool) -> void:
 		return
 	if existing != null:
 		return
-	var mesh := _mesh_for_reload_shape(shape_node.shape)
+	var mesh := DebugMenu.mesh_for_shape(shape_node.shape)
 	if mesh == null:
 		return
 	var vis := MeshInstance3D.new()
@@ -1317,27 +1349,6 @@ func _set_reload_shape_viz(shape_node: CollisionShape3D, show: bool) -> void:
 	mat.no_depth_test = true
 	vis.material_override = mat
 	shape_node.add_child(vis)
-
-
-func _mesh_for_reload_shape(shape: Shape3D) -> Mesh:
-	if shape is SphereShape3D:
-		var sphere := SphereMesh.new()
-		sphere.radius = (shape as SphereShape3D).radius
-		sphere.height = (shape as SphereShape3D).radius * 2.0
-		sphere.radial_segments = 16
-		sphere.rings = 8
-		return sphere
-	if shape is BoxShape3D:
-		var box := BoxMesh.new()
-		box.size = (shape as BoxShape3D).size
-		return box
-	if shape is CapsuleShape3D:
-		var capsule := CapsuleMesh.new()
-		var cap := shape as CapsuleShape3D
-		capsule.radius = cap.radius
-		capsule.height = cap.height
-		return capsule
-	return null
 
 
 func _reload_viz_color(shape_node: CollisionShape3D) -> Color:
@@ -1387,8 +1398,9 @@ func _clear_held_cartridge(destroy: bool) -> void:
 
 # -- Reload status HUD ------------------------------------------------------------
 
-func _flash_reload_event(text: String) -> void:
+func _flash_reload_event(text: String, closing := false) -> void:
 	_reload_event = text
+	_reload_event_closing = closing
 	_reload_event_timer = 2.0
 	_refresh_reload_status()
 
@@ -1412,34 +1424,34 @@ func is_holding_cartridge() -> bool:
 
 
 func _build_reload_status_text() -> String:
-	var ammo_line := "AMMO %d / %d" % [revolver.rounds, revolver.max_rounds]
+	var ammo_line := tr("RELOAD_AMMO") % [revolver.rounds, revolver.max_rounds]
 	if revolver.rounds <= 0:
-		ammo_line += "  (EMPTY)"
-	var gate_line := "GATE OPEN" if revolver.gate_open else "GATE CLOSED"
-	var hand_line := "ROUND IN HAND" if _holding_cartridge() else "HAND EMPTY"
-	var ready_line := "READY TO FIRE"
+		ammo_line += "  " + tr("RELOAD_AMMO_EMPTY")
+	var gate_line := tr("RELOAD_GATE_OPEN") if revolver.gate_open else tr("RELOAD_GATE_CLOSED")
+	var hand_line := tr("RELOAD_HAND_ROUND") if _holding_cartridge() else tr("RELOAD_HAND_EMPTY")
+	var ready_line := tr("RELOAD_READY")
 	if revolver.jammed:
-		ready_line = "JAMMED — look down, hold Space"
+		ready_line = tr("RELOAD_JAMMED")
 		var hold := float(GameManager.tuning["jam_clear_hold"])
 		if hold > 0.0 and _jam_clear_accum > 0.0:
 			ready_line += " (%d%%)" % int(100.0 * _jam_clear_accum / hold)
 	elif not revolver.drawn:
-		ready_line = "HOLSTERED"
+		ready_line = tr("RELOAD_HOLSTERED")
 	elif not revolver.held:
 		if use_vr:
-			ready_line = "GUN IN AIR — catch to fire"
+			ready_line = tr("RELOAD_IN_AIR_VR")
 		else:
-			ready_line = "GUN IN AIR — look at it, RMB"
+			ready_line = tr("RELOAD_IN_AIR_FLAT")
 	elif revolver.gate_open:
 		if use_vr:
-			ready_line = "RELOADING — shake dump / belt grab / bump-swing close"
+			ready_line = tr("RELOAD_RELOADING_VR")
 		else:
-			ready_line = "RELOADING — R chamber / Space close"
+			ready_line = tr("RELOAD_RELOADING_FLAT")
 	elif revolver.rounds <= 0:
 		if use_vr:
-			ready_line = "EMPTY — B open, shake dump, belt load"
+			ready_line = tr("RELOAD_EMPTY_VR")
 		else:
-			ready_line = "EMPTY — R open+dump, R load, Space close"
+			ready_line = tr("RELOAD_EMPTY_FLAT")
 	var lines := [ammo_line, gate_line, hand_line, ready_line]
 	if not _reload_event.is_empty():
 		lines.append("> " + _reload_event)
@@ -1461,6 +1473,7 @@ func _update_vr_reload_label(text: String) -> void:
 		if camera == null:
 			return
 		_vr_reload_label = Label3D.new()
+		_vr_reload_label.font = UiFonts.BOLD
 		_vr_reload_label.font_size = 42
 		_vr_reload_label.pixel_size = 0.0018
 		_vr_reload_label.outline_size = 12
@@ -1509,10 +1522,20 @@ func capture_replay_pose() -> Dictionary:
 		_replay_latch = {}
 		return _live_replay_pose()
 	if _replay_latched:
-		return _replay_latch.duplicate(true)
+		return _latched_with_live_loadout()
 	var pose := _live_replay_pose()
 	_replay_latch = pose.duplicate(true)
 	_replay_latched = true
+	return pose
+
+
+## The body stays where it died, but the gun and the off-hand prop keep falling in the clip.
+func _latched_with_live_loadout() -> Dictionary:
+	var pose := _replay_latch.duplicate(true)
+	var live := _live_replay_pose()
+	for key in [&"gun", &"objects", &"prop"]:
+		pose[key] = live[key]
+	pose["flags"] = (int(pose["flags"]) & REPLAY_BODY_FLAGS) | (int(live["flags"]) & ~REPLAY_BODY_FLAGS)
 	return pose
 
 
@@ -1676,7 +1699,7 @@ func _replay_objects_node() -> ReplayObjects:
 
 func _replay_object_word() -> int:
 	var word := 0
-	if props != null and props.has_prop():
+	if props != null and props.has_prop() and not props.is_prop_hidden():
 		var id := _replay_prop_id(props.equipped_item())
 		if id != ReplayBuffer.PROP_NONE:
 			var place := ReplayBuffer.PROP_PLACE_WORLD
@@ -1762,7 +1785,7 @@ func hide_menu_panel() -> void:
 
 
 ## Dark FOV cover + status text on the HMD while boot shaders compile.
-func show_boot_loading(status := "Loading...") -> void:
+func show_boot_loading(status := "") -> void:
 	hide_boot_loading()
 	if not use_vr or not is_instance_valid(rig):
 		return
@@ -1784,12 +1807,13 @@ func show_boot_loading(status := "Loading...") -> void:
 	camera.add_child(_boot_cover)
 	_boot_label = Label3D.new()
 	_boot_label.name = "BootLoadingLabel"
+	_boot_label.font = UiFonts.BOLD
 	_boot_label.font_size = 64
 	_boot_label.pixel_size = 0.002
 	_boot_label.outline_size = 12
 	_boot_label.modulate = Color(0.92, 0.86, 0.74, 1.0)
 	_boot_label.position = Vector3(0.0, 0.04, -0.9)
-	_boot_label.text = status
+	_boot_label.text = status if not status.is_empty() else tr("LOADING_STATUS")
 	camera.add_child(_boot_label)
 
 
@@ -1810,6 +1834,7 @@ func hide_boot_loading() -> void:
 func show_vr_message(text: String, duration: float) -> void:
 	if _vr_message == null:
 		_vr_message = Label3D.new()
+		_vr_message.font = UiFonts.BOLD
 		_vr_message.font_size = 64
 		_vr_message.pixel_size = 0.002
 		_vr_message.outline_size = 16

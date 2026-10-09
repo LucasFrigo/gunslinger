@@ -11,16 +11,31 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Added
 
+- Hit chunks: a hit on a duelist knocks a small patch out of the struck spot (head, torso front or back, upper arms, forearms, thighs, shins). A crater shows in the hole and the patch flies off as a gib that lands and stays until the next duel, with a flesh sound. The death-cam replay pops each chunk at the moment of the hit. New **Gore** setting (on by default) turns it off; F3 **Ragdoll / gore** has `chunk_chance`, `gib_speed`, and `gib_cap`. Mesh lab key 5 knocks chunks. Cosmetic only.
+- UI text is translation-ready: menus, settings, pause, loading, HUD and reload lines, in-game messages, the prop wheel, the practice board, and the slot topper read from `translations/translations.csv` through `tr()` keys (English only; nothing looks different). `language` in `user://settings.cfg` forces a locale. New `--autotest=i18n` fails on a key missing from the CSV.
+- Singleplayer menu: the Singleplayer button now opens a mode list (Gauntlet, Single Duel, Horde). Each mode has its own screen with a short description, its options, its best record, and a START button. Back steps one screen at a time. In VR the mode and START buttons are bigger.
+- Gauntlet best record: the furthest duel cleared, the best score, and whether you have beaten the ladder are saved after a win or a loss and shown on the Gauntlet screen.
+- Horde mode: endless single-player survival on a SP page arena you pick once per run. Every wave opens with a standoff and a bell, up to 3 NPCs, all focused on you with no retaliation between them — crossfire still lands physically. Clearing a wave plays the kill-cam fly-along and slow-mo with no replay, then heals you, refills your cylinder, and snaps the gun to the holster without moving you, before the next standoff. Dying ends the run like a free-duel loss (kill cam, orbit, replay). 8 authored waves, then the table loops with every slot promoted an archetype tier and every NPC a little faster. Kills and headshots score, wave clears add a bonus, crossfire kills count toward the clear but score nothing. Best waves cleared and best score are kept separately and shown on the SP page. Pause has **RESTART HORDE**.
+- Free duel against one to three NPCs. The singleplayer free-duel row has an **Opponents** pick and a **Mixed** enemy that rolls each slot, and it remembers your last arena, enemy, and count. They stand on per-arena markers and fight free-for-all: each picks a random target at the bell and shoots back at whoever hit it. Shots pass through corpses. A mid-fight kill is a ragdoll with an `N left` message; the last one standing wins and the replay shows who really fired, with the earlier corpses falling again. If you die, the survivors shoot each other during the corpse orbit.
+- Gauntlet rung 7, "Mexican standoff": Ghost, Sheriff, and Drunk together on Main Street.
+- Ragdoll: a killing shot drops the NPC, your body, and the other player's avatar in a 1v1 as a rag doll, kicked along the shot at the limb that was hit. The gun falls loose. A coin, ace, or bottle in the off hand falls too; a cigarette is hidden. The replay plays the whole fall after the death, slowed with the rest of the tail. A foul does not collapse. F3 has a **Ragdoll** group (`ragdoll_enabled` 0 turns it off), and mesh lab key 4 drops the puppet for a look.
+- F3 **Show hitboxes** toggle draws every combatant's hit volumes (head red, torso orange, arms blue, legs green).
 - VR spin throw and catch: releasing grip while the revolver hangs on the finger hinge throws it still turning on the same axis. Catch it with either hand and it hangs on that hand at the speed it had, until that hand presses and releases trick-shot. A bind already held at the catch does not stop it. Tossing it again repeats the throw.
-- Menus, the HUD, and the prop wheel use the Duello theme: ink, paper, rust, and gold, with the Silkscreen pixel font.
+- Menus, the HUD, and the prop wheel use the Duello theme: ink, paper, rust, and gold. Titles and big signs (logo, screen headers, REPLAY, the practice scoreboard, the slot machine) are set in Ultra, a heavy Western slab, and the titles and REPLAY tag carry a rust drop shadow; everything else is Bitter, with SemiBold on buttons and HUD readouts. In VR, the reload line, messages, prop wheel, loading text, and mute marker use Bitter too.
 - Mannequin legs take an in-place step while a player, remote avatar, or NPC moves, and settle when they stop. In VR the local body stays hidden, so the other player is the one who sees the step.
 - Mannequin fingers curl when a hand closes. In VR the grab button closes that hand (a fist if it caught nothing, otherwise the pose for the revolver, bottle, pinch prop, or belt round) and the index follows the trigger. Flat stays open until that hand is holding something. The wrist eases onto a grip marker on the object.
 
 ### Fixed
 
+- Quitting no longer sometimes crashes on the way out (a Godot 4.7 script-shutdown bug, worked around by a new `ScriptKeepalive` autoload). Headless autotests that passed no longer report a crash exit code ([BUG-020](docs/BUGS.md)).
+- Flat: the mouse is captured as soon as a match, gauntlet rung, or Horde wave starts, so you no longer have to click before you can look around.
+- NPC shots no longer pulse your controller in VR. [BUG-017]
+- The Sheriff and Ghost no longer teleport sideways while strafing. [BUG-018]
+- Ragdoll limbs no longer hang on the invisible walls on Train Rooftop. [BUG-019]
+- No hit volume covered the upper chest and neck on the player and the remote avatar. The torso now runs up to the head.
 - Mannequin knees fold the shin back on the in-place step. They were swinging the ankle toward the face, so the joint bowed backward. [BUG-016]
 - The game starts again. A bad indent in the flat prop wheel script made Godot refuse the `PropRadialOverlay` class on load.
-- Holding Tab opens the prop wheel. Its labels use the Duello pixel font; the theme had no font assigned, so drawing the names crashed.
+- Holding Tab opens the prop wheel. Its labels use the Duello font; the theme had no font assigned, so drawing the names crashed.
 - On the replay, the dead player's mannequin retraces the draw, aim, and steps, then holds that death pose for the corpse orbit. The revolver, an off-hand prop, and a held reload round follow the clip with it. [BUG-015]
 - A held object keeps the mannequin hand on it while walking or looking. The index, not the pinky, curls with the trigger.
 - Mannequin fingers sit on the palm, match its thickness, and curl into the hand instead of splaying.
@@ -40,6 +55,12 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Changed
 
+- Hit chunks cut where the bullet lands: a 5-10 cm hole (6 cm max on arms and legs) at the real impact point instead of one of 11 fixed spots, so the same place can be hit again and again, up to 8 holes per body (the ninth heals the oldest). A red bowl shows through each hole, and every hit throws a lumpy gib sized to the cut. The 1v1 chunk message now carries the cut (net protocol change: peers on older builds are refused). Hands are never cut.
+- Multiplayer protocol: a new chunk message (`DuelManager._mp_chunk`) syncs hit chunks in 1v1, so older builds cannot join a host on this one.
+- "Free Duel" is now called **Single Duel** in the menu.
+- The NPC no longer tips over stiff when it dies; it collapses as a ragdoll (see Added). `ragdoll_enabled` 0 brings the old tip-over back.
+- Hit volumes follow the mannequin: head on the head bone, a torso capsule, two capsules per arm that stop at the wrist, and a thigh and shin per leg. Nods, IK reach, and the walk step now move them. A VR duck no longer dodges until the body can crouch.
+- NPCs have an off-arm hit volume. A shot there disarms like their gun arm.
 - Mannequin arms and hands match the Blender mesh. They no longer render larger than the imported rig.
 - VR debug panel sits 0.4 m off the off-hand so it is readable, further from the headset.
 - VR scrollable menus (debug panel, Settings, server lists) have a scrollbar twice as thick. Point the laser at the bar and hold the trigger to drag it. While the laser is on that window, the right stick scrolls it and the left stick still walks.

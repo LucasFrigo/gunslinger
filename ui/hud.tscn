@@ -1,26 +1,34 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://ui/hud.gd" id="1"]
 [ext_resource type="PackedScene" path="res://ui/main_menu.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://ui/pause_menu.tscn" id="3"]
 [ext_resource type="Script" path="res://ui/prop_radial_overlay.gd" id="4"]
 [ext_resource type="PackedScene" path="res://ui/loading_screen.tscn" id="5"]
+[ext_resource type="FontFile" uid="uid://chn3xwt75qspp" path="res://assets/fonts/Bitter-SemiBold.ttf" id="font_bold"]
+[ext_resource type="FontFile" uid="uid://dsduftx1pb1ii" path="res://assets/fonts/Ultra-Regular.ttf" id="font_title"]
 
 [sub_resource type="LabelSettings" id="msg_settings"]
+font = ExtResource("font_bold")
 font_size = 42
 outline_size = 8
 outline_color = Color(0, 0, 0, 1)
 
 [sub_resource type="LabelSettings" id="reload_settings"]
+font = ExtResource("font_bold")
 font_size = 22
 outline_size = 6
 outline_color = Color(0, 0, 0, 1)
 
 [sub_resource type="LabelSettings" id="replay_settings"]
+font = ExtResource("font_title")
 font_size = 28
 font_color = Color(0.95, 0.88, 0.72, 1)
 outline_size = 8
 outline_color = Color(0, 0, 0, 1)
+shadow_size = 8
+shadow_color = Color(0.55, 0.28, 0.14, 1)
+shadow_offset = Vector2(3, 3)
 
 [sub_resource type="LabelSettings" id="version_settings"]
 font_size = 14
@@ -79,6 +87,15 @@ label_settings = SubResource("reload_settings")
 text = "Bottles 0"
 visible = false
 
+[node name="HordeStatus" type="Label" parent="."]
+offset_left = 24.0
+offset_top = 52.0
+offset_right = 320.0
+offset_bottom = 88.0
+label_settings = SubResource("reload_settings")
+text = "Wave 1 · Score 0"
+visible = false
+
 [node name="ReplayTag" type="Label" parent="."]
 visible = false
 anchors_preset = 1
@@ -90,7 +107,7 @@ offset_right = -24.0
 offset_bottom = 56.0
 mouse_filter = 2
 label_settings = SubResource("replay_settings")
-text = "REPLAY"
+text = "HUD_REPLAY"
 horizontal_alignment = 2
 
 [node name="VersionTag" type="Label" parent="."]

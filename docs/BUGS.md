@@ -11,11 +11,94 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
-None.
+_None._
 
 ---
 
 ## Fixed
+
+### BUG-020 — `load` (and occasionally `join` / `practice` / `horde`) headless autotest segfaults at shutdown after AUTOTEST PASS
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-09 |
+| Fixed | 2026-10-09 |
+| Platforms | Windows, Godot 4.7. Seen in the headless harness; any quit runs the same teardown. |
+| Areas | `autoload/script_keepalive.gd`, Godot `GDScriptLanguage::finish()` |
+
+**What:** The suite prints `AUTOTEST PASS`, then the process exits with code 139 (segfault) during scene-tree teardown, before `XR: Clearing primary interface`, with no backtrace. It happened in 6 of 15 `load` runs and 1 of 3 `join` runs, once in `practice` (1 run), and once in `horde` (after the hit chunks v2 rewrite). A script that checks the exit code reads a passing suite as a failure.
+
+**Repro:**
+1. `--headless --path . -- --autotest=load` (intermittent; repeat it).
+2. Check the exit code after `AUTOTEST PASS`.
+
+**Notes:** It still happened with `BodyChunks` creation and the chunk cache bypassed, so it is believed to predate the hit-chunks work, but that is not confirmed. Separately, `ragdoll` and `gauntlet` print "ObjectDB instances leaked" at exit.
+
+**Cause:** Not ENet or Steam (an explicit `steamShutdown` + peer close at exit did not change the rate). Every crash faulted at the same address in the Godot exe (Windows Application log, event 1000). Disassembly puts it in `GDScriptLanguage::finish()`, the shutdown loop over every live script. In 4.7 that loop reads the next list entry, then drops its `Ref` to the current script. If that frees a script the current one owned (a preloaded scene's script, an inner class), the next read is freed memory. That read probably happens on every exit; it only faults when the freed page has been reused, which is why it was intermittent and more likely under CPU load. Upstream `master` rewrote `finish()` to copy the list first.
+
+**Fix:** New first autoload `ScriptKeepalive` (`autoload/script_keepalive.gd`). On `_exit_tree` it pins every cached `.gd` (plus itself) in a static var. The loop walks newest-first, so it reaches this script, the oldest, last. Nothing can free mid-walk until that final `clear()` drops the static var, and removals there keep the list consistent. Verified with 4 `load` runs in parallel: 6 segfaults in 36 runs before, 0 in 48 after. Every other suite passes, including host/join. Remove the autoload when the engine moves past 4.7.
+
+### BUG-019 — Ragdoll limbs rest on the invisible rooftop walls
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-08 |
+| Fixed | 2026-10-08 |
+| Platforms | All. Train Rooftop. |
+| Areas | `characters/body_ragdoll.gd`, `scenarios/scenario_base.gd` |
+
+**What:** When a duelist ragdolled on Train Rooftop, a hand or other limb could stop against the invisible side and end walls and hang in mid-air.
+
+**Repro:**
+1. Free duel on Train Rooftop.
+2. Kill the NPC (or die) near a side of the roof.
+3. A limb can rest on an invisible wall.
+
+**Fix:** Ragdoll bodies mask the world layer, and the `Guard*` collision boxes are on it. `ScenarioBase` now puts every `Guard*` static body in the `ragdoll_ignore` group, and `BodyRagdoll` adds a collision exception for each when it builds a body. Walkers, bullets, and props still hit the walls. Covered by `--autotest=multi`.
+
+### BUG-018 — Sheriff and Ghost teleport while strafing
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-08 |
+| Fixed | 2026-10-08 |
+| Platforms | All. Every arena; most visible on Train Rooftop. |
+| Areas | `ai/duelist_ai.gd` |
+
+**What:** A strafing NPC (Sheriff, Ghost) snapped sideways by up to 1.5 m at times.
+
+**Repro:**
+1. Free duel against the Sheriff.
+2. Hit its arm so it drops the gun, then wait for it to redraw.
+3. It jumps sideways when it draws again.
+
+**Fix:** `begin_draw` re-captured the strafe origin each time it ran, including the redraw after a disarm, while the strafe phase kept running, so the position jumped by the old offset. The origin is now captured only at placement. The strafe line is also fixed at placement (`_strafe_axis`) instead of following the facing, which with several NPCs swung the offset whenever one retargeted. Covered by `--autotest=multi`.
+
+### BUG-017 — NPC shots pulse the player's controller
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-08 |
+| Fixed | 2026-10-08 |
+| Platforms | VR (the haptic is a controller rumble). SP free duel and gauntlet. |
+| Areas | `ai/duelist_ai.gd`, `autoload/impact_feedback.gd` `shot_fired` |
+
+**What:** Every shot an NPC fired rumbled the player's controller as if the player had pulled the trigger.
+
+**Repro:**
+1. VR free duel.
+2. Stand still while the NPC fires.
+3. The controller buzzes on each NPC shot.
+
+**Fix:** `WeaponBase` passes the revolver's `shooting_hand` to `ImpactFeedback.shot_fired` on every shot, and the NPC's revolver kept the default `right_hand`. `DuelistAI._ready` now clears it to `&""`, and `ImpactFeedback.shot_fired` skips the haptic when the hand is empty. The player always sets the hand in `attach_to` before it fires.
 
 ### BUG-016 — Mannequin knees bend backward
 

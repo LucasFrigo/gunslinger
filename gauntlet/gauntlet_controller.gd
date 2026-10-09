@@ -40,27 +40,29 @@ func on_duel_finished(player_won: bool) -> void:
 		if lives <= 0:
 			_defeat()
 			return
-		GameManager.show_message("%d lives left. Again!" % lives, 2.0)
+		GameManager.show_message(tr("MSG_LIVES_LEFT") % lives, 2.0)
 	_next_encounter()
 
 
 func _next_encounter() -> void:
 	var encounter := ladder.encounters[encounter_index]
 	progress_changed.emit(encounter_index, ladder.encounters.size(), score, lives)
-	GameManager.show_message("Duel %d / %d: %s" % [
+	GameManager.show_message(tr("MSG_DUEL_PROGRESS") % [
 		encounter_index + 1, ladder.encounters.size(), encounter.label], 3.0)
 	GameManager.begin_gauntlet_encounter(encounter)
 
 
 func _victory() -> void:
 	running = false
-	GameManager.show_message("GAUNTLET CLEARED!\nFinal score: %d" % score, 5.0)
+	PlayerSettings.record_gauntlet_run(encounter_index, score, true)
+	GameManager.show_message(tr("MSG_GAUNTLET_CLEARED") + "\n" + tr("MSG_FINAL_SCORE") % score, 5.0)
 	_back_to_menu()
 
 
 func _defeat() -> void:
 	running = false
-	GameManager.show_message("GAUNTLET OVER\nScore: %d" % score, 5.0)
+	PlayerSettings.record_gauntlet_run(encounter_index, score, false)
+	GameManager.show_message(tr("MSG_GAUNTLET_OVER") + "\n" + tr("MSG_SCORE") % score, 5.0)
 	_back_to_menu()
 
 

@@ -7,6 +7,7 @@ extends CanvasLayer
 @onready var reload_status: Label = $ReloadStatus
 @onready var health_status: Label = $HealthStatus
 @onready var practice_status: Label = $PracticeStatus
+@onready var horde_status: Label = $HordeStatus
 @onready var version_tag: Label = $VersionTag
 @onready var replay_tag: Label = $ReplayTag
 @onready var red_flash: ColorRect = $RedFlash
@@ -22,7 +23,7 @@ var _message_timer: SceneTreeTimer
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	_pixelate_theme()
+	_apply_theme()
 	_menu = $MenuHolder/MainMenu
 	pause_menu = $PauseHolder/PauseMenu
 	replay_tag.visible = false
@@ -30,6 +31,7 @@ func _ready() -> void:
 	reload_status.visible = false
 	health_status.visible = false
 	practice_status.visible = false
+	horde_status.visible = false
 	red_flash.modulate.a = 0.0
 	prop_radial.visible = false
 	menu_holder.visible = false
@@ -39,15 +41,9 @@ func _ready() -> void:
 	version_tag.text = "v%s" % str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
 
 
-func _pixelate_theme() -> void:
+func _apply_theme() -> void:
 	var theme := preload("res://ui/theme_duello.tres")
-	var font: Font = theme.default_font
-	if font is FontFile:
-		var face := font as FontFile
-		face.antialiasing = TextServer.FONT_ANTIALIASING_NONE
-		face.hinting = TextServer.HINTING_NONE
-		face.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
-	for node in [message_label, reload_status, health_status, practice_status, version_tag, replay_tag, prop_radial]:
+	for node in [message_label, reload_status, health_status, practice_status, horde_status, version_tag, replay_tag, prop_radial]:
 		if node is Control and (node as Control).theme == null:
 			(node as Control).theme = theme
 
@@ -74,6 +70,7 @@ func show_menu(is_vr: bool) -> void:
 	if _menu.has_method("show_mode_select"):
 		_menu.show_mode_select()
 	_menu.set_backdrop_dim(is_vr)
+	_menu.set_vr_layout(is_vr)
 	if is_vr:
 		menu_holder.visible = false
 		return
@@ -148,7 +145,7 @@ func set_health(current: float, max_hp: float) -> void:
 	if max_hp <= 0.0:
 		health_status.visible = false
 		return
-	health_status.text = "HP %d / %d" % [ceili(current), ceili(max_hp)]
+	health_status.text = tr("HUD_HP") % [ceili(current), ceili(max_hp)]
 	health_status.visible = true
 
 
@@ -157,8 +154,17 @@ func set_practice_count(count: int) -> void:
 	if count < 0:
 		practice_status.visible = false
 		return
-	practice_status.text = "Bottles %d" % count
+	practice_status.text = tr("HUD_BOTTLES") % count
 	practice_status.visible = true
+
+
+## Persistent "Wave N · Score S" corner label for Horde. A negative wave hides it.
+func set_horde_status(wave: int, score: int) -> void:
+	if wave < 0:
+		horde_status.visible = false
+		return
+	horde_status.text = tr("HUD_HORDE_STATUS") % [wave, score]
+	horde_status.visible = true
 
 
 # -- Prop radial (flat harness) ------------------------------------------------

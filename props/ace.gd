@@ -138,6 +138,20 @@ func cancel_charge() -> void:
 	hold_at(_attach)
 
 
+## The holder died: fall from where the card is.
+func drop_loose(world: Node, velocity: Vector3) -> void:
+	if state == State.LOOSE:
+		return
+	var pose := global_transform
+	reparent(world, true)
+	global_transform = pose
+	_release_body()
+	linear_velocity = velocity
+	angular_velocity = Vector3.ZERO
+	state = State.LOOSE
+	reset_physics_interpolation()
+
+
 func recall() -> void:
 	if state == State.LOOSE and _attach != null:
 		hold_at(_attach)

@@ -7,7 +7,7 @@ extends Node
 signal mode_changed(mode: int)
 signal tuning_changed(key: String, value: Variant)
 
-enum GameMode { BOOT, MENU, FREE_DUEL, GAUNTLET, MULTIPLAYER, PRACTICE, MESH_LAB }
+enum GameMode { BOOT, MENU, FREE_DUEL, GAUNTLET, MULTIPLAYER, PRACTICE, MESH_LAB, HORDE }
 
 const TUNING_PATH := "user://tuning.cfg"
 
@@ -31,11 +31,17 @@ const ARCHETYPES: Array[String] = [
 	"res://ai/archetypes/ghost.tres",
 ]
 
+## Most NPCs in one SP standoff.
+const MAX_NPCS := 3
+## Body-color shift between copies of one archetype: lighter for the 2nd, darker for the 3rd.
+const NPC_TINT_SHIFT := 0.25
+
 const PLAYER_SCENE := "res://player/player.tscn"
 const AI_SCENE := "res://ai/duelist.tscn"
 const AVATAR_SCENE := "res://player/remote_avatar.tscn"
 const HUD_SCENE := "res://ui/hud.tscn"
 const GAUNTLET_LADDER := "res://gauntlet/ladder_default.tres"
+const HORDE_WAVES := "res://gauntlet/horde_default.tres"
 
 ## Live gameplay tuning, editable from the debug menu, persisted to disk.
 var tuning := {
@@ -164,6 +170,32 @@ var tuning := {
 	"replay_slow_seconds": 2.0,
 	## Playback rate during that tail (1 = normal speed).
 	"replay_slow_factor": 0.35,
+	## Corpse ragdoll. 0 holds the death pose; the NPC tips over stiff again.
+	"ragdoll_enabled": 1.0,
+	## Kick (N·s) at the body nearest the hit, along the shot.
+	"ragdoll_hit_impulse": 30.0,
+	## Shove (N·s) shared by hips, spine, and chest along the shot.
+	"ragdoll_torso_push": 90.0,
+	## Share of the torso shove that goes up instead of along the shot.
+	"ragdoll_lift": 0.25,
+	"ragdoll_angular_damp": 2.0,
+	## Every body slower than this (m/s) for 0.4 s ends the fall.
+	"ragdoll_settle_speed": 0.12,
+	## Seconds before the fall is cut off and the pose is kept.
+	"ragdoll_max_time": 3.5,
+	## Speed (m/s) a dying gun is flung with.
+	"ragdoll_gun_fling": 7.0,
+	## Share of accepted hits that cut a hole where the bullet landed.
+	"chunk_chance": 1.0,
+	## Hole radius (m) rolled between these on the head and torso.
+	"cut_min": 0.05,
+	"cut_max": 0.10,
+	## Arm and leg holes are no wider than this (m).
+	"cut_limb_max": 0.06,
+	## Speed (m/s) a knocked chunk leaves along the shot.
+	"gib_speed": 3.5,
+	## Gibs alive at once. The oldest is freed past this.
+	"gib_cap": 16.0,
 }
 
 var mode: int = GameMode.BOOT
@@ -174,12 +206,14 @@ var local_player: Player
 var remote_avatar: RemoteAvatar
 var current_scenario: ScenarioBase
 var current_scenario_index := 0
-var current_archetype_index := 0
-var current_ai: DuelistAI
+## The free-duel lineup the restart replays.
+var current_lineup: Array[AIArchetype] = []
+var current_ais: Array[DuelistAI] = []
 var hud: Hud
 
 var duel: DuelManager
 var gauntlet: GauntletController
+var horde: HordeController
 var _action_generation := 0
 var _mesh_lab_open := false
 var _mesh_lab_puppet: MeshLabPuppet
@@ -194,6 +228,9 @@ func _ready() -> void:
 	gauntlet = GauntletController.new()
 	gauntlet.name = "GauntletController"
 	add_child(gauntlet)
+	horde = HordeController.new()
+	horde.name = "HordeController"
+	add_child(horde)
 	_load_tuning()
 
 	NetworkManager.session_started.connect(_on_session_started)
@@ -266,6 +303,7 @@ func go_to_menu() -> void:
 	NetworkManager.leave()
 	duel.stop()
 	gauntlet.stop()
+	horde.stop()
 	TimeManager.reset()
 	_clear_combatants()
 	_set_mode(GameMode.MENU)
@@ -324,6 +362,7 @@ func enter_mesh_lab() -> void:
 	NetworkManager.leave()
 	duel.stop()
 	gauntlet.stop()
+	horde.stop()
 	TimeManager.reset()
 	_clear_combatants()
 	if is_instance_valid(hud):
@@ -405,16 +444,25 @@ func is_menu_backdrop() -> bool:
 	return mode == GameMode.MENU and not is_vr
 
 
-func start_free_duel(scenario_index: int, archetype_index: int) -> void:
+## `archetype_index == ARCHETYPES.size()` is Mixed: each slot rolls its own archetype.
+func start_free_duel(scenario_index: int, archetype_index: int, count := 1) -> void:
 	if is_instance_valid(hud):
 		hud.close_pause()
 	_bump_action_generation()
 	_set_mode(GameMode.FREE_DUEL)
 	hud.hide_menu()
 	_remove_vr_menu_panel()
-	current_archetype_index = clampi(archetype_index, 0, ARCHETYPES.size() - 1)
-	var archetype: AIArchetype = load(ARCHETYPES[current_archetype_index])
-	_begin_ai_duel(scenario_index, archetype, 1.0)
+	current_lineup = _roll_lineup(archetype_index, count)
+	_begin_ai_duel(scenario_index, current_lineup, 1.0)
+
+
+func _roll_lineup(archetype_index: int, count: int) -> Array[AIArchetype]:
+	var lineup: Array[AIArchetype] = []
+	var mixed := archetype_index >= ARCHETYPES.size()
+	var fixed := clampi(archetype_index, 0, ARCHETYPES.size() - 1)
+	for _slot in clampi(count, 1, MAX_NPCS):
+		lineup.append(load(ARCHETYPES[randi() % ARCHETYPES.size() if mixed else fixed]))
+	return lineup
 
 
 func start_gauntlet() -> void:
@@ -427,6 +475,22 @@ func start_gauntlet() -> void:
 	gauntlet.start(load(GAUNTLET_LADDER))
 
 
+## Endless single-player survival on one arena, one life. `scenario_index` is the
+## Horde row's own remembered pick (separate from the free-duel row).
+func start_horde(scenario_index: int) -> void:
+	if is_instance_valid(hud):
+		hud.close_pause()
+	_bump_action_generation()
+	_set_mode(GameMode.HORDE)
+	hud.hide_menu()
+	_remove_vr_menu_panel()
+	TimeManager.reset()
+	_clear_combatants()
+	_load_scenario(scenario_index)
+	_place_local_player(current_scenario.get_player_spawn())
+	horde.start(load(HORDE_WAVES))
+
+
 ## Restart the active free duel, gauntlet encounter, or (host) MP rematch.
 func reset_current_duel() -> void:
 	if is_instance_valid(hud):
@@ -435,9 +499,8 @@ func reset_current_duel() -> void:
 		GameMode.FREE_DUEL:
 			_bump_action_generation()
 			TimeManager.reset()
-			var archetype: AIArchetype = load(ARCHETYPES[current_archetype_index])
-			_begin_ai_duel(current_scenario_index, archetype, 1.0)
-			show_message("Duel reset", 1.5)
+			_begin_ai_duel(current_scenario_index, current_lineup, 1.0)
+			show_message(tr("MSG_DUEL_RESET"), 1.5)
 		GameMode.GAUNTLET:
 			if not gauntlet.running:
 				return
@@ -445,43 +508,107 @@ func reset_current_duel() -> void:
 			TimeManager.reset()
 			var encounter := gauntlet.ladder.encounters[gauntlet.encounter_index]
 			begin_gauntlet_encounter(encounter)
-			show_message("Encounter reset", 1.5)
+			show_message(tr("MSG_ENCOUNTER_RESET"), 1.5)
 		GameMode.MULTIPLAYER:
 			if not NetworkManager.is_host():
-				show_message("Only the host can reset the duel.", 2.0)
+				show_message(tr("MSG_HOST_ONLY_RESET"), 2.0)
 				return
 			if NetworkManager.peer_count() <= 0:
-				show_message("No opponent connected.", 2.0)
+				show_message(tr("MSG_NO_OPPONENT"), 2.0)
 				return
 			_bump_action_generation()
 			TimeManager.reset()
 			duel.host_start_mp_duel(current_scenario_index, 0)
-			show_message("Duel reset", 1.5)
+			show_message(tr("MSG_DUEL_RESET"), 1.5)
 		GameMode.PRACTICE:
 			if in_practice():
 				practice_hub().reset_range()
-				show_message("Range reset", 1.5)
+				show_message(tr("MSG_RANGE_RESET"), 1.5)
+		GameMode.HORDE:
+			_bump_action_generation()
+			start_horde(current_scenario_index)
+			show_message(tr("MSG_HORDE_RESTARTED"), 1.5)
 		_:
-			show_message("No active duel to reset.", 1.5)
+			show_message(tr("MSG_NO_ACTIVE_DUEL"), 1.5)
 
 
 ## Called by the gauntlet controller for each rung of the ladder.
 func begin_gauntlet_encounter(encounter: DuelEncounter) -> void:
-	_begin_ai_duel(encounter.scenario_index, encounter.archetype, encounter.health_mult)
+	_begin_ai_duel(encounter.scenario_index, encounter.lineup(), encounter.health_mult)
 
 
-func _begin_ai_duel(scenario_index: int, archetype: AIArchetype, health_mult: float) -> void:
+func _begin_ai_duel(scenario_index: int, lineup: Array[AIArchetype], health_mult: float) -> void:
 	_clear_combatants()
 	_load_scenario(scenario_index)
 	_place_local_player(current_scenario.get_player_spawn())
 
-	current_ai = load(AI_SCENE).instantiate()
-	world_root.add_child(current_ai)
-	current_ai.global_transform = current_scenario.get_enemy_spawn()
-	current_ai.capture_spawn()
-	current_ai.setup(archetype, health_mult, local_player)
+	var spawns := current_scenario.get_enemy_spawns(lineup.size())
+	_spawn_npcs(lineup, spawns, health_mult, 1.0)
 
-	duel.start_ai_duel(current_ai)
+	# One NPC faces you before the bell; several pick their targets at the bell.
+	if current_ais.size() == 1:
+		current_ais[0].set_target(local_player)
+	var text := lineup_text(lineup)
+	show_message(text, 2.0)
+	duel.start_ai_duel(current_ais, text if lineup.size() >= 2 else "")
+
+
+## Spawns `lineup` on `spawns` (actor ids, tint shades for repeated archetypes,
+## current_ais). Shared by the free duel / gauntlet path and Horde's wave spawner.
+func _spawn_npcs(lineup: Array[AIArchetype], spawns: Array[Transform3D],
+		health_mult: float, speed_mult: float) -> void:
+	var copies := {}
+	for slot in lineup.size():
+		var ai: DuelistAI = load(AI_SCENE).instantiate()
+		ai.actor_id = slot + 1
+		world_root.add_child(ai)
+		ai.global_transform = spawns[slot]
+		ai.capture_spawn()
+		var seen: int = copies.get(lineup[slot], 0)
+		copies[lineup[slot]] = seen + 1
+		ai.setup(lineup[slot], health_mult, [0.0, NPC_TINT_SHIFT, -NPC_TINT_SHIFT][seen], speed_mult)
+		current_ais.append(ai)
+
+
+## Called by HordeController for each wave: clears the last wave's corpses/bullets/trails,
+## heals and reloads the player in place (no teleport), spawns the lineup clear of the
+## player, points every NPC at the player, and starts the round.
+func begin_horde_wave(lineup: Array[AIArchetype], speed_mult: float, wave: int) -> void:
+	_clear_combatants()
+	local_player.reset_for_wave()
+	_capture_flat_mouse()
+	var spawns := current_scenario.get_horde_spawns(
+			lineup.size(), local_player.get_head_position(), horde.waves.spawn_min_distance)
+	lineup = lineup.slice(0, spawns.size())
+	_spawn_npcs(lineup, spawns, 1.0, speed_mult)
+	for ai in current_ais:
+		ai.focus_player = true
+		ai.set_target(local_player)
+		ai.died.connect(horde.note_kill.bind(ai))
+	var text := tr("MSG_HORDE_WAVE") % [wave, lineup_text(lineup)]
+	show_message(text, 2.0)
+	duel.start_ai_duel(current_ais, text if lineup.size() >= 2 else "", false)
+
+
+## "A", "A & B", or "A, B & C" from the archetype display names.
+func lineup_text(lineup: Array[AIArchetype]) -> String:
+	var names: PackedStringArray = []
+	for archetype in lineup:
+		names.append(archetype.display_name)
+	if names.size() <= 1:
+		return "".join(names)
+	return tr("MSG_LINEUP_AND") % [", ".join(names.slice(0, names.size() - 1)), names[names.size() - 1]]
+
+
+## The local player (if alive) plus every NPC still standing.
+func live_duelists() -> Array[Node3D]:
+	var live: Array[Node3D] = []
+	if is_instance_valid(local_player) and local_player.alive:
+		live.append(local_player)
+	for ai in current_ais:
+		if is_instance_valid(ai) and ai.is_alive():
+			live.append(ai)
+	return live
 
 
 # -- Multiplayer flow ---------------------------------------------------------
@@ -498,16 +625,16 @@ func _on_session_started(as_host: bool) -> void:
 	if as_host:
 		if NetworkManager.transport_kind() == "steam":
 			show_message(
-					"Waiting for a challenger… Steam lobby (%s). Esc → Invite friends, or Shift+Tab."
+					tr("MSG_WAIT_STEAM")
 					% NetworkManager.steam_lobby_label(), 12.0)
 		else:
 			var ips := NetworkManager.lan_addresses()
-			var ip_hint := ", ".join(ips) if not ips.is_empty() else "(no LAN IPv4)"
-			show_message("Waiting for a challenger… LAN %s" % ip_hint, 12.0)
+			var ip_hint := ", ".join(ips) if not ips.is_empty() else tr("MSG_NO_LAN_IP")
+			show_message(tr("MSG_WAIT_LAN") % ip_hint, 12.0)
 		_load_scenario(current_scenario_index)
 		_place_local_player(current_scenario.get_player_spawn())
 	else:
-		show_message("Connected. Waiting for the host...")
+		show_message(tr("MSG_CONNECTED"))
 
 
 func _on_peer_joined(peer_id: int) -> void:
@@ -520,12 +647,12 @@ func _on_peer_left(_peer_id: int) -> void:
 	if mode == GameMode.MULTIPLAYER:
 		duel.stop()
 		_despawn_avatar()
-		show_message("Opponent left.")
+		show_message(tr("MSG_OPPONENT_LEFT"))
 
 
 func _on_session_ended(reason: String) -> void:
 	if mode == GameMode.MULTIPLAYER:
-		show_message("Session ended: %s" % reason)
+		show_message(tr("MSG_SESSION_ENDED") % reason)
 		go_to_menu()
 
 
@@ -583,8 +710,10 @@ func _on_shot_received(_peer_id: int, origin: Vector3, direction: Vector3) -> vo
 # -- Duel results -------------------------------------------------------------
 
 func _on_duel_finished(local_player_won: bool, reason: String) -> void:
-	var headline := "YOU WIN" if local_player_won else "YOU LOSE"
-	var message := "%s\n%s" % [headline, reason]
+	var headline := tr("MSG_YOU_WIN") if local_player_won else tr("MSG_YOU_LOSE")
+	var message := "%s\n%s" % [headline, tr(reason)]
+	if mode == GameMode.HORDE and local_player_won:
+		message = horde.clear_wave()
 	var generation_at_finish := _action_generation
 	var delay_vr_banner := is_vr and KillCam.is_playing
 	if delay_vr_banner:
@@ -599,6 +728,9 @@ func _on_duel_finished(local_player_won: bool, reason: String) -> void:
 				_after_delay(4.0, go_to_menu)
 			GameMode.GAUNTLET:
 				_after_delay(3.5, gauntlet.on_duel_finished.bind(local_player_won))
+			GameMode.HORDE:
+				_after_delay(horde.break_seconds() if local_player_won else 3.5,
+						horde.on_duel_finished.bind(local_player_won))
 			GameMode.MULTIPLAYER:
 				if NetworkManager.is_host():
 					_after_delay(5.0, _mp_rematch)
@@ -675,14 +807,29 @@ func _instance_scenario(resource: ScenarioResource, time_of_day := -1.0) -> void
 
 func _place_local_player(spawn: Transform3D) -> void:
 	local_player.reset_for_duel(spawn)
+	_capture_flat_mouse()
+
+
+## Flat play owns the cursor from the first frame of a match or wave, so look
+## works without a click to re-capture. Menus, pause, the debug panel, and the
+## mesh lab (its own toggle) keep the cursor.
+func _capture_flat_mouse() -> void:
+	if is_vr or OS.has_feature("headless"):
+		return
+	if mode in [GameMode.BOOT, GameMode.MENU, GameMode.MESH_LAB]:
+		return
+	if is_pause_open() or DebugMenu.panel.visible:
+		return
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _clear_combatants() -> void:
 	DeathCam.stop()
 	ReplayBuffer.abort()
-	if is_instance_valid(current_ai):
-		current_ai.queue_free()
-	current_ai = null
+	for ai in current_ais:
+		if is_instance_valid(ai):
+			ai.queue_free()
+	current_ais = []
 	_despawn_avatar()
 	# Free live projectiles before trails — otherwise clear_all frees the trail
 	# while Bullet._physics_process still calls add_point on it.
