@@ -3,8 +3,11 @@ extends Node3D
 ## AI opponent. Mirrors the duel FSM: waits for the bell, reacts after its
 ## archetype-defined reaction time, draws over draw_time, then fires with an
 ## accuracy cone. A spent cylinder opens a RELOADING window (reload_time).
-## Aims at one live duelist (the player or another NPC) and retaliates against
-## whoever wounds it. All behavior comes from an AIArchetype .tres file.
+## Aims at one live duelist of another side (the player, another NPC, or on a lobby
+## host another human's avatar) and retaliates against whoever wounds it. All behavior
+## comes from an AIArchetype .tres file.
+## In a lobby only the host runs it: it sends its pose and shots to the clients' proxy
+## (`RemoteAvatar.npc_proxy`) and resolves its own HP.
 
 signal died(trail_points: PackedVector3Array)
 
@@ -12,12 +15,13 @@ enum AIState { IDLE, REACTING, DRAWING, SHOOTING, RELOADING, DISARMED, DEAD }
 
 const RELOAD_ARM_BLEND := 0.3
 const STRAFE_RANGE := 1.5
+const POSE_SEND_HZ := 30.0
 
 var archetype: AIArchetype
 var health := CombatRules.DEFAULT_HEALTH
 var state: int = AIState.IDLE
 var move_speed_mult := 1.0
-## ReplayBuffer actor id. SP: NPC slot i is actor i + 1.
+## ReplayBuffer actor id. SP: NPC slot i is actor i + 1. Lobby: its slot.
 var actor_id := ReplayBuffer.ACTOR_OTHER
 ## Actor id of the shooter whose bullet killed this NPC, or -1 while alive.
 var killed_by := -1
@@ -38,6 +42,7 @@ var _strafe_axis := Vector3.RIGHT
 var _strafe_phase := 0.0
 var _disarm_remaining := 0.0
 var _leg_remaining := 0.0
+var _pose_accum := 0.0
 var _death_tween: Tween
 
 @onready var arm: Node3D = $Arm
@@ -58,7 +63,7 @@ func setup(new_archetype: AIArchetype, health_mult: float, shade := 0.0, speed :
 	archetype = new_archetype
 	health = archetype.health * health_mult
 	speed_mult = speed
-	_tint(archetype.body_color.lightened(shade) if shade >= 0.0 else archetype.body_color.darkened(-shade))
+	set_tint(archetype.body_color.lightened(shade) if shade >= 0.0 else archetype.body_color.darkened(-shade))
 	capture_spawn()
 
 
@@ -120,7 +125,7 @@ func on_duel_over(_player_won: bool) -> void:
 func _process(delta: float) -> void:
 	if state == AIState.DEAD:
 		return
-	if DeathCam.blocks_combat() and not GameManager.duel.survivors_fighting():
+	if DeathCam.blocks_npcs() and not GameManager.duel.survivors_fighting():
 		return
 	if state != AIState.IDLE and not _is_live(_target):
 		_pick_target()
@@ -163,6 +168,19 @@ func _process(delta: float) -> void:
 		AIState.DISARMED:
 			pass
 	_drive_gun_hand(delta)
+	_broadcast_pose(delta)
+
+
+## Lobby host: the clients' proxy of this NPC takes the head, the flags, and the gun.
+func _broadcast_pose(delta: float) -> void:
+	if not NetworkManager.is_active():
+		return
+	_pose_accum += delta / maxf(Engine.time_scale, 0.001)
+	if _pose_accum < 1.0 / POSE_SEND_HZ:
+		return
+	_pose_accum = 0.0
+	var pose := capture_replay_pose()
+	NetworkManager.send_npc_pose(actor_id, pose["head"], pose["flags"], pose["gun"])
 
 
 func _start_drawing() -> void:
@@ -189,7 +207,14 @@ func _is_live(node: Node) -> bool:
 		return (node as Player).alive
 	if node is DuelistAI:
 		return (node as DuelistAI).is_alive()
+	if node is RemoteAvatar:
+		return GameManager.duel.slot_alive((node as RemoteAvatar).slot)
 	return false
+
+
+## A live duelist of another side. Free-for-all and single player: anyone but this NPC.
+func _is_rival(node: Node) -> bool:
+	return _is_live(node) and GameManager.side_of(node) != GameManager.side_of(self)
 
 
 ## Horde: this NPC always aims at the player while the player is alive.
@@ -197,21 +222,25 @@ func _focused() -> bool:
 	return focus_player and _is_live(GameManager.local_player)
 
 
-## A random live duelist other than this NPC, or null when none is left.
+## A random live rival, or null when none is left.
 ## Horde NPCs always pick the player while focused; once the player is dead
 ## (or outside horde) they fall back to the shipped free-for-all pick.
 func _pick_target() -> void:
 	if _focused():
 		_target = GameManager.local_player
 		return
-	var rivals := GameManager.live_duelists()
-	rivals.erase(self)
+	var rivals: Array[Node3D] = []
+	for duelist in GameManager.live_duelists():
+		if _is_rival(duelist):
+			rivals.append(duelist)
 	_target = rivals.pick_random() if not rivals.is_empty() else null
 
 
 func _target_head() -> Vector3:
 	if _target is DuelistAI:
 		return (_target as DuelistAI).get_head_position()
+	if _target is RemoteAvatar:
+		return (_target as RemoteAvatar).get_head_position()
 	return (_target as Player).get_head_position()
 
 
@@ -292,6 +321,7 @@ func _on_fired(origin: Vector3, direction: Vector3) -> void:
 	ReplayBuffer.record_shot(origin, direction, actor_id)
 	Bullet.spawn(get_tree().current_scene, origin, direction,
 			archetype.bullet_speed, true, hitbox_rids(), false, 0.0, [], actor_id)
+	NetworkManager.send_npc_shot(actor_id, origin, direction)
 
 
 func capture_replay_pose() -> Dictionary:
@@ -335,7 +365,11 @@ func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 	var result := CombatRules.resolve(region, health, damage_mult)
 	health = result["health"]
 	# Before `_die`: the gib leaves from the live pose, not the one `collapse` rescales.
-	_dummy.knock_chunk(cut, DummyBody.shot_dir(trail_points), ReplayBuffer.clip_time(), result["died"])
+	if NetworkManager.is_active():
+		# Lobby host: `_mp_chunk` cuts the hole here and on every client's proxy.
+		GameManager.duel.mp_report_npc_cut(actor_id, cut, trail_points, result["died"])
+	else:
+		_dummy.knock_chunk(cut, DummyBody.shot_dir(trail_points), ReplayBuffer.clip_time(), result["died"])
 	if result["died"]:
 		killed_by = shooter if shooter >= 0 else ReplayBuffer.ACTOR_HOST
 		killed_region = region
@@ -343,7 +377,7 @@ func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 		return
 	if not _focused():
 		var attacker := ReplayBuffer.actor_node(shooter) if shooter >= 0 else null
-		if attacker != self and _is_live(attacker):
+		if _is_rival(attacker):
 			_target = attacker as Node3D
 	if result["disarm"]:
 		_disarm()
@@ -464,7 +498,9 @@ func _drive_gun_hand(delta: float) -> void:
 	_dummy.set_hand_curl(true, HandFingers.Pose.OPEN, 0.0)
 
 
-func _tint(color: Color) -> void:
+## Single player: the archetype's colour, shaded per copy (`setup`). A lobby host
+## recolours it by slot or side after `setup` (`GameManager._apply_lobby_tints`).
+func set_tint(color: Color) -> void:
 	if _dummy != null:
 		_dummy.set_tint(color)
 		return

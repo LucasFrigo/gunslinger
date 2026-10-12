@@ -11,11 +11,84 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
-_None._
+### BUG-022 — Host logs ENet `Unable to send packet on channel 0` when two clients quit at the same moment
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `minor` |
+| Filed | 2026-10-11 |
+| Platforms | Windows, Godot 4.7. Seen in the headless harness (`lobbyhost` + two `lobbyjoin`); not seen in play. |
+| Areas | `autoload/network_manager.gd` (`_on_peer_disconnected` → `_sync_roster`), `gauntlet/duel_manager.gd` (`host_peer_left`) |
+
+**What:** In the three-process lobby tests the host prints the engine error `Unable to send packet on channel 0` when both joiners exit together at the end of the run. The suites still print `AUTOTEST PASS`. It was seen during the tests of the mixed-lobbies work; how many runs showed it was not counted.
+
+**Repro:**
+1. Start `--autotest=lobbyhost`, then two `--autotest=lobbyjoin` processes.
+2. Read the host's output after the joiners quit.
+
+**Notes:** The cause is not established. It appears around teardown: when a peer disconnects, `NetworkManager._on_peer_disconnected` calls `host_peer_left` and `_sync_roster`, and the host sends reliable RPCs (`_roster_sync`, `_mp_down`) to peers it still lists as verified, one of which may already be gone. That is a guess, not a finding. Nothing was seen to break because of it.
+
+### BUG-023 — `Basis must be normalized` error from `ai/duelist_ai.gd` in the DRAWING branch
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `minor` |
+| Filed | 2026-10-11 |
+| Platforms | Windows, Godot 4.7. Seen in the headless harness (the host of `lobbyhost` + two `lobbyjoin`, which runs a Sheriff NPC); not seen in play. |
+| Areas | `ai/duelist_ai.gd` (`AIState.DRAWING` branch of `_process`) |
+
+**What:** The host printed the engine error `Basis must be normalized` from the NPC's DRAWING branch in 2 of 6 trio runs (`lobbyhost` + two `lobbyjoin`). Every run still printed `AUTOTEST PASS` on all three processes. It was not seen in the single-player suites, but it was not looked for there.
+
+**Repro:**
+1. Start `--autotest=lobbyhost`, then two `--autotest=lobbyjoin` processes.
+2. Search the host's output for `Basis must be normalized` (intermittent; repeat the trio).
+
+**Notes:** The cause is not established. The NPC runs on the host in a lobby (`GameManager.setup_mp_duel`), and the DRAWING branch also runs in single player, so it is not known whether the mixed-lobbies work caused it.
+
+### BUG-024 — VR player spawns off the Train Rooftop, past the invisible wall
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `major` |
+| Filed | 2026-10-12 |
+| Platforms | VR. Train Rooftop. Flat appears correct. Headset / runtime and game mode not recorded. |
+| Areas | `player/player.gd` `reset_for_duel`, `player/vr_rig.gd` `reset_locomotion`, `scenarios/scenario_base.gd` (`Guard*` walls, `get_player_spawn`), `scenarios/train_rooftop/train_rooftop.tscn` |
+
+**What:** On Train Rooftop the VR player is placed off the roof at spawn, on the far side of the invisible `Guard*` wall that should keep them on it. The same arena in flat mode appears to spawn the player in the right place.
+
+**Repro:**
+1. Start a duel on Train Rooftop in VR.
+2. At spawn the player is off the rooftop, outside the invisible wall.
+
+**Notes:** The cause is not established. One lead, not checked: `reset_for_duel` puts the Player root on the marker and `VRRig.reset_locomotion` zeroes the origin and yaws it around the HMD, but nothing moves the origin so the headset lands on the marker. A player standing away from the centre of their playspace would then start that far from the spawn, and a spawn-time placement is not a walk into the wall. Flat has no playspace offset (`rig.position = Vector3.ZERO`). Other arenas would shift the same way; only the narrow roof would show it.
 
 ---
 
 ## Fixed
+
+### BUG-021 — Multiplayer process crashes when a remote avatar is freed (seen as `join` / `lobbyjoin` exiting with an access violation after AUTOTEST PASS)
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `major` |
+| Filed | 2026-10-10 |
+| Fixed | 2026-10-10 |
+| Platforms | Windows, Godot 4.7. Seen in the headless harness; the same free happens in play on every rematch, leaver, and quit. |
+| Areas | `autoload/voice_chat.gd`, Godot `AudioStreamGeneratorPlayback` |
+
+**What:** A joiner prints `AUTOTEST PASS`, then the process exits with `0xC0000005` (-1073741819) during scene-tree teardown, with no backtrace. Measured with the mixed-lobbies waiting room in the tree: 7 of 52 `join` runs and 3 of 14 `lobbyjoin` processes. The same crash also happens on the commit before that work, less often (1 of 30 `join` runs). The host process never crashed.
+
+**Repro:**
+1. Start `--autotest=host`, then `--autotest=join` (intermittent; repeat it).
+2. Check the joiner's exit code after `AUTOTEST PASS`.
+
+**Cause:** Every crash dump (`%LOCALAPPDATA%\CrashDumps`, 10 of 10) faults at the same address in the Godot exe, on an unnamed engine thread. The disassembly is `AudioStreamGeneratorPlayback::get_stream_sampling_rate()`: the audio thread loads the playback's raw `generator` pointer and reads the stream's mix-rate fields from freed memory. `VoiceChat.bind_voice_player` made a new `AudioStreamGenerator` per avatar and only the avatar's player held it, so freeing the avatar freed the stream while the audio thread still had the playback listed for one more mix. The read only faults when the freed page is gone, which is why it is intermittent and mostly seen at exit. Not timing of the quit: a 1.5 s wait before quitting still crashed 3 of 24.
+
+**Fix:** `VoiceChat` keeps one `AudioStreamGenerator` for the whole process, every bound voice player plays it, and it holds one reference that is never released, so the audio thread can never read a freed stream. Verified: 0 crashes in 28 `host` / `join` runs and 0 in 12 `lobbyhost` + 2 × `lobbyjoin` runs after. The cost is one small object reported as leaked at exit.
 
 ### BUG-020 — `load` (and occasionally `join` / `practice` / `horde`) headless autotest segfaults at shutdown after AUTOTEST PASS
 

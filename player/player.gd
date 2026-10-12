@@ -16,6 +16,8 @@ const POSE_SEND_HZ := 30.0
 const RELOAD_VIZ_NAME := "_ReloadVolumeViz"
 const GUN_RECOVER_Y := -5.0
 const GUN_RECOVER_DIST := 20.0
+## The mannequin's colour outside a lobby.
+const BODY_TINT := Color(0.62, 0.60, 0.58)
 ## Pose flag bits that describe the body, not the gun. A latched clip keeps them.
 const REPLAY_BODY_FLAGS := NetworkManager.POSE_FLAG_HOLSTER_LEFT | NetworkManager.POSE_FLAG_GUN_HELD_LEFT \
 		| NetworkManager.POSE_FLAG_VOICE_MUTED | NetworkManager.POSE_FLAG_GUN_STEADIED
@@ -151,7 +153,7 @@ func _ready() -> void:
 	_dummy.attach_hitboxes(head_hitbox, torso_hitbox, arm_hitbox_l, arm_hitbox_r,
 			leg_hitbox_l, leg_hitbox_r)
 	_dummy.follow_travel(rig)
-	_dummy.set_tint(Color(0.62, 0.60, 0.58))
+	_dummy.set_tint(BODY_TINT)
 	_wrist_l = _make_wrist_marker("WristL")
 	_wrist_r = _make_wrist_marker("WristR")
 	# After the mannequin's 180° yaw, +X is the right arm.
@@ -553,13 +555,14 @@ func reset_for_wave() -> void:
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 		region: StringName = CombatRules.REGION_TORSO, self_inflicted := false,
-		shooter_is_local := false, shooter := -1, cut := {}) -> void:
+		_shooter_is_local := false, shooter := -1, cut := {}) -> void:
 	if not alive or GameManager.in_practice():
 		return
 	if NetworkManager.is_active():
-		# MP: host resolves HP/status; application arrives via _mp_wound / _mp_finish.
+		# MP: host resolves HP/status; application arrives via _mp_wound / _mp_down / _mp_finish.
 		if NetworkManager.is_host():
-			GameManager.duel.mp_report_hit(true, trail_points, region, damage_mult, shooter_is_local, cut)
+			GameManager.duel.mp_report_hit(GameManager.local_actor_id(), trail_points, region,
+					damage_mult, shooter, cut)
 		return
 	var result := CombatRules.resolve(region, health, damage_mult)
 	health = result["health"]
@@ -617,6 +620,13 @@ func collapse(trail: PackedVector3Array) -> void:
 ## The mannequin that falls on death. `DeathCam` orbits its chest.
 func corpse_body() -> DummyBody:
 	return _dummy
+
+
+## A lobby gives the body its slot's or side's colour; `BODY_TINT` comes back when the
+## session ends.
+func set_body_tint(color: Color) -> void:
+	if _dummy != null:
+		_dummy.set_tint(color)
 
 
 # -- Gun handling -----------------------------------------------------------------
@@ -945,6 +955,9 @@ func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
 	if pressed and DeathCam.can_skip():
 		DeathCam.request_skip()
 		return
+	if pressed and DeathCam.is_spectating():
+		DeathCam.cycle_spectate()
+		return
 	if DeathCam.blocks_combat():
 		return
 	# VR: the off-hand trigger throws the equipped prop instead of firing.
@@ -1172,9 +1185,7 @@ func _on_revolver_state_changed() -> void:
 
 
 func _on_revolver_fired(origin: Vector3, direction: Vector3) -> void:
-	var shooter := ReplayBuffer.ACTOR_HOST
-	if NetworkManager.is_active() and not NetworkManager.is_host():
-		shooter = ReplayBuffer.ACTOR_OTHER
+	var shooter := GameManager.local_actor_id()
 	ReplayBuffer.record_shot(origin, direction, shooter)
 	var authoritative := not NetworkManager.is_active() or NetworkManager.is_host()
 	Bullet.spawn(get_tree().current_scene, origin, direction,

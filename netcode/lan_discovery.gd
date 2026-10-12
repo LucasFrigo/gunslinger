@@ -19,8 +19,9 @@ var _role: int = Role.IDLE
 var _socket: PacketPeerUDP
 var _host_name := ""
 var _host_version := ""
+var _host_slots := ""
 var _browse_timer := 0.0
-## ip -> { "ip": String, "name": String, "version": String, "seen": float }
+## ip -> { "ip": String, "name": String, "version": String, "open": int, "total": int, "seen": float }
 var _found := {}
 
 
@@ -39,6 +40,11 @@ func start_beacon(host_name: String, host_version := "") -> void:
 		return
 	_role = Role.BEACON
 	_browse_timer = BROWSE_INTERVAL  # announce immediately
+
+
+## Host: the `open/total` human-slot field (`LobbyRoster.format_slots`) the beacon carries.
+func set_beacon_slots(slots: String) -> void:
+	_host_slots = slots
 
 
 func start_browse() -> void:
@@ -66,6 +72,7 @@ func stop() -> void:
 	_role = Role.IDLE
 	_found.clear()
 	_host_version = ""
+	_host_slots = ""
 
 
 func _process(delta: float) -> void:
@@ -116,28 +123,41 @@ func _send_to_broadcasts(payload: PackedByteArray) -> void:
 		_socket.put_packet(payload)
 
 
-## PONG rest is `ip|name|version` (preferred), legacy `ip|name`, or a bare display name.
+## PONG rest is `ip|name|version|open/total` (preferred). Older builds send
+## `ip|name|version`, `ip|name`, or a bare display name.
 func _pong_payloads() -> Array[PackedByteArray]:
 	var payloads: Array[PackedByteArray] = []
+	var tail := "%s|%s" % [_host_name, _host_version]
+	if not _host_slots.is_empty():
+		tail += "|" + _host_slots
 	var ips := lan_ipv4_addresses()
 	if ips.is_empty():
-		# No usable NIC IP: name|version so parsers still pick up the build string.
-		payloads.append((PONG + "%s|%s" % [_host_name, _host_version]).to_utf8_buffer())
+		# No usable NIC IP: name|version|slots so parsers still pick up the build string.
+		payloads.append((PONG + tail).to_utf8_buffer())
 		return payloads
 	for ip in ips:
-		payloads.append((PONG + "%s|%s|%s" % [ip, _host_name, _host_version]).to_utf8_buffer())
+		payloads.append((PONG + "%s|%s" % [ip, tail]).to_utf8_buffer())
 	return payloads
 
 
 ## Public for autotests. Returns {} when the packet has no usable LAN IPv4.
+## `total` is 0 when the host sent no slot field (an older build).
 static func parse_pong_packet(packet: String, packet_ip: String) -> Dictionary:
 	if not packet.begins_with(PONG):
 		return {}
 	var rest := packet.trim_prefix(PONG)
 	var ip := packet_ip
-	var host_name := rest
 	var version := ""
 	var parts := rest.split("|")
+	# A trailing `open/total` is the slot field; the version is the part before it.
+	var slots := Vector2i.ZERO
+	if parts.size() >= 2:
+		slots = LobbyRoster.parse_slots(parts[parts.size() - 1])
+		if slots.y > 0:
+			parts.remove_at(parts.size() - 1)
+		else:
+			slots = Vector2i.ZERO
+	var host_name := "|".join(parts)
 	if parts.size() >= 3:
 		var claimed := parts[0]
 		version = parts[parts.size() - 1]
@@ -159,6 +179,8 @@ static func parse_pong_packet(packet: String, packet_ip: String) -> Dictionary:
 		"ip": ip,
 		"name": host_name if not host_name.is_empty() else ip,
 		"version": version,
+		"open": slots.x,
+		"total": slots.y,
 		"seen": Time.get_ticks_msec() / 1000.0,
 	}
 

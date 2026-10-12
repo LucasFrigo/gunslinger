@@ -35,12 +35,15 @@ func _ready() -> void:
 	set_debug_visible(DebugMenu.show_hitboxes)
 
 
-## True for a dead NPC, or the local player after an SP death. Bullets fly through these.
+## True for a dead NPC, a dead local player, or a dead / fouled-out remote avatar.
+## Bullets fly through these.
 func is_corpse() -> bool:
 	if owner_entity is DuelistAI:
 		return (owner_entity as DuelistAI).state == DuelistAI.AIState.DEAD
-	if owner_entity is Player and not NetworkManager.is_active():
+	if owner_entity is Player:
 		return not (owner_entity as Player).alive
+	if owner_entity is RemoteAvatar:
+		return (owner_entity as RemoteAvatar).is_dead()
 	return false
 
 

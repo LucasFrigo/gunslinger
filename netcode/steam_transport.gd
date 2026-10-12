@@ -27,7 +27,9 @@ const APP_ID := 480
 const LOBBY_TYPE_PUBLIC := 2
 const DISTANCE_WORLDWIDE := 3
 const LOBBY_COMPARISON_EQUAL := 0
-const MAX_PLAYERS := 2
+const MAX_PLAYERS := LobbyRoster.MAX_SLOTS
+## Lobbies from builds without LOBBY_KEY_SLOTS hold two members.
+const LEGACY_MAX_PLAYERS := 2
 const LOBBY_KEY_GAME := "gunslinger"
 const LOBBY_VALUE_GAME := "1"
 const LOBBY_KEY_NAME := "gunslinger_name"
@@ -35,6 +37,8 @@ const LOBBY_KEY_VERSION := "gunslinger_version"
 ## Steam P2P virtual port the host's listen socket is on, so joiners can dial
 ## it. Absent (0) on builds that predate the rotation below.
 const LOBBY_KEY_PORT := "gunslinger_port"
+## `open/total` human slots (`LobbyRoster.format_slots`). Open is 0 while a duel runs.
+const LOBBY_KEY_SLOTS := "gunslinger_slots"
 
 ## Steam allows virtual ports 0..999 per process.
 const MAX_VIRTUAL_PORT := 999
@@ -196,6 +200,12 @@ func peer_connected() -> bool:
 func set_joinable(joinable: bool) -> void:
 	if _steam != null and lobby_id != 0:
 		_steam.call("setLobbyJoinable", lobby_id, joinable)
+
+
+## Host: publish the `open/total` human-slot field browsers read.
+func set_slots(slots: String) -> void:
+	if _steam != null and lobby_id != 0 and is_lobby_host:
+		_steam.call("setLobbyData", lobby_id, LOBBY_KEY_SLOTS, slots)
 
 
 func persona_name() -> String:
@@ -421,14 +431,18 @@ func _on_lobby_match_list(lobbies: Array) -> void:
 		var lobby_name := str(_steam.call("getLobbyData", id, LOBBY_KEY_NAME))
 		if lobby_name.is_empty():
 			continue
-		var players := int(_steam.call("getNumLobbyMembers", id))
-		if players >= MAX_PLAYERS:
-			continue  # 2/2 duel in progress; the host also set it unjoinable
+		var slots := LobbyRoster.parse_slots(str(_steam.call("getLobbyData", id, LOBBY_KEY_SLOTS)))
+		if slots.y <= 0:
+			var players := int(_steam.call("getNumLobbyMembers", id))
+			slots = Vector2i(maxi(LEGACY_MAX_PLAYERS - players, 0), LEGACY_MAX_PLAYERS)
+		if slots.x <= 0:
+			continue  # full, or a duel is running; the host also set it unjoinable
 		var version := str(_steam.call("getLobbyData", id, LOBBY_KEY_VERSION))
 		result.append({
 			"id": id,
 			"name": lobby_name,
-			"players": players,
+			"open": slots.x,
+			"total": slots.y,
 			"version": version,
 			"compatible": NetworkManager.versions_match(version, local_version),
 		})

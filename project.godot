@@ -132,6 +132,10 @@ interact={
 ]
 }
 
+[internationalization]
+
+locale/translations=PackedStringArray("res://translations/translations.en.translation")
+
 [layer_names]
 
 3d_physics/layer_1="world"
@@ -162,8 +166,3 @@ initialization/app_data/app_id=480
 openxr/enabled=true
 openxr/startup_alert=false
 shaders/enabled=true
-
-[internationalization]
-
-locale/fallback="en"
-locale/translations=PackedStringArray("res://translations/translations.en.translation")

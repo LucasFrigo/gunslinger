@@ -3,6 +3,9 @@ extends CanvasLayer
 ## Screen-space HUD (flat mode) and owner of the main menu / pause Controls,
 ## which the VR player borrows into a 3D panel via UIPanel3D.
 
+## A message was put up (what the player reads, before the timer hides it).
+signal message_shown(text: String)
+
 @onready var message_label: Label = $Message
 @onready var reload_status: Label = $ReloadStatus
 @onready var health_status: Label = $HealthStatus
@@ -10,6 +13,7 @@ extends CanvasLayer
 @onready var horde_status: Label = $HordeStatus
 @onready var version_tag: Label = $VersionTag
 @onready var replay_tag: Label = $ReplayTag
+@onready var spectate_tag: Label = $SpectateTag
 @onready var red_flash: ColorRect = $RedFlash
 @onready var prop_radial: PropRadialOverlay = $PropRadial
 @onready var menu_holder: Control = $MenuHolder
@@ -27,6 +31,7 @@ func _ready() -> void:
 	_menu = $MenuHolder/MainMenu
 	pause_menu = $PauseHolder/PauseMenu
 	replay_tag.visible = false
+	spectate_tag.visible = false
 	message_label.visible = false
 	reload_status.visible = false
 	health_status.visible = false
@@ -43,7 +48,7 @@ func _ready() -> void:
 
 func _apply_theme() -> void:
 	var theme := preload("res://ui/theme_duello.tres")
-	for node in [message_label, reload_status, health_status, practice_status, horde_status, version_tag, replay_tag, prop_radial]:
+	for node in [message_label, reload_status, health_status, practice_status, horde_status, version_tag, replay_tag, spectate_tag, prop_radial]:
 		if node is Control and (node as Control).theme == null:
 			(node as Control).theme = theme
 
@@ -118,6 +123,7 @@ func _reparent_menu_home() -> void:
 func show_message(text: String, duration := 2.5) -> void:
 	message_label.text = text
 	message_label.visible = true
+	message_shown.emit(text)
 	# Real-time timer so messages don't linger forever during slow-mo.
 	_message_timer = get_tree().create_timer(duration, true, false, true)
 	var timer := _message_timer
@@ -129,6 +135,12 @@ func show_message(text: String, duration := 2.5) -> void:
 ## Corner badge while the duel clip is playing.
 func set_replay_tag(on: bool) -> void:
 	replay_tag.visible = on
+
+
+## Corner line naming who a dead duelist is watching. Empty string hides it.
+func set_spectate_label(text: String) -> void:
+	spectate_tag.text = text
+	spectate_tag.visible = not text.is_empty()
 
 
 ## Persistent reload / ammo readout. Empty string hides it.
@@ -194,7 +206,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if pause_menu != null and pause_menu.is_open:
-		if pause_menu.is_settings_open():
+		if pause_menu.is_subpage_open():
 			pause_menu.show_pause_root()
 		else:
 			pause_menu.close()

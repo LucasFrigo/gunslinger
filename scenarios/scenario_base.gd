@@ -86,6 +86,14 @@ func get_enemy_spawns(count: int) -> Array[Transform3D]:
 	return spawns
 
 
+## One spawn per duelist of a lobby, in ring order: PlayerSpawn, then
+## `get_enemy_spawns(count - 1)`. Two duelists stand exactly where 1v1 does.
+func get_duel_spawns(count: int) -> Array[Transform3D]:
+	var spawns: Array[Transform3D] = [get_player_spawn()]
+	spawns.append_array(get_enemy_spawns(count - 1))
+	return spawns
+
+
 ## Horde: up to `count` markers at least `min_distance` (flat) from `avoid`, each facing
 ## `avoid`. Pool is EnemySpawn(s) at every supported count, deduped within 0.5 m. Fewer
 ## spawn if not enough markers clear the distance, but never zero: falls back to the

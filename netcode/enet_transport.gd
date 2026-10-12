@@ -3,7 +3,7 @@ extends NetworkTransport
 ## Plain ENet over UDP for LAN testing (Quest 3 standalone <-> notebook).
 
 const DEFAULT_PORT := 9099
-const MAX_PLAYERS := 2
+const MAX_PLAYERS := LobbyRoster.MAX_SLOTS
 ## Quest/Android cannot bind ENet's default dual-stack wildcard; LAN is IPv4.
 const BIND_IPV4 := "0.0.0.0"
 

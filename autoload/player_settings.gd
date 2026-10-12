@@ -135,6 +135,15 @@ var free_duel_count := 1
 
 ## Horde's own remembered arena pick, separate from the free-duel row.
 var horde_scenario := 0
+## The last host setup (`[lobby]`): slot count, mode, arena, and per slot after the host's
+## its kind (OPEN or NPC), archetype, and side. Humans, names, and wins are never saved.
+## The per-slot arrays hold LobbyRoster.MAX_SLOTS entries; index 0 (the host) is unused.
+var lobby_slot_count := LobbyRoster.MIN_SLOTS
+var lobby_mode: int = LobbyRoster.Mode.FFA
+var lobby_scenario := 0
+var lobby_kinds: Array[int] = [LobbyRoster.Kind.OPEN, LobbyRoster.Kind.OPEN, LobbyRoster.Kind.OPEN, LobbyRoster.Kind.OPEN]
+var lobby_archetypes: Array[int] = [LobbyRoster.ARCHETYPE_MIXED, LobbyRoster.ARCHETYPE_MIXED, LobbyRoster.ARCHETYPE_MIXED, LobbyRoster.ARCHETYPE_MIXED]
+var lobby_sides: Array[int] = [0, 1, 0, 1]
 ## Best waves cleared and best score, each kept as a separate maximum.
 var horde_best_wave := 0
 var horde_best_score := 0
@@ -215,6 +224,31 @@ func set_horde_scenario(scenario: int) -> void:
 	_save_config()
 
 
+## Remembers `roster`'s setup as the next host's. Slots past its size keep their last pick.
+func set_lobby_setup(roster: LobbyRoster) -> void:
+	lobby_slot_count = clampi(roster.slots.size(), LobbyRoster.MIN_SLOTS, LobbyRoster.max_slots())
+	lobby_mode = _clamp_lobby_mode(roster.mode)
+	lobby_scenario = _clamp_duel_scenario(roster.scenario_index)
+	for slot in range(1, mini(roster.slots.size(), LobbyRoster.MAX_SLOTS)):
+		var row := roster.slots[slot]
+		lobby_kinds[slot] = _clamp_lobby_kind(int(row["kind"]))
+		lobby_archetypes[slot] = _clamp_lobby_archetype(int(row["archetype"]))
+		lobby_sides[slot] = _clamp_lobby_side(int(row["side"]))
+	_save_config()
+
+
+## Replaces `roster` with the saved setup: the host alone in slot 0, no other human.
+func fill_lobby_setup(roster: LobbyRoster) -> void:
+	roster.reset()
+	roster.mode = lobby_mode
+	roster.scenario_index = lobby_scenario
+	roster.set_slot_count(lobby_slot_count)
+	for slot in range(1, roster.slots.size()):
+		roster.set_slot_kind(slot, lobby_kinds[slot])
+		roster.set_archetype(slot, lobby_archetypes[slot])
+		roster.set_side(slot, lobby_sides[slot])
+
+
 ## Keeps each maximum independently. Returns true when either improved.
 func record_horde_run(waves_cleared: int, score: int) -> bool:
 	var improved := false
@@ -257,6 +291,23 @@ func _clamp_duel_enemy(value: int) -> int:
 
 func _clamp_duel_count(value: int) -> int:
 	return clampi(value, 1, GameManager.MAX_NPCS)
+
+
+func _clamp_lobby_mode(value: int) -> int:
+	return LobbyRoster.Mode.TEAMS if value == LobbyRoster.Mode.TEAMS else LobbyRoster.Mode.FFA
+
+
+## A saved slot is open for a human or an NPC; whoever filled it last is not remembered.
+func _clamp_lobby_kind(value: int) -> int:
+	return LobbyRoster.Kind.NPC if value == LobbyRoster.Kind.NPC else LobbyRoster.Kind.OPEN
+
+
+func _clamp_lobby_archetype(value: int) -> int:
+	return clampi(value, LobbyRoster.ARCHETYPE_MIXED, GameManager.ARCHETYPES.size() - 1)
+
+
+func _clamp_lobby_side(value: int) -> int:
+	return clampi(value, 0, LobbyRoster.SIDES - 1)
 
 
 func set_master_volume(value: float) -> void:
@@ -739,7 +790,7 @@ func _can_query_display() -> bool:
 	return DisplayServer.get_name() != "headless"
 
 
-func _save_config() -> void:
+func _save_config(path := CONFIG_PATH) -> void:
 	var cfg := ConfigFile.new()
 	if not language.is_empty():
 		cfg.set_value("general", "language", language)
@@ -761,6 +812,13 @@ func _save_config() -> void:
 	cfg.set_value("free_duel", "scenario", free_duel_scenario)
 	cfg.set_value("free_duel", "enemy", free_duel_enemy)
 	cfg.set_value("free_duel", "count", free_duel_count)
+	cfg.set_value("lobby", "slots", lobby_slot_count)
+	cfg.set_value("lobby", "mode", lobby_mode)
+	cfg.set_value("lobby", "scenario", lobby_scenario)
+	for slot in range(1, LobbyRoster.MAX_SLOTS):
+		cfg.set_value("lobby", "kind_%d" % slot, lobby_kinds[slot])
+		cfg.set_value("lobby", "archetype_%d" % slot, lobby_archetypes[slot])
+		cfg.set_value("lobby", "side_%d" % slot, lobby_sides[slot])
 	cfg.set_value("horde", "scenario", horde_scenario)
 	cfg.set_value("horde", "best_wave", horde_best_wave)
 	cfg.set_value("horde", "best_score", horde_best_score)
@@ -772,12 +830,12 @@ func _save_config() -> void:
 	for action in FLAT_ACTIONS:
 		cfg.set_value("binds", "flat_%s" % String(action),
 				str(flat_binds.get(String(action), _encode_flat_event(_default_flat_event(action)))))
-	cfg.save(CONFIG_PATH)
+	cfg.save(path)
 
 
-func _load_config() -> void:
+func _load_config(path := CONFIG_PATH) -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(CONFIG_PATH) != OK:
+	if cfg.load(path) != OK:
 		return
 	language = str(cfg.get_value("general", "language", language))
 	if not language.is_empty():
@@ -802,6 +860,15 @@ func _load_config() -> void:
 	free_duel_scenario = _clamp_duel_scenario(int(cfg.get_value("free_duel", "scenario", free_duel_scenario)))
 	free_duel_enemy = _clamp_duel_enemy(int(cfg.get_value("free_duel", "enemy", free_duel_enemy)))
 	free_duel_count = _clamp_duel_count(int(cfg.get_value("free_duel", "count", free_duel_count)))
+	lobby_slot_count = clampi(int(cfg.get_value("lobby", "slots", lobby_slot_count)),
+			LobbyRoster.MIN_SLOTS, LobbyRoster.max_slots())
+	lobby_mode = _clamp_lobby_mode(int(cfg.get_value("lobby", "mode", lobby_mode)))
+	lobby_scenario = _clamp_duel_scenario(int(cfg.get_value("lobby", "scenario", lobby_scenario)))
+	for slot in range(1, LobbyRoster.MAX_SLOTS):
+		lobby_kinds[slot] = _clamp_lobby_kind(int(cfg.get_value("lobby", "kind_%d" % slot, lobby_kinds[slot])))
+		lobby_archetypes[slot] = _clamp_lobby_archetype(
+				int(cfg.get_value("lobby", "archetype_%d" % slot, lobby_archetypes[slot])))
+		lobby_sides[slot] = _clamp_lobby_side(int(cfg.get_value("lobby", "side_%d" % slot, lobby_sides[slot])))
 	horde_scenario = _clamp_duel_scenario(int(cfg.get_value("horde", "scenario", horde_scenario)))
 	horde_best_wave = maxi(int(cfg.get_value("horde", "best_wave", horde_best_wave)), 0)
 	horde_best_score = maxi(int(cfg.get_value("horde", "best_score", horde_best_score)), 0)

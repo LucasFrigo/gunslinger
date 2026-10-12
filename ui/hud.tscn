@@ -110,6 +110,19 @@ label_settings = SubResource("replay_settings")
 text = "HUD_REPLAY"
 horizontal_alignment = 2
 
+[node name="SpectateTag" type="Label" parent="."]
+visible = false
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -620.0
+offset_top = 16.0
+offset_right = -24.0
+offset_bottom = 56.0
+mouse_filter = 2
+label_settings = SubResource("replay_settings")
+horizontal_alignment = 2
+
 [node name="VersionTag" type="Label" parent="."]
 anchors_preset = 3
 anchor_left = 1.0

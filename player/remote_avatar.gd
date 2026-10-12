@@ -1,9 +1,10 @@
 class_name RemoteAvatar
 extends Node3D
-## Visual proxy for the other player in multiplayer: head (with hat), greybox
+## Visual proxy for another player in multiplayer: head (with hat), greybox
 ## torso/legs/arms, and a revolver that sits on the hip until drawn. Driven by
 ## the pose stream. On the host its hitboxes are the authoritative target for
-## the local player's bullets.
+## every other duelist's bullets.
+## A client also uses one as the proxy of an NPC the host runs (`npc_proxy`).
 
 const LERP_SPEED := 18.0
 const ARM_MESH_HEIGHT := 1.0
@@ -11,6 +12,8 @@ const SHOULDER_LOCAL := Vector3(0.18, 0.22, 0.0)
 ## Hidden greybox arms and torso mesh hang off the streamed head.
 const TORSO_BELOW_HEAD := 0.55
 const HOLSTER_LOCAL := Vector3(0.25, 0.0, 0.05)
+## A resting hand, from the feet: by the hip on +X (mirrored for the left).
+const HIP_HAND_LOCAL := Vector3(0.25, 1.15, 0.05)
 
 @onready var head: Node3D = $Head
 ## Proximity voice comes out of the mouth, so falloff is plain 3D attenuation.
@@ -47,6 +50,11 @@ var _snap_lock: Dictionary = {}
 var _snap_from_local: Dictionary = {}
 var _snap_blend: Dictionary = {}
 var replay_locked := false
+## Lobby slot this avatar stands for (= ReplayBuffer actor id). Set before add_child.
+var slot := -1
+## A client's stand-in for the NPC the host runs in this slot. The host sends only the
+## head, the flags, and the gun (`apply_npc_pose`). Set before add_child.
+var npc_proxy := false
 var _dummy: DummyBody
 var _replay_objects: ReplayObjects
 var _objects := 0
@@ -54,6 +62,10 @@ var _prop_xf := Transform3D.IDENTITY
 var _round_xf := Transform3D.IDENTITY
 ## Shot dead: the body falls on its own and the pose stream no longer drives it.
 var _collapsed := false
+## Out on a second foul: no fall, the body stands frozen where it was.
+var _out := false
+## Killed or out. Bullets pass through from here on.
+var _dead := false
 
 
 func _ready() -> void:
@@ -68,8 +80,8 @@ func _ready() -> void:
 	_attach_dummy()
 	# Rest pose before the first packet: head at spawn, hands by the hips.
 	_target_head = global_transform.translated_local(Vector3.UP * 1.7)
-	_target_left = global_transform.translated_local(Vector3(-0.25, 1.15, 0.05))
-	_target_right = global_transform.translated_local(Vector3(0.25, 1.15, 0.05))
+	_target_left = global_transform.translated_local(HIP_HAND_LOCAL * Vector3(-1.0, 1.0, 1.0))
+	_target_right = global_transform.translated_local(HIP_HAND_LOCAL)
 	head.global_transform = _target_head
 	left_hand.global_transform = _target_left
 	right_hand.global_transform = _target_right
@@ -104,6 +116,12 @@ func _attach_dummy() -> void:
 	_dummy.drive_arm(true, _snap_r, true, DummyBody.WRIST_INSET)
 
 
+## The lobby colour of this slot or its side (`GameManager._apply_lobby_tints`).
+func set_tint(color: Color) -> void:
+	if _dummy != null:
+		_dummy.set_tint(color)
+
+
 func _make_snap(snap_name: String) -> Marker3D:
 	var marker := Marker3D.new()
 	marker.name = snap_name
@@ -111,8 +129,9 @@ func _make_snap(snap_name: String) -> Marker3D:
 	return marker
 
 
-## A killing shot with a trail: the body falls along it and the gun drops loose.
+## A killing shot: the body falls along the trail and the gun drops loose.
 func collapse(trail: PackedVector3Array) -> void:
+	_dead = true
 	if _dummy == null or _collapsed or not DummyBody.ragdoll_on():
 		return
 	_collapsed = true
@@ -120,6 +139,20 @@ func collapse(trail: PackedVector3Array) -> void:
 	if gun is Revolver:
 		(gun as Revolver).release_into_world(get_tree().current_scene, DummyBody.gun_fling(trail),
 				DummyBody.gun_spin(trail), false)
+
+
+## A second foul: out of the duel with no fall. The body and the gun stay as they are.
+func put_out() -> void:
+	_dead = true
+	_out = true
+
+
+func is_dead() -> bool:
+	return _dead
+
+
+func get_head_position() -> Vector3:
+	return head.global_position
 
 
 ## The mannequin that falls on death. `DeathCam` orbits its chest.
@@ -166,6 +199,9 @@ func apply_replay_pose(pose: Dictionary) -> void:
 	# A corpse stands for the clip before the death; its fall takes over from there.
 	if _dummy != null:
 		_dummy.set_pose_driven(true)
+	if npc_proxy:
+		# The sample is `DuelistAI.capture_replay_pose` on the host: its hand fields are not hands.
+		pose = _npc_pose(pose["head"], int(pose["flags"]), pose["gun"])
 	var objects := int(pose.get("objects", 0))
 	var prop_xf: Transform3D = pose.get("prop", Transform3D.IDENTITY)
 	var round_xf: Transform3D = pose.get("round", Transform3D.IDENTITY)
@@ -190,7 +226,7 @@ func clear_replay_pose() -> void:
 func apply_pose(head_t: Transform3D, left_t: Transform3D, right_t: Transform3D, flags: int,
 		gun_t := Transform3D.IDENTITY, hands := 0, objects := 0,
 		prop_t := Transform3D.IDENTITY, round_t := Transform3D.IDENTITY) -> void:
-	if _collapsed and not replay_locked:
+	if (_collapsed or _out) and not replay_locked:
 		return
 	_target_head = head_t
 	_target_left = left_t
@@ -208,6 +244,37 @@ func apply_pose(head_t: Transform3D, left_t: Transform3D, right_t: Transform3D, 
 	set_voice_muted(flags & NetworkManager.POSE_FLAG_VOICE_MUTED != 0)
 	_apply_gun_parent(flags & NetworkManager.POSE_FLAG_GUN_DRAWN != 0)
 	_has_pose = true
+
+
+## NPC proxy: the host's stream for this slot (`NetworkManager._npc_pose`).
+func apply_npc_pose(head_t: Transform3D, flags: int, gun_t: Transform3D) -> void:
+	var pose := _npc_pose(head_t, flags, gun_t)
+	apply_pose(pose["head"], pose["left"], pose["right"], pose["flags"], pose["gun"], pose["hands"])
+
+
+## The pose an NPC proxy takes from the three fields the host sends, live or in a replay
+## sample. The hands rest at the hips. A held gun is flagged steadied: it follows the sent
+## transform and the wrist IK reaches its grip. A tossed one follows it as any free gun.
+func _npc_pose(head_t: Transform3D, flags: int, gun_t: Transform3D) -> Dictionary:
+	var held := flags & NetworkManager.POSE_FLAG_GUN_DRAWN != 0 \
+			and flags & NetworkManager.POSE_FLAG_GUN_FREE == 0
+	if held:
+		flags |= NetworkManager.POSE_FLAG_GUN_STEADIED
+	return {
+		"head": head_t,
+		"left": _hip_hand(head_t, false),
+		"right": _hip_hand(head_t, true),
+		"gun": gun_t,
+		"flags": flags,
+		"hands": HandFingers.pack(HandFingers.Pose.OPEN,
+				HandFingers.Pose.PISTOL if held else HandFingers.Pose.OPEN, 0.0, 0.0),
+	}
+
+
+func _hip_hand(head_t: Transform3D, right: bool) -> Transform3D:
+	var yaw := Basis(Vector3.UP, head_t.basis.get_euler().y)
+	var local := HIP_HAND_LOCAL if right else HIP_HAND_LOCAL * Vector3(-1.0, 1.0, 1.0)
+	return Transform3D(yaw, Vector3(head_t.origin.x, global_position.y, head_t.origin.z) + yaw * local)
 
 
 func _replay_objects_node() -> ReplayObjects:
@@ -263,7 +330,7 @@ func _apply_gun_parent(drawn: bool) -> void:
 
 
 func _process(delta: float) -> void:
-	if _collapsed and not replay_locked:
+	if (_collapsed or _out) and not replay_locked:
 		return
 	var weight := 1.0 if replay_locked else clampf(LERP_SPEED * delta / maxf(Engine.time_scale, 0.001), 0.0, 1.0)
 	head.global_transform = head.global_transform.interpolate_with(_target_head, weight)
@@ -275,9 +342,13 @@ func _process(delta: float) -> void:
 		var root_yaw := global_transform.basis.get_euler().y
 		var body_yaw := PI + wrapf(yaw.get_euler().y - root_yaw, -PI, PI)
 		var head_basis := head.global_transform.basis
+		var eye := head.global_position
+		if npc_proxy:
+			# An NPC stands under its head; `place_toward_head` sets a body back from an eye.
+			eye -= yaw.z * DummyBody.EYE_SETBACK
 		_dummy.place_toward_head(
-			head.global_position, body_yaw, DummyBody.pitch_from_basis(head_basis),
-			head.global_position, DummyBody.roll_from_basis(head_basis))
+			eye, body_yaw, DummyBody.pitch_from_basis(head_basis),
+			eye, DummyBody.roll_from_basis(head_basis))
 	var head_pos := head.global_position
 	var hip := HOLSTER_LOCAL
 	hip.x = -absf(hip.x) if _holster_left else absf(hip.x)
@@ -350,9 +421,9 @@ func _place_limb(node: Node3D, from: Vector3, to: Vector3) -> void:
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 		region: StringName = CombatRules.REGION_TORSO, _self_inflicted := false,
-		shooter_is_local := false, _shooter := -1, cut := {}) -> void:
+		_shooter_is_local := false, shooter := -1, cut := {}) -> void:
 	if NetworkManager.is_host():
-		GameManager.duel.mp_report_hit(false, trail_points, region, damage_mult, shooter_is_local, cut)
+		GameManager.duel.mp_report_hit(slot, trail_points, region, damage_mult, shooter, cut)
 
 
 func hitbox_rids() -> Array[RID]:

@@ -20,11 +20,14 @@ const BIG_BUTTON_FONT_VR := 28
 @onready var lan_list: ItemList = %LanList
 @onready var steam_list: ItemList = %SteamList
 @onready var status_label: Label = %StatusLabel
+@onready var lobby_setup: LobbyPanel = %LobbySetup
 @onready var settings_menu: SettingsMenu = $Center/Panel/Margin/SettingsMenu
 
 var _lan_hosts: Array = []
 var _steam_lobbies: Array = []
 var _gauntlet_ladder: GauntletLadder
+## A Steam lobby is being created: the saved setup goes on its roster once it is ready.
+var _steam_setup_pending := false
 
 
 func _ready() -> void:
@@ -78,7 +81,8 @@ func _ready() -> void:
 
 	NetworkManager.lan_hosts_updated.connect(_on_lan_hosts)
 	NetworkManager.steam_lobbies_updated.connect(_on_steam_lobbies)
-	NetworkManager.network_error.connect(_set_status)
+	NetworkManager.network_error.connect(_on_network_error)
+	NetworkManager.session_started.connect(_on_session_started)
 
 	if OS.has_feature("android"):
 		# Meta Store SKU: LAN only — no Steam lobby chrome on the headset.
@@ -211,12 +215,27 @@ func _sync_browse() -> void:
 
 func _host_lan() -> void:
 	_set_status(tr("MENU_HOSTING_LAN"))
-	NetworkManager.host_lan()
+	if NetworkManager.host_lan() == OK:
+		LobbyPanel.apply_saved_setup()
 
 
 func _host_steam() -> void:
 	_set_status(tr("MENU_CREATING_LOBBY"))
-	NetworkManager.host_steam()
+	_steam_setup_pending = true
+	if NetworkManager.host_steam() != OK:
+		_steam_setup_pending = false
+
+
+## The Steam lobby takes a callback to create, so its session starts after HOST returns.
+func _on_session_started(as_host: bool) -> void:
+	if _steam_setup_pending and as_host:
+		LobbyPanel.apply_saved_setup()
+	_steam_setup_pending = false
+
+
+func _on_network_error(message: String) -> void:
+	_steam_setup_pending = false
+	_set_status(message)
 
 
 func _join_selected_lan() -> void:
@@ -267,8 +286,13 @@ func _on_lan_hosts(hosts: Array) -> void:
 		var host_v := str(host.get("version", ""))
 		var compatible := NetworkManager.versions_match(host_v, local_v)
 		var version_label := host_v if not host_v.is_empty() else "?"
-		var idx := lan_list.add_item(tr("MENU_LAN_ENTRY") % [host["name"], host["ip"], version_label])
-		if not compatible:
+		var total := int(host.get("total", 0))
+		var open := int(host.get("open", 0))
+		var slots_label := LobbyRoster.format_slots(open, total) if total > 0 else "?"
+		var idx := lan_list.add_item(
+				tr("MENU_LAN_ENTRY") % [host["name"], host["ip"], slots_label, version_label])
+		# Full, or a duel is running. An older host sends no slot field (total 0).
+		if not compatible or (total > 0 and open <= 0):
 			lan_list.set_item_disabled(idx, true)
 	if hosts.is_empty():
 		lan_list.add_item(tr("MENU_LAN_SEARCHING"))
@@ -284,9 +308,10 @@ func _on_steam_lobbies(lobbies: Array) -> void:
 		var version_label := host_v if not host_v.is_empty() else "?"
 		var compatible: bool = bool(lobby.get("compatible",
 				NetworkManager.versions_match(host_v, NetworkManager.game_version())))
-		var idx := steam_list.add_item(
-				tr("MENU_STEAM_ENTRY") % [lobby["name"], lobby["players"], version_label])
-		if not compatible:
+		var open := int(lobby.get("open", 0))
+		var idx := steam_list.add_item(tr("MENU_STEAM_ENTRY") % [lobby["name"],
+				LobbyRoster.format_slots(open, int(lobby.get("total", 0))), version_label])
+		if not compatible or open <= 0:
 			steam_list.set_item_disabled(idx, true)
 	if lobbies.is_empty():
 		steam_list.add_item(tr("MENU_STEAM_EMPTY"))

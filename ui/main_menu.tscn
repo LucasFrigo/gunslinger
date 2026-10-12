@@ -1,8 +1,9 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://ui/main_menu.gd" id="1"]
 [ext_resource type="PackedScene" path="res://ui/settings_menu.tscn" id="2"]
 [ext_resource type="Theme" path="res://ui/theme_duello.tres" id="3"]
+[ext_resource type="PackedScene" path="res://ui/lobby_panel.tscn" id="4"]
 [ext_resource type="FontFile" uid="uid://dsduftx1pb1ii" path="res://assets/fonts/Ultra-Regular.ttf" id="font_title"]
 
 [sub_resource type="LabelSettings" id="title_settings"]
@@ -333,64 +334,88 @@ horizontal_alignment = 1
 [node name="MpSep" type="HSeparator" parent="Center/Panel/Margin/MultiplayerPage"]
 layout_mode = 2
 
-[node name="LanRow" type="HBoxContainer" parent="Center/Panel/Margin/MultiplayerPage"]
+[node name="MpScroll" type="ScrollContainer" parent="Center/Panel/Margin/MultiplayerPage"]
+custom_minimum_size = Vector2(520, 400)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="MpContent" type="VBoxContainer" parent="Center/Panel/Margin/MultiplayerPage/MpScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="SetupTitle" type="Label" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
+layout_mode = 2
+text = "LOBBY_SETUP_TITLE"
+horizontal_alignment = 1
+
+[node name="LobbySetup" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent" instance=ExtResource("4")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="SetupSep" type="HSeparator" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
+layout_mode = 2
+
+[node name="LanRow" type="HBoxContainer" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="HostLanButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/LanRow"]
+[node name="HostLanButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent/LanRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "MENU_HOST_LAN"
 
-[node name="IpEdit" type="LineEdit" parent="Center/Panel/Margin/MultiplayerPage/LanRow"]
+[node name="IpEdit" type="LineEdit" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent/LanRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "MENU_IP_PLACEHOLDER"
 
-[node name="JoinIpButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/LanRow"]
+[node name="JoinIpButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent/LanRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "MENU_JOIN_IP"
 
-[node name="LanList" type="ItemList" parent="Center/Panel/Margin/MultiplayerPage"]
+[node name="LanList" type="ItemList" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(420, 76)
 
-[node name="JoinLanButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage"]
+[node name="JoinLanButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "MENU_JOIN_LAN"
 
-[node name="SteamRow" type="HBoxContainer" parent="Center/Panel/Margin/MultiplayerPage"]
+[node name="SteamRow" type="HBoxContainer" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="HostSteamButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/SteamRow"]
+[node name="HostSteamButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent/SteamRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "MENU_HOST_STEAM"
 
-[node name="RefreshSteamButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/SteamRow"]
+[node name="RefreshSteamButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent/SteamRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "MENU_REFRESH_LOBBIES"
 
-[node name="SteamList" type="ItemList" parent="Center/Panel/Margin/MultiplayerPage"]
+[node name="SteamList" type="ItemList" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(420, 76)
 
-[node name="JoinSteamButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage"]
+[node name="JoinSteamButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "MENU_JOIN_LOBBY"
 
-[node name="SteamNote" type="Label" parent="Center/Panel/Margin/MultiplayerPage"]
+[node name="SteamNote" type="Label" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
 unique_name_in_owner = true
 layout_mode = 2
 text = ""
