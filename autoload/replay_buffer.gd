@@ -1,9 +1,10 @@
 extends Node
 ## Autoload. Rolling 30 Hz record of the live duel (poses + shots).
-## Single-player and the 1v1 host record. On a lethal hit the buffer keeps
-## `replay_post_death` seconds, seals, and the host sends that clip to the
-## joiner so both peers play the same frames.
-## Actor 0 is the host (or the local player in SP). Actor 1 is the AI or the joiner.
+## Single-player and the lobby host record. On the final lethal hit the buffer keeps
+## `replay_post_death` seconds, seals, and the host sends that clip to every
+## client so all peers play the same frames.
+## An actor id is a lobby slot in MP (0 is the host) and, in SP, the player (0) or
+## NPC i (i + 1). A clip holds one actor per lobby slot, or per SP duelist.
 
 const HZ := 30.0
 const ACTOR_HOST := 0
@@ -14,8 +15,9 @@ const XFORM_FLOATS := 7
 ## flags + five body transforms, then an object word and the prop and round poses.
 const OBJECT_FLOATS := 1 + XFORM_FLOATS * 2
 const ACTOR_FLOATS := 1 + XFORM_FLOATS * 5 + OBJECT_FLOATS
-const SAMPLE_FLOATS := 1 + ACTOR_FLOATS * ACTORS
-const SAMPLES_PER_CHUNK := 8
+## Floats in one `_replay_samples` RPC: eight samples of a two-actor clip. A wider clip
+## sends fewer samples per chunk, never a bigger one.
+const CHUNK_FLOATS := 8 * (1 + ACTOR_FLOATS * ACTORS)
 const _XFORM_KEYS: PackedStringArray = ["root", "head", "left", "right", "gun"]
 ## Off-hand prop packed into the object word. 0 is an empty hand.
 const PROP_ID_MASK := 7
@@ -35,6 +37,9 @@ var is_sealed := false
 var death_time := -1.0
 var killer_id := ACTOR_HOST
 var victim_id := ACTOR_OTHER
+## Actor id -> clip time of its death: the victim, and every duelist that fell before it.
+## A client gets these with the clip.
+var death_times := {}
 
 var _recording := false
 var _serial := 0
@@ -44,6 +49,8 @@ var _accum := 0.0
 var _post_left := -1.0
 var _samples: Array = []
 var _shots: Array = []
+## Client: actors per sample in the clip being received.
+var _clip_actors := ACTORS
 
 
 func _ready() -> void:
@@ -72,6 +79,12 @@ func is_recording() -> bool:
 	return _recording
 
 
+## Clip clock now, for stamping events the replay re-plays. -1 when not recording
+## (an MP client, or after the clip sealed).
+func clip_time() -> float:
+	return _elapsed if _recording else -1.0
+
+
 func ready_to_play() -> bool:
 	return is_sealed and not _samples.is_empty()
 
@@ -79,6 +92,7 @@ func ready_to_play() -> bool:
 func mark_death(killer: int, victim: int) -> void:
 	killer_id = killer
 	victim_id = victim
+	note_death(victim)
 	# Start the sequence first so the death-frame sample latches a frozen pose.
 	DeathCam.start_sequence()
 	if _recording and death_time < 0.0:
@@ -88,6 +102,17 @@ func mark_death(killer: int, victim: int) -> void:
 		_post_left = maxf(_tune("replay_post_death", 2.0), 0.0)
 		if _post_left <= 0.0:
 			_seal()
+
+
+## Clip time `actor_id` died at; the first call wins. Only while recording.
+func note_death(actor_id: int) -> void:
+	if _recording and not death_times.has(actor_id):
+		death_times[actor_id] = _elapsed
+
+
+## -1 when `actor_id` did not die inside the recording.
+func death_time_of(actor_id: int) -> float:
+	return float(death_times.get(actor_id, -1.0))
 
 
 func record_shot(origin: Vector3, direction: Vector3, shooter: int) -> void:
@@ -150,18 +175,27 @@ func shots_between(t0: float, t1: float) -> Array:
 	return out
 
 
-## Host body, AI, or the peer avatar — whichever this machine is showing for `actor_id`.
+## Recorded actors: every slot of the running MP duel, else the player plus every SP NPC.
+func actor_count() -> int:
+	var snapshot := GameManager.duel.snapshot
+	if snapshot != null:
+		return snapshot.slots.size()
+	return maxi(ACTORS, 1 + GameManager.current_ais.size())
+
+
+## Floats one packed sample of `count` actors takes.
+func sample_floats(count: int) -> int:
+	return 1 + ACTOR_FLOATS * count
+
+
+## Samples of `count` actors that fit one chunk RPC.
+func samples_per_chunk(count: int) -> int:
+	return maxi(CHUNK_FLOATS / sample_floats(count), 1)
+
+
+## The local player, an NPC, or a peer's avatar: whichever this machine shows for `actor_id`.
 func actor_node(actor_id: int) -> Node:
-	var host_side := not NetworkManager.is_active() or NetworkManager.is_host()
-	if actor_id == ACTOR_HOST:
-		if host_side:
-			return GameManager.local_player
-		return GameManager.remote_avatar
-	if is_instance_valid(GameManager.current_ai):
-		return GameManager.current_ai
-	if host_side:
-		return GameManager.remote_avatar
-	return GameManager.local_player
+	return GameManager.actor_node(actor_id)
 
 
 func _process(delta: float) -> void:
@@ -184,8 +218,8 @@ func _process(delta: float) -> void:
 
 func _capture_sample() -> void:
 	var actors: Array = []
-	actors.append(_capture_node(actor_node(ACTOR_HOST)))
-	actors.append(_capture_node(actor_node(ACTOR_OTHER)))
+	for actor_id in actor_count():
+		actors.append(_capture_node(actor_node(actor_id)))
 	_samples.append({"t": _elapsed, "actors": actors})
 
 
@@ -235,13 +269,15 @@ func _seal() -> void:
 
 
 func _send_clip() -> void:
-	_replay_header.rpc(_serial, death_time, killer_id, victim_id)
+	var actors := actor_count()
+	_replay_header.rpc(_serial, death_time, killer_id, victim_id, actors, _pack_death_times(actors))
+	var per_chunk := samples_per_chunk(actors)
 	var buf := PackedFloat32Array()
 	var count := 0
 	for sample in _samples:
-		_pack_sample(buf, sample)
+		_pack_sample(buf, sample, actors)
 		count += 1
-		if count >= SAMPLES_PER_CHUNK:
+		if count >= per_chunk:
 			_replay_samples.rpc(_serial, buf)
 			buf = PackedFloat32Array()
 			count = 0
@@ -263,11 +299,27 @@ func _send_clip() -> void:
 	_replay_seal.rpc(_serial)
 
 
+## One clip time per actor id, -1 for an actor that did not die in the recording.
+func _pack_death_times(count: int) -> PackedFloat32Array:
+	var times := PackedFloat32Array()
+	for actor_id in count:
+		times.append(death_time_of(actor_id))
+	return times
+
+
+func _unpack_death_times(times: PackedFloat32Array, count: int) -> void:
+	death_times.clear()
+	for actor_id in mini(times.size(), count):
+		if times[actor_id] >= 0.0:
+			death_times[actor_id] = times[actor_id]
+
+
 func _reset_clip() -> void:
 	is_sealed = false
 	death_time = -1.0
 	killer_id = ACTOR_HOST
 	victim_id = ACTOR_OTHER
+	death_times.clear()
 	_elapsed = 0.0
 	_accum = 0.0
 	_post_left = -1.0
@@ -281,9 +333,7 @@ func _tune(key: String, fallback: float) -> float:
 
 func _blend_actors(a_actors: Array, b_actors: Array, u: float) -> Array:
 	var blended: Array = []
-	for i in ACTORS:
-		if i >= a_actors.size() or i >= b_actors.size():
-			break
+	for i in mini(a_actors.size(), b_actors.size()):
 		var a: Dictionary = a_actors[i]
 		var b: Dictionary = b_actors[i]
 		var flags_a := int(a.get("flags", 0))
@@ -354,10 +404,11 @@ func _read_xform(buf: PackedFloat32Array, i: int) -> Transform3D:
 	return Transform3D(Basis(q), origin)
 
 
-func _pack_sample(buf: PackedFloat32Array, sample: Dictionary) -> void:
+## Appends `sample_floats(count)` floats. An actor the sample lacks packs blank.
+func _pack_sample(buf: PackedFloat32Array, sample: Dictionary, count: int) -> void:
 	buf.append(float(sample["t"]))
 	var actors: Array = sample["actors"]
-	for i in ACTORS:
+	for i in count:
 		var pose: Dictionary = actors[i] if i < actors.size() else _blank_pose()
 		buf.append(float(pose.get("flags", 0)))
 		for key in _XFORM_KEYS:
@@ -367,12 +418,12 @@ func _pack_sample(buf: PackedFloat32Array, sample: Dictionary) -> void:
 		_append_xform(buf, _xform_of(pose, "round"))
 
 
-func _unpack_sample(buf: PackedFloat32Array, offset: int) -> Dictionary:
+func _unpack_sample(buf: PackedFloat32Array, offset: int, count: int) -> Dictionary:
 	var i := offset
 	var t := buf[i]
 	i += 1
 	var actors: Array = []
-	for _actor in ACTORS:
+	for _actor in count:
 		var flags := int(buf[i])
 		i += 1
 		var pose := {"flags": flags}
@@ -389,33 +440,45 @@ func _unpack_sample(buf: PackedFloat32Array, offset: int) -> Dictionary:
 	return {"t": t, "actors": actors, "next": i}
 
 
+## True on a client inside the session. The host records its own clip, and a peer still
+## in the handshake gets the broadcasts too and must ignore them.
+func _takes_clip() -> bool:
+	return NetworkManager.is_active() and not NetworkManager.is_host()
+
+
+## `actors` is the sample stride. `times` holds one clip time per actor id, -1 for an
+## actor that did not die in the recording.
 @rpc("authority", "call_remote", "reliable")
-func _replay_header(serial: int, death_t: float, killer: int, victim: int) -> void:
-	if NetworkManager.is_host() or not DeathCam.is_active():
+func _replay_header(serial: int, death_t: float, killer: int, victim: int, actors: int,
+		times: PackedFloat32Array) -> void:
+	if not _takes_clip() or not DeathCam.is_active() or actors < 1 or actors > LobbyRoster.MAX_SLOTS:
 		return
 	_accept_serial = serial
+	_clip_actors = actors
 	_samples.clear()
 	_shots.clear()
 	is_sealed = false
 	death_time = death_t
 	killer_id = killer
 	victim_id = victim
+	_unpack_death_times(times, actors)
 
 
 @rpc("authority", "call_remote", "reliable")
 func _replay_samples(serial: int, buf: PackedFloat32Array) -> void:
-	if NetworkManager.is_host() or serial != _accept_serial or is_sealed:
+	if not _takes_clip() or serial != _accept_serial or is_sealed:
 		return
+	var stride := sample_floats(_clip_actors)
 	var i := 0
-	while i + SAMPLE_FLOATS <= buf.size():
-		var parsed := _unpack_sample(buf, i)
+	while i + stride <= buf.size():
+		var parsed := _unpack_sample(buf, i, _clip_actors)
 		_samples.append({"t": parsed["t"], "actors": parsed["actors"]})
 		i = int(parsed["next"])
 
 
 @rpc("authority", "call_remote", "reliable")
 func _replay_shots(serial: int, buf: PackedFloat32Array) -> void:
-	if NetworkManager.is_host() or serial != _accept_serial or is_sealed:
+	if not _takes_clip() or serial != _accept_serial or is_sealed:
 		return
 	_shots.clear()
 	var i := 0
@@ -431,17 +494,20 @@ func _replay_shots(serial: int, buf: PackedFloat32Array) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func _replay_seal(serial: int) -> void:
-	if NetworkManager.is_host() or serial != _accept_serial:
+	if not _takes_clip() or serial != _accept_serial:
 		return
 	is_sealed = true
 
 
 @rpc("any_peer", "call_remote", "reliable")
 func _request_skip() -> void:
-	if NetworkManager.is_host():
+	var snapshot := GameManager.duel.snapshot
+	if NetworkManager.is_active() and NetworkManager.is_host() and snapshot != null \
+			and snapshot.slot_of_peer(multiplayer.get_remote_sender_id()) >= 0:
 		_apply_skip.rpc()
 
 
 @rpc("authority", "call_local", "reliable")
 func _apply_skip() -> void:
-	DeathCam.skip_to_trailing()
+	if NetworkManager.is_active():
+		DeathCam.skip_to_trailing()

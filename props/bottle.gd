@@ -155,6 +155,21 @@ func cancel_charge() -> void:
 	hold_at(_attach)
 
 
+## The holder died: fall from where the bottle is. A hard landing still shatters it.
+func drop_loose(world: Node, velocity: Vector3) -> void:
+	if _breaking or state == State.LOOSE:
+		return
+	var pose := global_transform
+	reparent(world, true)
+	global_transform = pose
+	_release_body()
+	linear_velocity = velocity
+	angular_velocity = Vector3.ZERO
+	_prev_speed = velocity.length()
+	state = State.LOOSE
+	reset_physics_interpolation()
+
+
 func recall() -> void:
 	if state == State.LOOSE and not _breaking and _attach != null:
 		hold_at(_attach)

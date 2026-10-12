@@ -105,6 +105,11 @@ func cancel_charge() -> void:
 		hold_at(_attach)
 
 
+## The holder died. A prop with no body to fall (the cigarette) is hidden.
+func drop_loose(_world: Node, _velocity: Vector3) -> void:
+	visible = false
+
+
 func recall() -> void:
 	if _attach != null:
 		hold_at(_attach)

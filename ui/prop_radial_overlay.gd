@@ -47,7 +47,7 @@ func _draw() -> void:
 		draw_circle(at, radius, Color(color, 0.25))
 		draw_arc(at, radius, 0.0, TAU, 32, color, 2.0)
 		_draw_centered(font, at + Vector2(0.0, radius + 26.0), _labels[i], 18, color)
-	var hint := "release to cancel" if _highlight < 0 else "release to equip"
+	var hint := tr("RADIAL_CANCEL") if _highlight < 0 else tr("RADIAL_EQUIP")
 	_draw_centered(font, center + Vector2(0.0, 6.0), hint, 16, Color(0.9, 0.88, 0.82, 0.8))
 
 

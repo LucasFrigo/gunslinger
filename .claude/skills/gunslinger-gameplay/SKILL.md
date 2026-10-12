@@ -42,7 +42,7 @@ Name VR, flat, AI, and multiplayer before editing. If the spec leaves one unchan
 - **Flat** aims with the camera ray (`player/flat_rig.gd`). **VR** uses the controllers (`player/vr_rig.gd`). **AI** passes its own aim. A VR-only feel (aim steady, jam-free) stays off the other two.
 - Fire, cock, and reload require `held`. `drawn` stays true while the gun is in the air.
 - Hits apply only in `DRAW`. Head kills; a surviving arm hit tosses the gun; a leg hit slows. Gun-hand self-hit grace skips only that arm. AI bullets still exclude the shooter.
-- Multiplayer is **1v1 and host-authoritative**. Do not pause the tree in MP. Visuals the peer must see go on the pose stream. LAN is every SKU. Steam is desktop only. The Quest APK is LAN-only.
+- Multiplayer is **host-authoritative lobbies of 2-4 duelists**: humans and host-run NPCs, free-for-all or Teams. A lobby slot is the actor id and the shooter id (`LobbyRoster`, `NetworkManager.roster`; each duel runs on `DuelManager.snapshot`). Do not pause the tree in MP. Visuals a human peer must see go on the pose stream; an NPC slot's go on `_npc_pose` / `_npc_shot`. LAN is every SKU. Steam is desktop only. The Quest APK is LAN-only.
 - Slow-mo is single-player. The kill-cam burst is the multiplayer exception.
 - Practice has no `DuelManager` and no HP.
 - Do not swap AI or remote-avatar meshes, and do not add `SoftBody3D` cloth, unless the user asks.
@@ -53,7 +53,7 @@ Name VR, flat, AI, and multiplayer before editing. If the spec leaves one unchan
 
 - **Low:** the named file only. Do not explore the repo.
 - **Moderate:** the writeup is the plan. Edit the files it names.
-- **High / Very high:** list the files and what must stay put, and ask the design questions, before editing. Hitboxes-follow-mesh comes before ragdoll; ragdoll comes before dismemberment.
+- **High / Very high:** list the files and what must stay put, and ask the design questions, before editing. Hitboxes-follow-mesh comes before ragdoll; ragdoll comes before hit chunks; severing (Ideas) would build on both.
 
 ## After the edit
 
@@ -63,4 +63,4 @@ Update `docs/FEATURES.md`. Move a finished roadmap bullet to **Completed**. Add 
 godot --headless --path . -- --autotest=duel
 ```
 
-Suites: `duel`, `gauntlet`, `load`, `props`, `practice`, `host`, `join`, `steam`, `steamcycle`. Start `host` before `join`.
+Suites: `duel`, `gauntlet`, `multi`, `horde`, `load`, `props`, `practice`, `ragdoll`, `chunks`, `i18n`, `host`, `join`, `lobby`, `lobbyhost`, `lobbyjoin`, `steam`, `steamcycle`. Start `host` before `join`, and `lobbyhost` before two `lobbyjoin` processes (three humans; check all three results). `lobby` is one process.

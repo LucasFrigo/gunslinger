@@ -25,7 +25,8 @@ func shot_fired(muzzle_global: Transform3D, shooting_hand: StringName = &"right_
 	var parent := _scene_root()
 	if parent != null:
 		VfxCatalog.spawn(&"muzzle_smoke", parent, muzzle_global.origin, -muzzle_global.basis.z)
-	CombatHaptics.fire(shooting_hand)
+	if shooting_hand != &"":
+		CombatHaptics.fire(shooting_hand)
 
 
 func world_impact(origin: Vector3, normal: Vector3) -> void:
@@ -46,6 +47,11 @@ func body_impact(origin: Vector3, normal: Vector3, region: StringName = REGION_T
 		var lifetime_scale := 1.15 if region == REGION_HEAD else 1.0
 		VfxCatalog.spawn(&"blood_burst", parent, origin, normal, amount_scale, lifetime_scale)
 	_play_spatial(AudioCatalog.get_stream(&"impact_flesh"), origin)
+
+
+## A hit knocked a chunk out. Layered on `body_impact`'s `impact_flesh`.
+func flesh_chunk(origin: Vector3) -> void:
+	_play_spatial(AudioCatalog.get_stream(&"flesh_chunk"), origin)
 
 
 ## Practice-hub bottle breaking (shot or thrown).
@@ -88,21 +94,21 @@ func near_miss(at: Vector3) -> void:
 ## (XR swapchain / flat viewport). Await this; it emits `warmup_progress`.
 func warmup() -> void:
 	if _did_warmup:
-		warmup_progress.emit(1.0, "Ready")
+		warmup_progress.emit(1.0, tr("LOADING_READY"))
 		return
-	warmup_progress.emit(0.08, "Loading sounds...")
+	warmup_progress.emit(0.08, tr("LOADING_SOUNDS"))
 	AudioCatalog.warmup()
-	warmup_progress.emit(0.22, "Loading weapons...")
+	warmup_progress.emit(0.22, tr("LOADING_WEAPONS"))
 	Bullet.ensure_mesh()
 	if OS.has_feature("headless"):
 		_did_warmup = true
-		warmup_progress.emit(1.0, "Ready")
+		warmup_progress.emit(1.0, tr("LOADING_READY"))
 		return
-	warmup_progress.emit(0.35, "Preparing effects...")
+	warmup_progress.emit(0.35, tr("LOADING_EFFECTS"))
 	var tree := get_tree()
 	if tree == null:
 		_did_warmup = true
-		warmup_progress.emit(1.0, "Ready")
+		warmup_progress.emit(1.0, tr("LOADING_READY"))
 		return
 	var camera: Node3D = null
 	for _try in 60:
@@ -113,17 +119,17 @@ func warmup() -> void:
 	if camera == null:
 		push_warning("ImpactFeedback.warmup: no camera; first shot may hitch")
 		_did_warmup = true
-		warmup_progress.emit(1.0, "Ready")
+		warmup_progress.emit(1.0, tr("LOADING_READY"))
 		return
-	warmup_progress.emit(0.5, "Compiling shaders...")
+	warmup_progress.emit(0.5, tr("LOADING_SHADERS"))
 	var host := _spawn_draw_warmup(camera)
 	for i in DRAW_FRAMES:
 		await tree.process_frame
-		warmup_progress.emit(0.5 + 0.4 * float(i + 1) / float(DRAW_FRAMES), "Compiling shaders...")
+		warmup_progress.emit(0.5 + 0.4 * float(i + 1) / float(DRAW_FRAMES), tr("LOADING_SHADERS"))
 	if is_instance_valid(host):
 		host.queue_free()
 	_did_warmup = true
-	warmup_progress.emit(1.0, "Ready")
+	warmup_progress.emit(1.0, tr("LOADING_READY"))
 
 
 func _scene_root() -> Node:
@@ -167,6 +173,7 @@ func _spawn_draw_warmup(camera: Node3D) -> Node3D:
 	host.scale = Vector3.ONE * 0.12
 
 	VfxCatalog.spawn_for_compile(host)
+	BodyChunks.spawn_for_compile(host)
 
 	var slug := MeshInstance3D.new()
 	slug.mesh = Bullet.ensure_mesh()

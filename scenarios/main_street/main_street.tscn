@@ -53,6 +53,25 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 8)
 [node name="EnemySpawn" type="Marker3D" parent="." unique_id=1701695076]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, -8)
 
+[node name="EnemySpawns2" type="Node3D" parent="."]
+
+[node name="A" type="Marker3D" parent="EnemySpawns2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.9, 0, -4)
+
+[node name="B" type="Marker3D" parent="EnemySpawns2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.9, 0, -4)
+
+[node name="EnemySpawns3" type="Node3D" parent="."]
+
+[node name="A" type="Marker3D" parent="EnemySpawns3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.5, 0, 0)
+
+[node name="B" type="Marker3D" parent="EnemySpawns3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -8)
+
+[node name="C" type="Marker3D" parent="EnemySpawns3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.5, 0, 0)
+
 [node name="Sun" type="DirectionalLight3D" parent="." unique_id=793511931]
 transform = Transform3D(0.766044, -0.430109, 0.477684, 0, 0.743145, 0.669131, -0.642788, -0.512584, 0.569282, 0, 18, 0)
 light_color = Color(1, 0.94, 0.82, 1)

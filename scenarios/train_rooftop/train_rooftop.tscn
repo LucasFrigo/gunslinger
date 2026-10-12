@@ -31,12 +31,32 @@ fog_sky_affect = 0.4
 
 [node name="TrainRooftop" type="Node3D" unique_id=954112534]
 script = ExtResource("1")
+strafe_half_width = 1.5
 
 [node name="PlayerSpawn" type="Marker3D" parent="." unique_id=135262534]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 10)
 
 [node name="EnemySpawn" type="Marker3D" parent="." unique_id=769817657]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 3.2, -10)
+
+[node name="EnemySpawns2" type="Node3D" parent="."]
+
+[node name="A" type="Marker3D" parent="EnemySpawns2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, 3.2, -10)
+
+[node name="B" type="Marker3D" parent="EnemySpawns2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 3.2, -3.5)
+
+[node name="EnemySpawns3" type="Node3D" parent="."]
+
+[node name="A" type="Marker3D" parent="EnemySpawns3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 3.2, -11)
+
+[node name="B" type="Marker3D" parent="EnemySpawns3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, 3.2, -5)
+
+[node name="C" type="Marker3D" parent="EnemySpawns3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 3.2, 3.5)
 
 [node name="Sun" type="DirectionalLight3D" parent="." unique_id=298167983]
 transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 0, 15, 0)

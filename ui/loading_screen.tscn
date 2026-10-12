@@ -1,10 +1,14 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://ui/loading_screen.gd" id="1"]
 [ext_resource type="Theme" path="res://ui/theme_duello.tres" id="2"]
+[ext_resource type="FontFile" uid="uid://dsduftx1pb1ii" path="res://assets/fonts/Ultra-Regular.ttf" id="font_title"]
 
 [sub_resource type="LabelSettings" id="title_settings"]
+font = ExtResource("font_title")
 font_size = 48
+shadow_color = Color(0.55, 0.28, 0.14, 1)
+shadow_offset = Vector2(4, 4)
 
 [sub_resource type="LabelSettings" id="status_settings"]
 font_size = 22
@@ -52,7 +56,7 @@ horizontal_alignment = 1
 unique_name_in_owner = true
 layout_mode = 2
 label_settings = SubResource("status_settings")
-text = "Loading..."
+text = "LOADING_STATUS"
 horizontal_alignment = 1
 
 [node name="ProgressBar" type="ProgressBar" parent="Center/Column"]

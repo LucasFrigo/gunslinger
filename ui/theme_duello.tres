@@ -1,6 +1,7 @@
 [gd_resource type="Theme" format=3 uid="uid://dvt0tr3eu2cwp"]
 
-[ext_resource type="FontFile" uid="uid://ddi2rdvsuv8ug" path="res://assets/fonts/Silkscreen-Regular.ttf" id="1_silk"]
+[ext_resource type="FontFile" uid="uid://b4rdcutpi15cp" path="res://assets/fonts/Bitter-Regular.ttf" id="1_body"]
+[ext_resource type="FontFile" uid="uid://chn3xwt75qspp" path="res://assets/fonts/Bitter-SemiBold.ttf" id="2_bold"]
 
 [sub_resource type="StyleBoxFlat" id="button"]
 content_margin_left = 10.0
@@ -63,12 +64,13 @@ border_width_bottom = 2
 border_color = Color(0.78, 0.62, 0.28, 1)
 
 [resource]
-default_font = ExtResource("1_silk")
+default_font = ExtResource("1_body")
 default_font_size = 16
 Button/colors/font_color = Color(0.93, 0.86, 0.72, 1)
 Button/colors/font_focus_color = Color(0.98, 0.94, 0.84, 1)
 Button/colors/font_hover_color = Color(0.98, 0.94, 0.84, 1)
 Button/colors/font_pressed_color = Color(0.78, 0.62, 0.28, 1)
+Button/fonts/font = ExtResource("2_bold")
 Button/styles/disabled = SubResource("button")
 Button/styles/focus = SubResource("hover")
 Button/styles/hover = SubResource("hover")
@@ -77,12 +79,14 @@ Button/styles/pressed = SubResource("pressed")
 CheckButton/colors/font_color = Color(0.93, 0.86, 0.72, 1)
 CheckButton/colors/font_hover_color = Color(0.98, 0.94, 0.84, 1)
 CheckButton/colors/font_pressed_color = Color(0.78, 0.62, 0.28, 1)
+CheckButton/fonts/font = ExtResource("2_bold")
 HSlider/styles/grabber_area = SubResource("track")
 HSlider/styles/grabber_area_highlight = SubResource("hover")
 HSlider/styles/slider = SubResource("track")
 Label/colors/font_color = Color(0.93, 0.86, 0.72, 1)
 OptionButton/colors/font_color = Color(0.93, 0.86, 0.72, 1)
 OptionButton/colors/font_hover_color = Color(0.98, 0.94, 0.84, 1)
+OptionButton/fonts/font = ExtResource("2_bold")
 OptionButton/styles/focus = SubResource("hover")
 OptionButton/styles/hover = SubResource("hover")
 OptionButton/styles/normal = SubResource("button")

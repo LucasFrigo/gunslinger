@@ -1,18 +1,24 @@
 extends Node
-## Autoload. After a lethal hit the dead player orbits the corpse. The winner
-## keeps control. Both then watch the replay: killer's eyes until the death,
-## then the same corpse orbit. Fire / trigger skips the clip onto that orbit.
-## In 1v1 either peer's skip applies to both.
+## Autoload. After the final lethal hit the dead orbit the victim's corpse and the
+## living keep control. Everyone then watches the replay: killer's eyes until the
+## death, then the same corpse orbit. Fire / trigger skips the clip onto that orbit.
+## In MP any peer's skip applies to all.
+## MP: a duelist who goes down while the duel goes on spectates the living from the
+## same orbit camera (SPECTATE, local only) until that final hit.
 
 signal trailing_started
 signal skipped
 
-enum Phase { IDLE, FLYING, ORBIT, PLAYBACK, TRAILING }
+enum Phase { IDLE, FLYING, ORBIT, PLAYBACK, TRAILING, SPECTATE }
 
 const ORBIT_RADIUS := 3.2
 const ORBIT_PITCH := 0.28
 const CLIP_WAIT := 8.0
 const WORLD_MASK := 0b1000101
+const REPLAY_SHADOW_COLOR := Color(0.55, 0.28, 0.14)
+const REPLAY_SHADOW_PX := 4.0
+## Seconds the VR headset shows who is being watched after the spectate target changes.
+const SPECTATE_LABEL_SEC := 2.5
 
 var phase: int = Phase.IDLE
 
@@ -42,6 +48,16 @@ var _stashed: Array = []
 var _sting: AudioStreamPlayer
 var _sting_played := false
 var _replay_label: Label3D
+var _spectate_label: Label3D
+## Actor ids whose body retraces its own fall in the clip: the victim, plus every NPC
+## that died inside the clip (SP with several NPCs).
+var _retraced: Array[int] = []
+## SPECTATE: the actor id on the orbit pivot. The local id while the camera is on the
+## own corpse.
+var _spectate_target := -1
+var _spectate_killer := -1
+## SPECTATE: still on the own corpse, before the first move to a living duelist.
+var _spectate_holding := false
 
 
 func _ready() -> void:
@@ -49,38 +65,59 @@ func _ready() -> void:
 	set_process(false)
 
 
+## The final-kill sequence is running. Spectating a live duel is not part of it.
 func is_active() -> bool:
-	return phase != Phase.IDLE
+	return phase != Phase.IDLE and phase != Phase.SPECTATE
 
 
-## The dead player is on the corpse orbit. The winner keeps their own camera
-## except during the fly-along and the replay, which both watch.
+func is_spectating() -> bool:
+	return phase == Phase.SPECTATE
+
+
+## The actor id being watched, the local one while the camera is on the own corpse.
+## -1 when not spectating.
+func spectate_target() -> int:
+	return _spectate_target if phase == Phase.SPECTATE else -1
+
+
+## The dead are on the corpse orbit or spectating. The living keep their own camera
+## except during the fly-along and the replay, which everyone watches.
 func blocks_combat() -> bool:
 	if phase == Phase.IDLE:
 		return false
+	if phase == Phase.ORBIT or phase == Phase.TRAILING:
+		return _local_is_down()
+	return true
+
+
+## NPCs hold still for the fly-along and the replay. Single player: also while the dead
+## player is on the orbit (`DuelManager.survivors_fighting` lifts that for the survivors).
+## A dead or spectating host does not stop the NPCs it runs.
+func blocks_npcs() -> bool:
 	if phase == Phase.FLYING or phase == Phase.PLAYBACK:
 		return true
+	if phase == Phase.IDLE or phase == Phase.SPECTATE or NetworkManager.is_active():
+		return false
 	return _local_is_victim()
 
 
-## Drop remote pose packets while that body is being driven by the clip,
-## and while the remote player is the corpse (their headset must not turn it).
-func blocks_remote_pose() -> bool:
-	if phase == Phase.IDLE:
-		return false
+## Drop `slot`'s pose packets while its body is being driven by the clip, and once it
+## is a corpse or out (that player's headset must not turn it).
+func blocks_remote_pose(slot: int) -> bool:
 	if phase == Phase.PLAYBACK:
 		return true
-	return not _local_is_victim()
+	var avatar := GameManager.actor_node(slot) as RemoteAvatar
+	return avatar != null and avatar.is_dead()
 
 
-## Freeze the local body into the recording. The winner stays live once the
+## Freeze the local body into the recording. The living stay live once the
 ## fly-along is over so their orbit-time movement can be sampled.
 func locks_recorded_body() -> bool:
 	if phase == Phase.IDLE:
 		return false
-	if phase == Phase.FLYING or phase == Phase.PLAYBACK:
-		return true
-	return _local_is_victim()
+	if phase == Phase.ORBIT or phase == Phase.TRAILING:
+		return _local_is_down()
+	return true
 
 
 func blocks_look() -> bool:
@@ -92,10 +129,10 @@ func blocks_look() -> bool:
 func consumes_look() -> bool:
 	if get_tree().paused or GameManager.is_pause_open():
 		return false
-	if _in_replay_trail():
+	if phase == Phase.SPECTATE or _in_replay_trail():
 		return true
 	if phase == Phase.ORBIT or phase == Phase.TRAILING:
-		return _local_is_victim()
+		return _local_is_down()
 	return false
 
 
@@ -105,7 +142,7 @@ func can_skip() -> bool:
 	if phase == Phase.FLYING or phase == Phase.PLAYBACK:
 		return true
 	if phase == Phase.ORBIT:
-		return _local_is_victim()
+		return _local_is_down()
 	return false
 
 
@@ -113,7 +150,9 @@ func wants_camera() -> bool:
 	return phase == Phase.FLYING
 
 
+## The final kill. Takes over from SPECTATE.
 func start_sequence() -> void:
+	end_spectate()
 	if phase != Phase.IDLE:
 		return
 	_trailing_emitted = false
@@ -137,10 +176,10 @@ func take_camera(camera: Camera3D, restore_camera: Camera3D, spectator: XROrigin
 	_restore_xr_camera = restore_xr_camera
 	_hmd_ref = hmd_ref
 	_hmd_ref_valid = hmd_ref_valid
-	if _local_is_victim():
+	if _local_is_down():
 		_enter_orbit()
 		return
-	# Winner keeps first person. Drop the fly-along camera.
+	# The living keep first person. Drop the fly-along camera.
 	if is_instance_valid(camera):
 		camera.current = false
 		camera.queue_free()
@@ -172,6 +211,55 @@ func request_skip() -> void:
 	ReplayBuffer.request_skip()
 
 
+## MP, local only: the local duelist went down and the duel goes on. `hold_on_corpse`
+## (a kill) orbits the own corpse for `death_cam_hold` seconds, then moves to `killer_id`
+## if that duelist still stands, else to the next living one. Without it (a foul) the
+## camera goes straight to the next living one. Never synced.
+func start_spectate(killer_id: int, hold_on_corpse: bool) -> void:
+	if phase != Phase.IDLE or not GameManager.duel.local_down():
+		return
+	phase = Phase.SPECTATE
+	_hold = 0.0
+	_spectate_killer = killer_id
+	_spectate_holding = hold_on_corpse
+	_spectate_target = GameManager.local_actor_id()
+	set_process(true)
+	# The orbit starts behind where the player was looking.
+	var behind := Vector3.BACK
+	var player := GameManager.local_player
+	if is_instance_valid(player) and player.rig != null:
+		behind = player.rig.get_head_transform().basis.z
+	_ensure_camera()
+	_radius = ORBIT_RADIUS
+	_pitch = ORBIT_PITCH
+	_yaw = atan2(behind.x, behind.z)
+	if not hold_on_corpse:
+		_leave_own_corpse()
+	_apply_orbit()
+
+
+## Fire / trigger while spectating: the next living duelist, any side, wrapping. On the
+## own corpse it ends the hold early.
+func cycle_spectate() -> void:
+	if phase != Phase.SPECTATE or GameManager.is_pause_open():
+		return
+	if _spectate_holding:
+		_leave_own_corpse()
+	else:
+		_spectate_move(_next_spectate(_spectate_target))
+
+
+## Hands the view back to the player's own camera. The final kill calls this before its
+## fly-along starts (`DuelManager._mp_finish`), since that restores the camera it finds.
+func end_spectate() -> void:
+	if phase != Phase.SPECTATE:
+		return
+	_clear_spectate()
+	_teardown_camera()
+	phase = Phase.IDLE
+	set_process(false)
+
+
 func skip_to_trailing() -> void:
 	if phase != Phase.FLYING and phase != Phase.ORBIT and phase != Phase.PLAYBACK:
 		return
@@ -201,6 +289,7 @@ func add_stick(stick: Vector2, delta: float) -> void:
 func stop() -> void:
 	_set_replay_tag(false)
 	_stop_sting()
+	_clear_spectate()
 	if phase == Phase.IDLE and _camera == null and _spectator == null:
 		_drop_listeners()
 		return
@@ -211,6 +300,7 @@ func stop() -> void:
 	_trailing_emitted = false
 	_orbit_saved = false
 	_stashed.clear()
+	_retraced.clear()
 	set_process(false)
 	_drop_listeners()
 
@@ -232,7 +322,7 @@ func _process(delta: float) -> void:
 				_enter_orbit()
 		Phase.ORBIT:
 			_hold += real_delta
-			if _local_is_victim():
+			if _local_is_down():
 				_apply_orbit()
 			var hold := _tune("death_cam_hold", 2.0)
 			if _hold >= hold and ReplayBuffer.ready_to_play():
@@ -242,14 +332,95 @@ func _process(delta: float) -> void:
 		Phase.PLAYBACK:
 			_advance_playback(real_delta)
 		Phase.TRAILING:
-			if _local_is_victim():
+			if _local_is_down():
 				_apply_orbit()
+		Phase.SPECTATE:
+			_hold += real_delta
+			if _spectate_holding:
+				if _hold >= _tune("death_cam_hold", 2.0):
+					_leave_own_corpse()
+			elif not _can_spectate(_spectate_target):
+				# The watched duelist died, fouled out, or left.
+				_spectate_move(_next_spectate(_spectate_target))
+			_apply_orbit()
+
+
+## `actor_id` is another duelist still in the duel, with a body on this machine.
+func _can_spectate(actor_id: int) -> bool:
+	return actor_id != GameManager.local_actor_id() and GameManager.duel.slot_alive(actor_id) \
+			and is_instance_valid(ReplayBuffer.actor_node(actor_id))
+
+
+## The next actor id after `from` that can be watched, wrapping back to `from` itself.
+## -1 when nobody can.
+func _next_spectate(from: int) -> int:
+	var count := ReplayBuffer.actor_count()
+	for step in range(1, count + 1):
+		var actor_id := posmod(from + step, count)
+		if _can_spectate(actor_id):
+			return actor_id
+	return -1
+
+
+func _leave_own_corpse() -> void:
+	_spectate_holding = false
+	_spectate_move(_spectate_killer if _can_spectate(_spectate_killer) \
+			else _next_spectate(_spectate_target))
+
+
+## Puts the orbit on `actor_id` and names it. -1 (nobody left to watch) is the own corpse.
+func _spectate_move(actor_id: int) -> void:
+	var local := GameManager.local_actor_id()
+	if actor_id < 0:
+		actor_id = local
+	if actor_id == _spectate_target:
+		return
+	_spectate_target = actor_id
+	_show_spectate_label("" if actor_id == local \
+			else tr("HUD_SPECTATING") % GameManager.duel.slot_name(actor_id))
+
+
+## Flat: a corner label that stays. VR: a tag on the spectator camera when the target changes.
+func _show_spectate_label(text: String) -> void:
+	if GameManager.is_vr:
+		_show_vr_spectate_tag(text)
+	elif GameManager.hud != null:
+		GameManager.hud.set_spectate_label(text)
+
+
+## The spectator view is its own XR origin, so a message on the player's rig is never in
+## it: the tag hangs on that camera, as the REPLAY tag does, for `SPECTATE_LABEL_SEC`.
+func _show_vr_spectate_tag(text: String) -> void:
+	_hide_vr_spectate_tag()
+	if text.is_empty() or not is_instance_valid(_spectator_cam):
+		return
+	var label := _vr_tag(text)
+	_spectate_label = label
+	_spectator_cam.add_child(label)
+	get_tree().create_timer(SPECTATE_LABEL_SEC, true, false, true).timeout.connect(func() -> void:
+		if _spectate_label == label:
+			_hide_vr_spectate_tag())
+
+
+func _hide_vr_spectate_tag() -> void:
+	if _spectate_label != null and is_instance_valid(_spectate_label):
+		_spectate_label.queue_free()
+	_spectate_label = null
+
+
+func _clear_spectate() -> void:
+	_spectate_target = -1
+	_spectate_killer = -1
+	_spectate_holding = false
+	_hide_vr_spectate_tag()
+	if GameManager.hud != null:
+		GameManager.hud.set_spectate_label("")
 
 
 func _enter_orbit() -> void:
 	phase = Phase.ORBIT
 	_hold = 0.0
-	if not _local_is_victim():
+	if not _local_is_down():
 		_teardown_camera()
 		return
 	_ensure_camera()
@@ -263,6 +434,13 @@ func _begin_playback() -> void:
 	_saved_radius = _radius
 	_orbit_saved = true
 	_stash_live()
+	_retraced = _corpse_ids()
+	for actor_id in _retraced:
+		var body := _body_of(actor_id)
+		if body != null:
+			body.corpse_replay_begin()
+	for body in _actor_bodies():
+		body.chunks_replay_begin(ReplayBuffer.clip_begin())
 	Bullet.clear_all()
 	_sting_played = false
 	phase = Phase.PLAYBACK
@@ -302,14 +480,20 @@ func _enter_trailing() -> void:
 	_set_replay_tag(false)
 	if not _stashed.is_empty():
 		_restore_stash()
-	elif phase == Phase.FLYING and _local_is_victim():
+	elif phase == Phase.FLYING and _local_is_down():
 		_radius = ORBIT_RADIUS
 		_pitch = ORBIT_PITCH
 		_yaw = 0.6
 	# After this frame's IK, so the stashed death pose is the one that sticks.
 	_freeze_replay_bodies()
+	for actor_id in _corpse_ids():
+		var body := _body_of(actor_id)
+		if body != null:
+			body.corpse_hold_final.call_deferred()
+	for body in _actor_bodies():
+		body.chunks_hold_final()
 	phase = Phase.TRAILING
-	if _local_is_victim():
+	if _local_is_down():
 		_ensure_camera()
 		_apply_orbit()
 	else:
@@ -326,9 +510,22 @@ func _apply_playback_frame(t: float) -> void:
 		var pose: Dictionary = actors[i]
 		if int(pose.get("flags", 0)) & ReplayBuffer.PRESENT == 0:
 			continue
+		# An NPC that died before the clip began stays the corpse it is.
+		if i != ReplayBuffer.victim_id and not _retraced.has(i) and ReplayBuffer.death_time_of(i) >= 0.0:
+			continue
 		var node := ReplayBuffer.actor_node(i)
 		if is_instance_valid(node) and node.has_method("apply_replay_pose"):
 			node.apply_replay_pose(pose)
+	# From each death on, that body's recorded fall plays on the clip clock.
+	for actor_id in _retraced:
+		var died_at := _death_time_of(actor_id)
+		if died_at >= 0.0 and t >= died_at:
+			var body := _body_of(actor_id)
+			if body != null:
+				body.corpse_replay_at(t - died_at)
+	# Every actor's chunks pop on the clip clock, the killer's included.
+	for body in _actor_bodies():
+		body.chunks_replay_at(t)
 
 
 ## Killer's eyes through the shot, then the corpse orbit for the rest of the clip.
@@ -348,15 +545,18 @@ func _in_replay_trail_at(t: float) -> bool:
 
 
 func _local_is_victim() -> bool:
-	var host_side := not NetworkManager.is_active() or NetworkManager.is_host()
-	if ReplayBuffer.victim_id == ReplayBuffer.ACTOR_HOST:
-		return host_side
-	return not host_side
+	return ReplayBuffer.victim_id == GameManager.local_actor_id()
+
+
+## The local view belongs on the corpse orbit: the final victim, or (MP) a duelist who
+## was killed or fouled out earlier in that duel.
+func _local_is_down() -> bool:
+	return _local_is_victim() or GameManager.duel.local_down()
 
 
 func _stash_live() -> void:
 	_stashed.clear()
-	for actor_id in [ReplayBuffer.ACTOR_HOST, ReplayBuffer.ACTOR_OTHER]:
+	for actor_id in ReplayBuffer.actor_count():
 		var node := ReplayBuffer.actor_node(actor_id)
 		if node is Player:
 			_stashed.append((node as Player).capture_live_replay_pose())
@@ -379,7 +579,7 @@ func _restore_stash() -> void:
 
 
 func _freeze_replay_bodies() -> void:
-	for actor_id in [ReplayBuffer.ACTOR_HOST, ReplayBuffer.ACTOR_OTHER]:
+	for actor_id in ReplayBuffer.actor_count():
 		var node := ReplayBuffer.actor_node(actor_id)
 		if is_instance_valid(node) and node is Player:
 			(node as Player).freeze_replay_body.call_deferred()
@@ -388,11 +588,24 @@ func _freeze_replay_bodies() -> void:
 func _unlock_winner() -> void:
 	if ReplayBuffer.killer_id == ReplayBuffer.victim_id:
 		return
-	var winner_id := ReplayBuffer.ACTOR_OTHER if ReplayBuffer.victim_id == ReplayBuffer.ACTOR_HOST \
-			else ReplayBuffer.ACTOR_HOST
-	var winner := ReplayBuffer.actor_node(winner_id)
-	if is_instance_valid(winner) and winner.has_method("clear_replay_pose"):
-		winner.clear_replay_pose()
+	_unlock_survivors()
+
+
+## Everyone still alive but the victim gets control of their gun back. The dead (NPC,
+## player, or avatar) keep their held guns until `stop()`, like the victim.
+func _unlock_survivors() -> void:
+	for actor_id in ReplayBuffer.actor_count():
+		var node := ReplayBuffer.actor_node(actor_id)
+		if actor_id == ReplayBuffer.victim_id or not is_instance_valid(node) \
+				or not node.has_method("clear_replay_pose"):
+			continue
+		if node is DuelistAI and not (node as DuelistAI).is_alive():
+			continue
+		if node is Player and not (node as Player).alive:
+			continue
+		if node is RemoteAvatar and (node as RemoteAvatar).is_dead():
+			continue
+		node.clear_replay_pose()
 
 
 ## Same full-speed sting as the live kill. Replay slow-mo does not drag it.
@@ -426,18 +639,32 @@ func _show_vr_replay_tag() -> void:
 		_replay_label.visible = true
 		return
 	_hide_vr_replay_tag()
-	_replay_label = Label3D.new()
-	_replay_label.text = "REPLAY"
-	_replay_label.font_size = 48
-	_replay_label.pixel_size = 0.0018
-	_replay_label.outline_size = 12
-	_replay_label.modulate = Color(0.95, 0.88, 0.72)
-	_replay_label.no_depth_test = true
-	_replay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_replay_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	# Upper right of the headset view, same idea as the flat HUD corner.
-	_replay_label.position = Vector3(0.55, 0.28, -1.4)
+	_replay_label = _vr_tag(tr("HUD_REPLAY"))
 	view.add_child(_replay_label)
+
+
+## A title-font line in the upper right of a headset view, same idea as the flat HUD corner.
+func _vr_tag(text: String) -> Label3D:
+	var label := Label3D.new()
+	label.text = text
+	label.font = UiFonts.TITLE
+	label.font_size = 48
+	label.pixel_size = 0.0018
+	label.outline_size = 12
+	label.modulate = Color(0.95, 0.88, 0.72)
+	label.no_depth_test = true
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	label.position = Vector3(0.55, 0.28, -1.4)
+	# Label3D has no drop shadow: a rust copy offset down-right and drawn first.
+	var shadow := label.duplicate() as Label3D
+	shadow.modulate = REPLAY_SHADOW_COLOR
+	shadow.outline_modulate = REPLAY_SHADOW_COLOR
+	shadow.render_priority = -2
+	shadow.outline_render_priority = -3
+	shadow.position = Vector3(REPLAY_SHADOW_PX, -REPLAY_SHADOW_PX, -1.0) * label.pixel_size
+	label.add_child(shadow)
+	return label
 
 
 func _hide_vr_replay_tag() -> void:
@@ -510,7 +737,7 @@ func _spawn_replay_shot(shot: Dictionary, rate: float) -> void:
 
 func _seed_orbit_from_camera() -> void:
 	var eye := _current_eye_origin()
-	var pivot := _chest()
+	var pivot := _chest(_pivot_id())
 	var offset := eye - pivot
 	if offset.length_squared() < 0.04:
 		_radius = ORBIT_RADIUS
@@ -525,7 +752,7 @@ func _seed_orbit_from_camera() -> void:
 
 func _apply_orbit() -> void:
 	_ensure_camera()
-	var pivot := _chest()
+	var pivot := _chest(_pivot_id())
 	var cp := cos(_pitch)
 	var offset := Vector3(sin(_yaw) * cp, sin(_pitch), cos(_yaw) * cp) * _radius
 	var eye := pivot + offset
@@ -535,8 +762,50 @@ func _apply_orbit() -> void:
 	_place_locked(xf)
 
 
-func _chest() -> Vector3:
-	var node := ReplayBuffer.actor_node(ReplayBuffer.victim_id)
+## Every recorded actor's mannequin.
+func _actor_bodies() -> Array[DummyBody]:
+	var bodies: Array[DummyBody] = []
+	for actor_id in ReplayBuffer.actor_count():
+		var body := _body_of(actor_id)
+		if body != null:
+			bodies.append(body)
+	return bodies
+
+
+func _body_of(actor_id: int) -> DummyBody:
+	var node := ReplayBuffer.actor_node(actor_id)
+	if is_instance_valid(node) and node.has_method("corpse_body"):
+		return node.corpse_body()
+	return null
+
+
+## Clip time `actor_id` died at, or -1. The victim's time also arrives over the wire in MP.
+func _death_time_of(actor_id: int) -> float:
+	if actor_id == ReplayBuffer.victim_id:
+		return ReplayBuffer.death_time
+	return ReplayBuffer.death_time_of(actor_id)
+
+
+## The victim, then every other actor that died inside the clip.
+func _corpse_ids() -> Array[int]:
+	var ids: Array[int] = [ReplayBuffer.victim_id]
+	for actor_id in ReplayBuffer.death_times:
+		if actor_id != ReplayBuffer.victim_id and ReplayBuffer.death_time_of(actor_id) >= ReplayBuffer.clip_begin():
+			ids.append(actor_id)
+	return ids
+
+
+## The actor the orbit turns around: the spectated one, else the final victim.
+func _pivot_id() -> int:
+	return _spectate_target if phase == Phase.SPECTATE else ReplayBuffer.victim_id
+
+
+## Chest height of `actor_id`: its corpse once it has fallen, else its standing body.
+func _chest(actor_id: int) -> Vector3:
+	var node := ReplayBuffer.actor_node(actor_id)
+	var body := _body_of(actor_id)
+	if body != null and body.has_corpse():
+		return body.corpse_pivot()
 	if node is Player:
 		return (node as Player).get_head_position() + Vector3.DOWN * 0.45
 	if node is RemoteAvatar:
@@ -555,7 +824,7 @@ func _current_eye_origin() -> Vector3:
 		return _camera.global_position
 	if is_instance_valid(_spectator_cam):
 		return _spectator_cam.global_position
-	return _chest() + Vector3(1.6, 1.4, 2.4)
+	return _chest(_pivot_id()) + Vector3(1.6, 1.4, 2.4)
 
 
 func _place_locked(desired: Transform3D) -> void:
@@ -622,10 +891,12 @@ func _teardown_camera() -> void:
 
 
 func _release_actors() -> void:
-	for actor_id in [ReplayBuffer.ACTOR_HOST, ReplayBuffer.ACTOR_OTHER]:
+	for actor_id in ReplayBuffer.actor_count():
 		var node := ReplayBuffer.actor_node(actor_id)
 		if is_instance_valid(node) and node.has_method("clear_replay_pose"):
 			node.clear_replay_pose()
+	for body in _actor_bodies():
+		body.chunks_hold_final()
 
 
 func _clear_replay_fx() -> void:

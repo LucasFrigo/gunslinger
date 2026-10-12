@@ -45,6 +45,7 @@ Check when the placeholder is replaced. Call sites in parentheses.
 | [ ] | `whizz` | `whizz.ogg` | Bullet near-miss (`ImpactFeedback.near_miss`) |
 | [ ] | `near_miss_whoosh` | `near_miss_whoosh.ogg` | Soft layer under `whizz` (same call, −4 dB) |
 | [ ] | `impact_flesh` | `impact_flesh.ogg` | Body hit (any region) |
+| [ ] | `flesh_chunk` | `flesh_chunk.ogg` | A hit knocks a chunk out of a body (`ImpactFeedback.flesh_chunk`, spatial, plays with `impact_flesh`) |
 | [ ] | `impact_world` | `impact_world.ogg` | Environment hit |
 | [ ] | `ricochet` | `ricochet.ogg` | ~35% of world hits, quieter tick |
 | [ ] | `hurt` | `hurt.ogg` | Local player took a hit (`player_hurt`; 2D, not spatial) |
@@ -113,6 +114,7 @@ Do **not** record live gunfire for `gunshot`. Build it from a licensed crack (li
 | `holster` | Belt, jacket, leather bag, wallet against jeans |
 | `gun_catch` / `gun_drop` | Tool clack on a table (sharp take + a duller take) |
 | `impact_world` | Fist or hammer into dirt, sandbag, dry wood, brick — the hit, not the room |
+| `flesh_chunk` | Low wet tear, a thick cloth rip with a squelch. Longer and duller than `impact_flesh` |
 | `impact_flesh` / `hurt` | Wet towel slap, cabbage/melon, leather jacket punch. Keep it short |
 | `ricochet` | Spoon on a steel bowl, then pitch up |
 | `whizz` / `near_miss_whoosh` | Stick or jacket swung past the phone, then pitch/stretch. Ableton noise is also fine |

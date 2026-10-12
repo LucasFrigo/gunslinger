@@ -1,17 +1,22 @@
 extends Node
-## Autoload. Owns the active NetworkTransport (ENet LAN or Steam) and relays
-## fast-path gameplay traffic (poses, shots). Gameplay code is
+## Autoload. Owns the active NetworkTransport (ENet LAN or Steam), the lobby
+## roster, and relays fast-path gameplay traffic (poses, shots). Gameplay code is
 ## transport-agnostic: everything goes through Godot's MultiplayerAPI.
 
 signal session_started(as_host: bool)
 signal session_ended(reason: String)
 signal peer_joined(peer_id: int)
 signal peer_left(peer_id: int)
+## The roster was edited (host) or a sync arrived (client).
+signal roster_changed
 signal lan_hosts_updated(hosts: Array)
 signal steam_lobbies_updated(lobbies: Array)
 signal network_error(message: String)
 signal pose_received(peer_id: int, head: Transform3D, left: Transform3D, right: Transform3D, flags: int, gun: Transform3D, hands: int, objects: int, prop: Transform3D, round_xf: Transform3D)
 signal shot_received(peer_id: int, origin: Vector3, direction: Vector3)
+## Client: the host's NPC in lobby slot `slot` moved or fired.
+signal npc_pose_received(slot: int, head: Transform3D, flags: int, gun: Transform3D)
+signal npc_shot_received(slot: int, origin: Vector3, direction: Vector3)
 
 const POSE_FLAG_GUN_DRAWN := 1
 const POSE_FLAG_GUN_COCKED := 2
@@ -26,24 +31,33 @@ const POSE_FLAG_GATE_OPEN := 256
 const POSE_FLAG_CHAMBER_SHIFT := 9
 const STEAM_REFRESH_SEC := 4.0
 const VERSION_HANDSHAKE_TIMEOUT := 3.0
+## A refused peer is dropped this long after the RPC that says why, and never in the
+## same frame: disconnecting clears the send queue, so the peer would only see the
+## link close and report a version mismatch.
+const KICK_GRACE_MSEC := 250
 
 var transport: NetworkTransport
 var discovery: LanDiscovery
 var session_active := false
+## The live lobby. The host edits it through the host_* calls; clients get `_roster_sync`.
+var roster := LobbyRoster.new()
 
 var _steam: SteamTransport
 var _steam_browse := false
 var _steam_refresh_accum := 0.0
 var _last_steam_lobbies: Array = []
 
-## Host: peer that connected but has not finished the version hello yet.
-var _pending_hello_peer_id := 0
-## Host: peer that passed the version check (1v1 — ignore further hellos).
-var _verified_peer_id := 0
-## Joiner: waiting for _version_ok / _version_reject after sending hello.
+## Host: peer id -> seconds left to send the version hello.
+var _pending_peers := {}
+## Host: peer id -> player name, for peers that passed the hello and hold a slot.
+var _verified_peers := {}
+## Joiner: waiting for _version_ok / _version_reject / _join_refused after sending hello.
 var _awaiting_version_ok := false
 var _handshake_timer := 0.0
-var _kick_peer_id := 0
+## Host: peer id -> [frame it was queued on, tick (msec) it may be dropped at].
+var _kick_peers := {}
+## Host: the `open/total` field last pushed to the LAN beacon and the Steam lobby.
+var _advertised_slots := ""
 
 
 func _ready() -> void:
@@ -77,11 +91,8 @@ func _process(delta: float) -> void:
 			_steam_refresh_accum = 0.0
 			refresh_steam_lobbies()
 	_tick_handshake(delta)
-	if _kick_peer_id != 0:
-		var kick_id := _kick_peer_id
-		_kick_peer_id = 0
-		if multiplayer.multiplayer_peer != null:
-			multiplayer.multiplayer_peer.disconnect_peer(kick_id)
+	_flush_kicks()
+	_refresh_advert()
 
 
 # -- Version helpers ---------------------------------------------------------
@@ -95,9 +106,9 @@ func versions_match(host_version: String, local_version: String) -> bool:
 
 
 func version_mismatch_message(host_version: String, local_version: String) -> String:
-	var host_label := host_version if not host_version.is_empty() else "unknown (older build)"
-	var local_label := local_version if not local_version.is_empty() else "unknown"
-	return "Cannot join: host is v%s, you are v%s." % [host_label, local_label]
+	var host_label := host_version if not host_version.is_empty() else tr("NET_UNKNOWN_OLD")
+	var local_label := local_version if not local_version.is_empty() else tr("NET_UNKNOWN")
+	return tr("NET_VERSION_MISMATCH") % [host_label, local_label]
 
 
 # -- Session queries ---------------------------------------------------------
@@ -118,6 +129,24 @@ func peer_count() -> int:
 
 func transport_kind() -> String:
 	return transport.kind() if transport != null else "none"
+
+
+## Steam persona on the Steam transport, the device name on LAN.
+func local_player_name() -> String:
+	var player_name := ""
+	if _steam != null and transport == _steam:
+		player_name = _steam.persona_name()
+	if player_name.is_empty():
+		player_name = _local_host_name()
+	return _clean_name(player_name)
+
+
+## Human slots a new player could take right now. None while a duel runs: the
+## lobby is joinable only between duels.
+func joinable_slots() -> int:
+	if not _is_lobby_host() or GameManager.duel.state != DuelManager.State.IDLE:
+		return 0
+	return roster.open_human_slots()
 
 
 func steam_available() -> bool:
@@ -146,7 +175,7 @@ func host_lan() -> Error:
 		var hint := error_string(err)
 		if OS.get_name() == "Android" and err == ERR_CANT_CREATE:
 			hint += " — APK missing INTERNET (re-export Quest 3 after enabling LAN permissions)"
-		network_error.emit("Could not host LAN game: %s" % hint)
+		network_error.emit(tr("NET_HOST_FAILED") % hint)
 		transport = null
 		return err
 	discovery.start_beacon(_local_host_name(), game_version())
@@ -168,7 +197,7 @@ func join_lan(ip: String) -> Error:
 	transport = ENetTransport.new(multiplayer)
 	var err := transport.join(address)
 	if err != OK:
-		network_error.emit("Could not join %s: %s" % [address, error_string(err)])
+		network_error.emit(tr("NET_JOIN_FAILED") % [address, error_string(err)])
 		transport = null
 	return err  # session starts after version handshake
 
@@ -190,7 +219,7 @@ func lan_addresses() -> PackedStringArray:
 
 func host_steam() -> Error:
 	if _steam == null:
-		network_error.emit("GodotSteam extension not found. See README.")
+		network_error.emit(tr("NET_NO_STEAM"))
 		return ERR_UNAVAILABLE
 	leave("switching session")
 	transport = _steam
@@ -202,7 +231,7 @@ func host_steam() -> Error:
 
 func join_steam(lobby_id: int) -> Error:
 	if _steam == null:
-		network_error.emit("GodotSteam extension not found. See README.")
+		network_error.emit(tr("NET_NO_STEAM"))
 		return ERR_UNAVAILABLE
 	for lobby in _last_steam_lobbies:
 		if int(lobby.get("id", 0)) != lobby_id:
@@ -246,7 +275,7 @@ func _on_steam_failed(reason: String) -> void:
 
 func invite_steam_friends() -> void:
 	if _steam == null or not session_active or transport != _steam or not _steam.is_lobby_host:
-		network_error.emit("Host a Steam lobby first, then invite.")
+		network_error.emit(tr("NET_HOST_FIRST"))
 		return
 	_steam.open_invite_overlay()
 
@@ -304,6 +333,13 @@ func _begin_session(as_host: bool) -> void:
 	if session_active:
 		return
 	session_active = true
+	# A joiner holds this placeholder until the host's first _roster_sync.
+	roster.reset(local_player_name() if as_host else "")
+	if as_host:
+		roster.scenario_index = GameManager.current_scenario_index
+	_advertised_slots = ""
+	_refresh_advert()
+	roster_changed.emit()
 	session_started.emit(as_host)
 
 
@@ -317,25 +353,19 @@ func _local_host_name() -> String:
 func _on_peer_connected(peer_id: int) -> void:
 	if not multiplayer.is_server():
 		return
-	if _steam != null and transport == _steam:
-		_steam.set_joinable(false)
-	if _verified_peer_id != 0:
-		return
-	_pending_hello_peer_id = peer_id
-	_handshake_timer = VERSION_HANDSHAKE_TIMEOUT
+	_pending_peers[peer_id] = VERSION_HANDSHAKE_TIMEOUT
 
 
 func _on_peer_disconnected(peer_id: int) -> void:
-	var was_verified := peer_id == _verified_peer_id
-	if peer_id == _pending_hello_peer_id:
-		_pending_hello_peer_id = 0
-		_handshake_timer = 0.0
-	if peer_id == _verified_peer_id:
-		_verified_peer_id = 0
-	if _steam != null and transport == _steam and session_active:
-		_steam.set_joinable(true)
-	if was_verified:
-		peer_left.emit(peer_id)
+	_pending_peers.erase(peer_id)
+	_kick_peers.erase(peer_id)
+	if not _verified_peers.has(peer_id):
+		return
+	_verified_peers.erase(peer_id)
+	# Read the duel state before peer_left: GameManager stops the duel on it.
+	roster.vacate_peer(peer_id, GameManager.duel.state != DuelManager.State.IDLE)
+	peer_left.emit(peer_id)
+	_sync_roster()
 
 
 func _on_connected_to_server() -> void:
@@ -344,7 +374,7 @@ func _on_connected_to_server() -> void:
 
 
 func _on_connection_failed() -> void:
-	network_error.emit("Connection failed.")
+	network_error.emit(tr("NET_CONN_FAILED"))
 	leave("connection failed")
 
 
@@ -357,18 +387,19 @@ func _on_server_disconnected() -> void:
 		return
 	if not session_active and transport == null:
 		return  # already cleaned up (e.g. version reject)
-	network_error.emit("Host disconnected.")
+	network_error.emit(tr("NET_HOST_DISCONNECTED"))
 	leave("host disconnected")
 
 
 # -- Version handshake -------------------------------------------------------
 
 func _clear_handshake_state() -> void:
-	_pending_hello_peer_id = 0
-	_verified_peer_id = 0
+	_pending_peers.clear()
+	_verified_peers.clear()
 	_awaiting_version_ok = false
 	_handshake_timer = 0.0
-	_kick_peer_id = 0
+	_kick_peers.clear()
+	_advertised_slots = ""
 
 
 func _start_joiner_handshake() -> void:
@@ -376,52 +407,87 @@ func _start_joiner_handshake() -> void:
 		return
 	_awaiting_version_ok = true
 	_handshake_timer = VERSION_HANDSHAKE_TIMEOUT
-	_version_hello.rpc_id(1, game_version())
+	_version_hello.rpc_id(1, game_version(), local_player_name())
 
 
 func _tick_handshake(delta: float) -> void:
+	for peer_id: int in _pending_peers.keys():
+		_pending_peers[peer_id] -= delta
+		if _pending_peers[peer_id] > 0.0:
+			continue
+		_pending_peers.erase(peer_id)
+		_version_reject.rpc_id(peer_id, game_version())
+		_queue_kick(peer_id)
+		GameManager.show_message(
+				tr("NET_REJECT_UNKNOWN") % game_version(), 6.0)
 	if _handshake_timer <= 0.0:
 		return
 	_handshake_timer -= delta
 	if _handshake_timer > 0.0:
 		return
 	_handshake_timer = 0.0
-	if multiplayer.is_server() and _pending_hello_peer_id != 0:
-		var peer_id := _pending_hello_peer_id
-		_pending_hello_peer_id = 0
-		_version_reject.rpc_id(peer_id, game_version())
-		_kick_peer_id = peer_id
-		GameManager.show_message(
-				"Rejected challenger: version mismatch (host v%s, peer unknown / older build)."
-				% game_version(), 6.0)
-	elif _awaiting_version_ok:
+	if _awaiting_version_ok:
 		_awaiting_version_ok = false
 		network_error.emit(version_mismatch_message("", game_version()))
 		leave("version handshake timeout")
 
 
+func _queue_kick(peer_id: int) -> void:
+	_kick_peers[peer_id] = [Engine.get_process_frames(), Time.get_ticks_msec() + KICK_GRACE_MSEC]
+
+
+func _flush_kicks() -> void:
+	for peer_id: int in _kick_peers.keys():
+		var due: Array = _kick_peers[peer_id]
+		if Engine.get_process_frames() <= due[0] or Time.get_ticks_msec() < due[1]:
+			continue
+		_kick_peers.erase(peer_id)
+		var peer := multiplayer.multiplayer_peer
+		if peer != null and multiplayer.get_peers().has(peer_id):
+			peer.disconnect_peer(peer_id)
+
+
+## Host: tell `peer_id` why it cannot stay, then drop it.
+func _refuse(peer_id: int, reason_key: String) -> void:
+	_pending_peers.erase(peer_id)
+	_join_refused.rpc_id(peer_id, reason_key)
+	_queue_kick(peer_id)
+
+
+func _clean_name(player_name: String) -> String:
+	return player_name.strip_escapes().strip_edges().left(LobbyRoster.NAME_MAX)
+
+
 @rpc("any_peer", "call_remote", "reliable")
-func _version_hello(client_version: String) -> void:
+func _version_hello(client_version: String, player_name: String) -> void:
 	if not multiplayer.is_server():
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
-	if _verified_peer_id != 0:
+	if _verified_peers.has(peer_id) or _kick_peers.has(peer_id):
 		return
-	if _pending_hello_peer_id != 0 and peer_id != _pending_hello_peer_id:
+	_pending_peers.erase(peer_id)
+	if not versions_match(game_version(), client_version):
+		_version_reject.rpc_id(peer_id, game_version())
+		_queue_kick(peer_id)
+		var peer_label := client_version if not client_version.is_empty() else tr("NET_UNKNOWN_OLD")
+		GameManager.show_message(
+				tr("NET_REJECT_VERSION") % [game_version(), peer_label], 6.0)
 		return
-	_pending_hello_peer_id = 0
-	_handshake_timer = 0.0
-	if versions_match(game_version(), client_version):
-		_verified_peer_id = peer_id
-		_version_ok.rpc_id(peer_id)
-		peer_joined.emit(peer_id)
+	if GameManager.duel.state != DuelManager.State.IDLE:
+		_refuse(peer_id, "NET_REFUSED_DUEL")
 		return
-	_version_reject.rpc_id(peer_id, game_version())
-	_kick_peer_id = peer_id
-	var peer_label := client_version if not client_version.is_empty() else "unknown (older build)"
-	GameManager.show_message(
-			"Rejected challenger: version mismatch (host v%s, peer v%s)."
-			% [game_version(), peer_label], 6.0)
+	var slot := roster.assign_peer(peer_id, _clean_name(player_name))
+	if slot < 0:
+		_refuse(peer_id, "NET_REFUSED_FULL")
+		return
+	if str(roster.slots[slot]["name"]).is_empty():
+		roster.slots[slot]["name"] = tr("NET_PLAYER_N") % (slot + 1)
+	_verified_peers[peer_id] = roster.slots[slot]["name"]
+	_version_ok.rpc_id(peer_id)
+	# The roster goes out before peer_joined, so the joiner knows its slot when
+	# GameManager sends it to the waiting room.
+	_sync_roster()
+	peer_joined.emit(peer_id)
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -439,6 +505,200 @@ func _version_reject(host_version: String) -> void:
 	leave("version mismatch")
 
 
+## Host -> one peer: the lobby is full, a duel is running, or the host kicked it.
+## `reason_key` is a translation key. The host drops the peer after KICK_GRACE_MSEC.
+@rpc("authority", "call_remote", "reliable")
+func _join_refused(reason_key: String) -> void:
+	_awaiting_version_ok = false
+	_handshake_timer = 0.0
+	var reason := tr(reason_key)
+	network_error.emit(reason)
+	leave(reason)
+
+
+# -- Lobby roster --------------------------------------------------------------
+
+func _is_lobby_host() -> bool:
+	return session_active and multiplayer.is_server()
+
+
+## Host: push the roster to every verified peer and tell local listeners.
+func _sync_roster() -> void:
+	var data := roster.pack()
+	for peer_id: int in _verified_peers:
+		_roster_sync.rpc_id(peer_id, data)
+	roster_changed.emit()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _roster_sync(data: Dictionary) -> void:
+	if roster.unpack(data):
+		roster_changed.emit()
+
+
+## Pick a side in Teams. A client asks the host; the host applies its own. Ignored in
+## free-for-all. A pick may leave a side empty: START then refuses until one is filled.
+## During a duel it applies from the next one (the duel runs on its snapshot).
+func request_side(side: int) -> void:
+	if not session_active:
+		return
+	if multiplayer.is_server():
+		_apply_side(roster.local_slot(), side)
+	else:
+		_request_side.rpc_id(1, side)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_side(side: int) -> void:
+	if multiplayer.is_server():
+		_apply_side(roster.slot_of_peer(multiplayer.get_remote_sender_id()), side)
+
+
+func _apply_side(slot: int, side: int) -> void:
+	if roster.mode == LobbyRoster.Mode.TEAMS and roster.set_side(slot, side):
+		_sync_roster()
+
+
+## Host: keep the LAN beacon and the Steam lobby in step with the roster and the duel.
+func _refresh_advert() -> void:
+	if not _is_lobby_host():
+		return
+	var open := joinable_slots()
+	var slots_text := LobbyRoster.format_slots(open, roster.human_slots())
+	if slots_text == _advertised_slots:
+		return
+	_advertised_slots = slots_text
+	discovery.set_beacon_slots(slots_text)
+	if _steam != null and transport == _steam:
+		_steam.set_slots(slots_text)
+		_steam.set_joinable(open > 0)
+
+
+# Host API. The lobby UI and the autotests edit the roster only through these; each
+# returns false when refused and ends in a sync when applied.
+
+func host_set_slot_count(count: int) -> bool:
+	if not _is_lobby_host() or not roster.set_slot_count(count):
+		return false
+	_sync_roster()
+	return true
+
+
+func host_set_mode(mode: int) -> bool:
+	if not _is_lobby_host() or (mode != LobbyRoster.Mode.FFA and mode != LobbyRoster.Mode.TEAMS):
+		return false
+	roster.mode = mode
+	_sync_roster()
+	return true
+
+
+func host_set_scenario(scenario_index: int) -> bool:
+	if not _is_lobby_host() or scenario_index < 0 or scenario_index >= GameManager.SCENARIOS.size():
+		return false
+	roster.scenario_index = scenario_index
+	# The waiting room is the arena, so a pick made there moves everyone now. A
+	# pick made during a duel applies from the next one.
+	if GameManager.duel.state == DuelManager.State.IDLE:
+		GameManager.duel.host_open_lobby()
+	_sync_roster()
+	return true
+
+
+## `kind` is OPEN or NPC. A slot a human holds is refused: kick first.
+func host_set_slot_kind(slot: int, kind: int) -> bool:
+	if not _is_lobby_host() or not roster.set_slot_kind(slot, kind):
+		return false
+	_sync_roster()
+	return true
+
+
+## `archetype` is an index into GameManager.ARCHETYPES, or LobbyRoster.ARCHETYPE_MIXED.
+func host_set_archetype(slot: int, archetype: int) -> bool:
+	if not _is_lobby_host() or archetype >= GameManager.ARCHETYPES.size() \
+			or not roster.set_archetype(slot, archetype):
+		return false
+	_sync_roster()
+	return true
+
+
+func host_set_npc_side(slot: int, side: int) -> bool:
+	if not _is_lobby_host() or slot < 0 or slot >= roster.slots.size() \
+			or roster.slots[slot]["kind"] != LobbyRoster.Kind.NPC or not roster.set_side(slot, side):
+		return false
+	_sync_roster()
+	return true
+
+
+## Between duels only (the waiting room or the rematch gap). The slot reopens.
+func host_kick(slot: int) -> bool:
+	if not _is_lobby_host() or slot <= 0 or slot >= roster.slots.size() \
+			or roster.slots[slot]["kind"] != LobbyRoster.Kind.HUMAN:
+		return false
+	var duel_state := GameManager.duel.state
+	if duel_state != DuelManager.State.IDLE and duel_state != DuelManager.State.RESOLUTION:
+		return false
+	var peer_id: int = roster.slots[slot]["peer_id"]
+	roster.open_slot(slot)
+	_verified_peers.erase(peer_id)
+	_refuse(peer_id, "NET_REFUSED_KICKED")
+	peer_left.emit(peer_id)
+	_sync_roster()
+	return true
+
+
+## A duel ended: one more win for each of `slots` (the winning side's).
+func host_add_wins(slots: Array[int]) -> bool:
+	if not _is_lobby_host():
+		return false
+	for slot in slots:
+		if slot >= 0 and slot < roster.slots.size():
+			roster.slots[slot]["wins"] += 1
+	_sync_roster()
+	return true
+
+
+## Translation key for why the host cannot start a duel now, or "" when it can.
+func start_refusal() -> String:
+	if not _is_lobby_host():
+		return "MSG_HOST_ONLY_RESET"
+	return roster_refusal()
+
+
+## Translation key for why the live roster cannot start a duel, or "" when it can. Any
+## peer can ask: a client knows the reason a rematch fell back to the waiting room.
+func roster_refusal() -> String:
+	if roster.open_human_slots() > 0:
+		return "MSG_LOBBY_NOT_FULL"
+	if not roster.can_start():
+		return "MSG_LOBBY_EMPTY_SIDE"
+	return ""
+
+
+## Start (or restart) the duel for everyone. Shows the reason and returns false when
+## the roster cannot start.
+func host_start() -> bool:
+	var refusal := start_refusal()
+	if not refusal.is_empty():
+		GameManager.show_message(tr(refusal), 3.0)
+		return false
+	# A peer still mid-handshake must not see the duel RPCs. Refuse it first: the
+	# reliable channel delivers this ahead of _mp_begin.
+	for peer_id: int in _pending_peers.keys():
+		_refuse(peer_id, "NET_REFUSED_DUEL")
+	GameManager.begin_mp_duel()
+	_sync_roster()
+	return true
+
+
+## Stop any duel and put everyone in the waiting room on the roster's arena.
+func host_back_to_lobby() -> bool:
+	if not _is_lobby_host():
+		return false
+	GameManager.duel.host_open_lobby()
+	_sync_roster()
+	return true
+
+
 # -- Fast-path relays --------------------------------------------------------
 
 func send_pose(head: Transform3D, left: Transform3D, right: Transform3D, flags: int,
@@ -451,7 +711,9 @@ func send_pose(head: Transform3D, left: Transform3D, right: Transform3D, flags: 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
 func _pose(head: Transform3D, left: Transform3D, right: Transform3D, flags: int,
 		gun: Transform3D, hands: int, objects: int, prop: Transform3D, round_xf: Transform3D) -> void:
-	pose_received.emit(multiplayer.get_remote_sender_id(), head, left, right, flags, gun, hands, objects, prop, round_xf)
+	var peer_id := multiplayer.get_remote_sender_id()
+	if _accepts_sender(peer_id):
+		pose_received.emit(peer_id, head, left, right, flags, gun, hands, objects, prop, round_xf)
 
 
 func send_shot(origin: Vector3, direction: Vector3) -> void:
@@ -461,4 +723,40 @@ func send_shot(origin: Vector3, direction: Vector3) -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func _shot(origin: Vector3, direction: Vector3) -> void:
-	shot_received.emit(multiplayer.get_remote_sender_id(), origin, direction)
+	var peer_id := multiplayer.get_remote_sender_id()
+	if _accepts_sender(peer_id):
+		shot_received.emit(peer_id, origin, direction)
+
+
+## Host: the pose of the NPC it runs in `slot`, for the clients' proxy. `flags` are the
+## POSE_FLAG_* bits `DuelistAI.capture_replay_pose` sets.
+func send_npc_pose(slot: int, head: Transform3D, flags: int, gun: Transform3D) -> void:
+	if _is_lobby_host() and peer_count() > 0:
+		_npc_pose.rpc(slot, head, flags, gun)
+
+
+## Receivers drop a slot that is not an NPC in the running duel's snapshot.
+@rpc("authority", "call_remote", "unreliable_ordered")
+func _npc_pose(slot: int, head: Transform3D, flags: int, gun: Transform3D) -> void:
+	if session_active:
+		npc_pose_received.emit(slot, head, flags, gun)
+
+
+## Host: the NPC in `slot` fired. Clients draw the tracer; the hit is the host's.
+func send_npc_shot(slot: int, origin: Vector3, direction: Vector3) -> void:
+	if _is_lobby_host() and peer_count() > 0:
+		_npc_shot.rpc(slot, origin, direction)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _npc_shot(slot: int, origin: Vector3, direction: Vector3) -> void:
+	if session_active:
+		npc_shot_received.emit(slot, origin, direction)
+
+
+## Poses and shots count only inside a session, and on the host only from a peer that
+## passed the handshake. Receivers then map the sender to its slot and drop the unknown.
+func _accepts_sender(peer_id: int) -> bool:
+	if not session_active:
+		return false
+	return not multiplayer.is_server() or _verified_peers.has(peer_id)

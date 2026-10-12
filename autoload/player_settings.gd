@@ -13,6 +13,7 @@ signal vr_source_captured(source: String)
 signal voice_changed
 signal audio_devices_changed
 signal eye_height_changed
+signal gore_changed
 
 ## Name AudioServer uses for "follow the OS default".
 const DEFAULT_DEVICE := "Default"
@@ -66,35 +67,38 @@ const DEFAULT_VR_BINDS := {
 }
 
 const VR_SOURCE_LABELS := {
-	"trigger_click": "Trigger",
-	"grip_click": "Grip",
-	"ax_button": "A / X",
-	"by_button": "B / Y",
-	"primary_click": "Stick Click",
-	"stick_down": "Stick Down",
+	"trigger_click": "BIND_SRC_TRIGGER",
+	"grip_click": "BIND_SRC_GRIP",
+	"ax_button": "BIND_SRC_AX",
+	"by_button": "BIND_SRC_BY",
+	"primary_click": "BIND_SRC_STICK_CLICK",
+	"stick_down": "BIND_SRC_STICK_DOWN",
 }
 
 const FLAT_ACTION_LABELS := {
-	"fire": "Fire",
-	"draw_toggle": "Draw / Holster",
-	"cock_hammer": "Cock",
-	"reload": "Reload",
-	"prop_radial": "Prop Radial",
-	"prop_fire": "Cigarette / Prop",
-	"voice_mute": "Mute Mic",
-	"voice_ptt": "Push To Talk",
+	"fire": "BIND_FIRE",
+	"draw_toggle": "BIND_DRAW_HOLSTER",
+	"cock_hammer": "BIND_COCK",
+	"reload": "BIND_RELOAD",
+	"prop_radial": "BIND_PROP_RADIAL",
+	"prop_fire": "BIND_PROP_FIRE",
+	"voice_mute": "BIND_VOICE_MUTE",
+	"voice_ptt": "BIND_VOICE_PTT",
 }
 
 const VR_ACTION_LABELS := {
-	"fire": "Fire",
-	"grip": "Grip",
-	"cock": "Cock",
-	"trick_shot": "Trick Shot",
-	"gate": "Gate",
-	"prop_radial": "Prop Radial",
-	"pause": "Pause",
+	"fire": "BIND_FIRE",
+	"grip": "BIND_GRIP",
+	"cock": "BIND_COCK",
+	"trick_shot": "BIND_TRICK_SHOT",
+	"gate": "BIND_GATE",
+	"prop_radial": "BIND_PROP_RADIAL",
+	"pause": "BIND_PAUSE",
 }
 
+## UI locale. Empty follows the OS / Quest locale; set `language` under [general]
+## in user://settings.cfg to force one.
+var language := ""
 var master_volume := 1.0
 ## Incoming proximity voice only (the Voice bus), not gunshots.
 var voice_volume := 1.0
@@ -110,6 +114,8 @@ var output_device := DEFAULT_DEVICE
 var window_mode: int = WindowModeSetting.WINDOWED
 var window_width := 1280
 var window_height := 720
+## Hit chunks: craters, gibs, and the chunk sound. Local to this viewer.
+var gore_enabled := true
 
 ## Headset height above the player root, in centimeters. Not stature.
 ## `eye_height_set` stays false until Calibrate or an edit, so a fresh install
@@ -122,6 +128,28 @@ var eye_height_set := false
 var eye_height_imperial := false
 ## 0 is raw wrist tracking. 1 is full slow-hand damping. Same default on Quest and PCVR.
 var aim_steady := 0.5
+## Last free-duel pick: arena index, enemy index (ARCHETYPES.size() is Mixed), opponent count.
+var free_duel_scenario := 0
+var free_duel_enemy := 0
+var free_duel_count := 1
+
+## Horde's own remembered arena pick, separate from the free-duel row.
+var horde_scenario := 0
+## The last host setup (`[lobby]`): slot count, mode, arena, and per slot after the host's
+## its kind (OPEN or NPC), archetype, and side. Humans, names, and wins are never saved.
+## The per-slot arrays hold LobbyRoster.MAX_SLOTS entries; index 0 (the host) is unused.
+var lobby_slot_count := LobbyRoster.MIN_SLOTS
+var lobby_mode: int = LobbyRoster.Mode.FFA
+var lobby_scenario := 0
+var lobby_kinds: Array[int] = [LobbyRoster.Kind.OPEN, LobbyRoster.Kind.OPEN, LobbyRoster.Kind.OPEN, LobbyRoster.Kind.OPEN]
+var lobby_archetypes: Array[int] = [LobbyRoster.ARCHETYPE_MIXED, LobbyRoster.ARCHETYPE_MIXED, LobbyRoster.ARCHETYPE_MIXED, LobbyRoster.ARCHETYPE_MIXED]
+var lobby_sides: Array[int] = [0, 1, 0, 1]
+## Best waves cleared and best score, each kept as a separate maximum.
+var horde_best_wave := 0
+var horde_best_score := 0
+var gauntlet_best_rung := 0
+var gauntlet_best_score := 0
+var gauntlet_cleared := false
 
 ## action StringName → source string (VR) or encoded event string (flat).
 var vr_binds: Dictionary = {}
@@ -184,6 +212,104 @@ func set_aim_steady(value: float) -> void:
 	_save_config()
 
 
+func set_free_duel_pick(scenario: int, enemy: int, count: int) -> void:
+	free_duel_scenario = _clamp_duel_scenario(scenario)
+	free_duel_enemy = _clamp_duel_enemy(enemy)
+	free_duel_count = _clamp_duel_count(count)
+	_save_config()
+
+
+func set_horde_scenario(scenario: int) -> void:
+	horde_scenario = _clamp_duel_scenario(scenario)
+	_save_config()
+
+
+## Remembers `roster`'s setup as the next host's. Slots past its size keep their last pick.
+func set_lobby_setup(roster: LobbyRoster) -> void:
+	lobby_slot_count = clampi(roster.slots.size(), LobbyRoster.MIN_SLOTS, LobbyRoster.max_slots())
+	lobby_mode = _clamp_lobby_mode(roster.mode)
+	lobby_scenario = _clamp_duel_scenario(roster.scenario_index)
+	for slot in range(1, mini(roster.slots.size(), LobbyRoster.MAX_SLOTS)):
+		var row := roster.slots[slot]
+		lobby_kinds[slot] = _clamp_lobby_kind(int(row["kind"]))
+		lobby_archetypes[slot] = _clamp_lobby_archetype(int(row["archetype"]))
+		lobby_sides[slot] = _clamp_lobby_side(int(row["side"]))
+	_save_config()
+
+
+## Replaces `roster` with the saved setup: the host alone in slot 0, no other human.
+func fill_lobby_setup(roster: LobbyRoster) -> void:
+	roster.reset()
+	roster.mode = lobby_mode
+	roster.scenario_index = lobby_scenario
+	roster.set_slot_count(lobby_slot_count)
+	for slot in range(1, roster.slots.size()):
+		roster.set_slot_kind(slot, lobby_kinds[slot])
+		roster.set_archetype(slot, lobby_archetypes[slot])
+		roster.set_side(slot, lobby_sides[slot])
+
+
+## Keeps each maximum independently. Returns true when either improved.
+func record_horde_run(waves_cleared: int, score: int) -> bool:
+	var improved := false
+	if waves_cleared > horde_best_wave:
+		horde_best_wave = waves_cleared
+		improved = true
+	if score > horde_best_score:
+		horde_best_score = score
+		improved = true
+	if improved:
+		_save_config()
+	return improved
+
+
+## Rungs cleared, score, and whether the whole ladder fell. Each kept
+## independently. Returns true when any improved.
+func record_gauntlet_run(rungs_cleared: int, score: int, cleared: bool) -> bool:
+	var improved := false
+	if rungs_cleared > gauntlet_best_rung:
+		gauntlet_best_rung = rungs_cleared
+		improved = true
+	if score > gauntlet_best_score:
+		gauntlet_best_score = score
+		improved = true
+	if cleared and not gauntlet_cleared:
+		gauntlet_cleared = true
+		improved = true
+	if improved:
+		_save_config()
+	return improved
+
+
+func _clamp_duel_scenario(value: int) -> int:
+	return clampi(value, 0, GameManager.SCENARIOS.size() - 1)
+
+
+func _clamp_duel_enemy(value: int) -> int:
+	return clampi(value, 0, GameManager.ARCHETYPES.size())
+
+
+func _clamp_duel_count(value: int) -> int:
+	return clampi(value, 1, GameManager.MAX_NPCS)
+
+
+func _clamp_lobby_mode(value: int) -> int:
+	return LobbyRoster.Mode.TEAMS if value == LobbyRoster.Mode.TEAMS else LobbyRoster.Mode.FFA
+
+
+## A saved slot is open for a human or an NPC; whoever filled it last is not remembered.
+func _clamp_lobby_kind(value: int) -> int:
+	return LobbyRoster.Kind.NPC if value == LobbyRoster.Kind.NPC else LobbyRoster.Kind.OPEN
+
+
+func _clamp_lobby_archetype(value: int) -> int:
+	return clampi(value, LobbyRoster.ARCHETYPE_MIXED, GameManager.ARCHETYPES.size() - 1)
+
+
+func _clamp_lobby_side(value: int) -> int:
+	return clampi(value, 0, LobbyRoster.SIDES - 1)
+
+
 func set_master_volume(value: float) -> void:
 	master_volume = clampf(value, 0.0, 1.0)
 	apply_audio()
@@ -211,6 +337,14 @@ func set_voice_ptt_enabled(value: bool) -> void:
 	voice_ptt_enabled = value
 	_save_config()
 	voice_changed.emit()
+
+
+func set_gore_enabled(value: bool) -> void:
+	if gore_enabled == value:
+		return
+	gore_enabled = value
+	_save_config()
+	gore_changed.emit()
 
 
 func set_voice_gate_cutoff(value: float) -> void:
@@ -374,28 +508,28 @@ func get_flat_bind_event(action: StringName) -> InputEvent:
 
 
 func vr_action_label(action: StringName) -> String:
-	return str(VR_ACTION_LABELS.get(String(action), String(action)))
+	return tr(str(VR_ACTION_LABELS.get(String(action), String(action))))
 
 
 func flat_action_label(action: StringName) -> String:
-	return str(FLAT_ACTION_LABELS.get(String(action), String(action)))
+	return tr(str(FLAT_ACTION_LABELS.get(String(action), String(action))))
 
 
 func vr_source_label(source: String) -> String:
-	return str(VR_SOURCE_LABELS.get(source, source))
+	return tr(str(VR_SOURCE_LABELS.get(source, source)))
 
 
 func flat_event_label(event: InputEvent) -> String:
 	if event is InputEventMouseButton:
 		match (event as InputEventMouseButton).button_index:
 			MOUSE_BUTTON_LEFT:
-				return "LMB"
+				return tr("BIND_MOUSE_LEFT")
 			MOUSE_BUTTON_RIGHT:
-				return "RMB"
+				return tr("BIND_MOUSE_RIGHT")
 			MOUSE_BUTTON_MIDDLE:
-				return "MMB"
+				return tr("BIND_MOUSE_MIDDLE")
 			_:
-				return "Mouse %d" % (event as InputEventMouseButton).button_index
+				return tr("BIND_MOUSE_N") % (event as InputEventMouseButton).button_index
 	if event is InputEventKey:
 		var key := event as InputEventKey
 		var code := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
@@ -656,8 +790,11 @@ func _can_query_display() -> bool:
 	return DisplayServer.get_name() != "headless"
 
 
-func _save_config() -> void:
+func _save_config(path := CONFIG_PATH) -> void:
 	var cfg := ConfigFile.new()
+	if not language.is_empty():
+		cfg.set_value("general", "language", language)
+	cfg.set_value("general", "gore", gore_enabled)
 	cfg.set_value("audio", "master_volume", master_volume)
 	cfg.set_value("audio", "voice_volume", voice_volume)
 	cfg.set_value("audio", "voice_muted", voice_muted)
@@ -672,18 +809,38 @@ func _save_config() -> void:
 	cfg.set_value("vr", "eye_height_set", eye_height_set)
 	cfg.set_value("vr", "eye_height_imperial", eye_height_imperial)
 	cfg.set_value("vr", "aim_steady", aim_steady)
+	cfg.set_value("free_duel", "scenario", free_duel_scenario)
+	cfg.set_value("free_duel", "enemy", free_duel_enemy)
+	cfg.set_value("free_duel", "count", free_duel_count)
+	cfg.set_value("lobby", "slots", lobby_slot_count)
+	cfg.set_value("lobby", "mode", lobby_mode)
+	cfg.set_value("lobby", "scenario", lobby_scenario)
+	for slot in range(1, LobbyRoster.MAX_SLOTS):
+		cfg.set_value("lobby", "kind_%d" % slot, lobby_kinds[slot])
+		cfg.set_value("lobby", "archetype_%d" % slot, lobby_archetypes[slot])
+		cfg.set_value("lobby", "side_%d" % slot, lobby_sides[slot])
+	cfg.set_value("horde", "scenario", horde_scenario)
+	cfg.set_value("horde", "best_wave", horde_best_wave)
+	cfg.set_value("horde", "best_score", horde_best_score)
+	cfg.set_value("gauntlet", "best_rung", gauntlet_best_rung)
+	cfg.set_value("gauntlet", "best_score", gauntlet_best_score)
+	cfg.set_value("gauntlet", "cleared", gauntlet_cleared)
 	for action in VR_ACTIONS:
 		cfg.set_value("binds", "vr_%s" % String(action), get_vr_bind(action))
 	for action in FLAT_ACTIONS:
 		cfg.set_value("binds", "flat_%s" % String(action),
 				str(flat_binds.get(String(action), _encode_flat_event(_default_flat_event(action)))))
-	cfg.save(CONFIG_PATH)
+	cfg.save(path)
 
 
-func _load_config() -> void:
+func _load_config(path := CONFIG_PATH) -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(CONFIG_PATH) != OK:
+	if cfg.load(path) != OK:
 		return
+	language = str(cfg.get_value("general", "language", language))
+	if not language.is_empty():
+		TranslationServer.set_locale(language)
+	gore_enabled = bool(cfg.get_value("general", "gore", gore_enabled))
 	master_volume = clampf(float(cfg.get_value("audio", "master_volume", master_volume)), 0.0, 1.0)
 	voice_volume = clampf(float(cfg.get_value("audio", "voice_volume", voice_volume)), 0.0, 1.0)
 	voice_muted = bool(cfg.get_value("audio", "voice_muted", voice_muted))
@@ -700,6 +857,24 @@ func _load_config() -> void:
 		eye_height_cm = clampi(int(cfg.get_value("vr", "eye_height_cm", eye_height_cm)),
 				EYE_HEIGHT_CM_MIN, EYE_HEIGHT_CM_MAX)
 	aim_steady = clampf(float(cfg.get_value("vr", "aim_steady", aim_steady)), 0.0, 1.0)
+	free_duel_scenario = _clamp_duel_scenario(int(cfg.get_value("free_duel", "scenario", free_duel_scenario)))
+	free_duel_enemy = _clamp_duel_enemy(int(cfg.get_value("free_duel", "enemy", free_duel_enemy)))
+	free_duel_count = _clamp_duel_count(int(cfg.get_value("free_duel", "count", free_duel_count)))
+	lobby_slot_count = clampi(int(cfg.get_value("lobby", "slots", lobby_slot_count)),
+			LobbyRoster.MIN_SLOTS, LobbyRoster.max_slots())
+	lobby_mode = _clamp_lobby_mode(int(cfg.get_value("lobby", "mode", lobby_mode)))
+	lobby_scenario = _clamp_duel_scenario(int(cfg.get_value("lobby", "scenario", lobby_scenario)))
+	for slot in range(1, LobbyRoster.MAX_SLOTS):
+		lobby_kinds[slot] = _clamp_lobby_kind(int(cfg.get_value("lobby", "kind_%d" % slot, lobby_kinds[slot])))
+		lobby_archetypes[slot] = _clamp_lobby_archetype(
+				int(cfg.get_value("lobby", "archetype_%d" % slot, lobby_archetypes[slot])))
+		lobby_sides[slot] = _clamp_lobby_side(int(cfg.get_value("lobby", "side_%d" % slot, lobby_sides[slot])))
+	horde_scenario = _clamp_duel_scenario(int(cfg.get_value("horde", "scenario", horde_scenario)))
+	horde_best_wave = maxi(int(cfg.get_value("horde", "best_wave", horde_best_wave)), 0)
+	horde_best_score = maxi(int(cfg.get_value("horde", "best_score", horde_best_score)), 0)
+	gauntlet_best_rung = maxi(int(cfg.get_value("gauntlet", "best_rung", gauntlet_best_rung)), 0)
+	gauntlet_best_score = maxi(int(cfg.get_value("gauntlet", "best_score", gauntlet_best_score)), 0)
+	gauntlet_cleared = bool(cfg.get_value("gauntlet", "cleared", gauntlet_cleared))
 	for action in VR_ACTIONS:
 		var loaded := str(cfg.get_value("binds", "vr_%s" % String(action), get_vr_bind(action)))
 		if loaded in VR_SOURCES:

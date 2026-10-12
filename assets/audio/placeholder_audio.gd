@@ -39,6 +39,12 @@ static func impact_flesh() -> AudioStreamWAV:
 		return _noise_burst(0.14, 0.75, 22.0, 180.0))
 
 
+## Layered on `impact_flesh` when a hit knocks a chunk out: lower and longer.
+static func flesh_chunk() -> AudioStreamWAV:
+	return _cached("flesh_chunk", func() -> AudioStreamWAV:
+		return _noise_burst(0.28, 0.7, 11.0, 90.0))
+
+
 static func impact_world() -> AudioStreamWAV:
 	return _cached("impact_world", func() -> AudioStreamWAV:
 		return _noise_burst(0.12, 0.55, 28.0, 90.0))

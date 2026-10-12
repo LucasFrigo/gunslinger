@@ -31,6 +31,7 @@ var _radial_index := -1
 var _vr_wheel: PropRadial
 var _fire_held := false
 var _replay_suspended := false
+var _prop_hidden := false
 var _replay_process_mode := Node.PROCESS_MODE_INHERIT
 
 
@@ -111,9 +112,24 @@ func set_replay_suspended(suspended: bool) -> void:
 			(_prop as RigidBody3D).freeze = true
 		return
 	_prop.process_mode = _replay_process_mode
-	_prop.visible = true
+	_prop.visible = not _prop_hidden
 	if _prop is RigidBody3D and _prop.is_loose():
 		(_prop as RigidBody3D).freeze = false
+
+
+## The player died: a windup is dropped, a coin / ace / bottle falls loose, a cigarette is hidden.
+func drop_on_death(world: Node, velocity: Vector3) -> void:
+	_fire_held = false
+	if not has_prop():
+		return
+	_prop.cancel_charge()
+	_prop.drop_loose(world, velocity)
+	_prop_hidden = not _prop.visible
+
+
+## True once the prop was hidden on death. The replay does not show it either.
+func is_prop_hidden() -> bool:
+	return _prop_hidden
 
 
 ## New duel: drop whatever is in the hand and close any open wheel.
@@ -193,7 +209,7 @@ func equip_item(id: StringName) -> void:
 	_clear_prop()
 	_equipped = id
 	if id == ITEM_NONE:
-		GameManager.show_message("Off hand empty", 1.2)
+		GameManager.show_message(tr("MSG_OFFHAND_EMPTY"), 1.2)
 		return
 	var attach := _prop_attach()
 	if attach == null:
@@ -202,20 +218,20 @@ func equip_item(id: StringName) -> void:
 	match id:
 		ITEM_CIGARETTE:
 			_prop = Cigarette.spawn_held(attach)
-			GameManager.show_message("Cigarette in the off hand", 1.5)
+			GameManager.show_message(tr("MSG_OFFHAND_CIGARETTE"), 1.5)
 		ITEM_COIN:
 			_prop = Coin.spawn_held(attach)
 			_prop.configure_for_rig(_player != null and _player.use_vr)
-			GameManager.show_message("Coin in the off hand", 1.5)
+			GameManager.show_message(tr("MSG_OFFHAND_COIN"), 1.5)
 		ITEM_ACE:
 			_prop = AceOfSpades.spawn_held(attach)
-			GameManager.show_message("Ace of spades in the off hand", 1.5)
+			GameManager.show_message(tr("MSG_OFFHAND_ACE"), 1.5)
 		ITEM_BOTTLE:
 			_prop = Longneck.spawn_held(attach)
-			GameManager.show_message("Bottle in the off hand", 1.5)
+			GameManager.show_message(tr("MSG_OFFHAND_BOTTLE"), 1.5)
 		_:
 			_equipped = ITEM_NONE
-			GameManager.show_message("Off hand empty", 1.2)
+			GameManager.show_message(tr("MSG_OFFHAND_EMPTY"), 1.2)
 
 
 # -- Throw --------------------------------------------------------------------
@@ -304,6 +320,7 @@ func _clear_prop() -> void:
 	if is_instance_valid(_prop):
 		_prop.queue_free()
 	_prop = null
+	_prop_hidden = false
 
 
 func _can_use_props() -> bool:
@@ -318,4 +335,5 @@ func _can_use_props() -> bool:
 		GameManager.GameMode.FREE_DUEL,
 		GameManager.GameMode.GAUNTLET,
 		GameManager.GameMode.MULTIPLAYER,
+		GameManager.GameMode.HORDE,
 	]

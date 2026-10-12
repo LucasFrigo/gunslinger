@@ -27,6 +27,23 @@ const REPLAY_SLIDERS := {
 	"replay_slow_factor": [0.05, 1.0, 0.01],
 }
 
+const RAGDOLL_SLIDERS := {
+	"ragdoll_enabled": [0.0, 1.0, 1.0],
+	"ragdoll_hit_impulse": [0.0, 150.0, 1.0],
+	"ragdoll_torso_push": [0.0, 300.0, 1.0],
+	"ragdoll_lift": [0.0, 1.0, 0.01],
+	"ragdoll_angular_damp": [0.0, 10.0, 0.1],
+	"ragdoll_settle_speed": [0.01, 1.0, 0.01],
+	"ragdoll_max_time": [1.0, 8.0, 0.1],
+	"ragdoll_gun_fling": [0.0, 15.0, 0.1],
+	"chunk_chance": [0.0, 1.0, 0.05],
+	"cut_min": [0.01, 0.2, 0.005],
+	"cut_max": [0.01, 0.2, 0.005],
+	"cut_limb_max": [0.01, 0.2, 0.005],
+	"gib_speed": [0.0, 12.0, 0.1],
+	"gib_cap": [0.0, 48.0, 1.0],
+}
+
 ## Meters. Panel faces the headset (+Z), so -Z is away from the head.
 const VR_PANEL_HEAD_CLEARANCE := 0.4
 
@@ -53,6 +70,7 @@ var _refreshing := false
 var _mode_option: OptionButton
 var _slowmo_sliders: Dictionary = {}
 var _replay_sliders: Dictionary = {}
+var _ragdoll_sliders: Dictionary = {}
 var _bullet_slider: HSlider
 var _bullet_value: Label
 var _ai_slider: HSlider
@@ -77,8 +95,11 @@ var _preset_name_edit: LineEdit
 var _mesh_lab_button: Button
 var _time_slider_widgets: Dictionary = {}
 var _reload_volume_toggle: CheckButton
+var _hitbox_toggle: CheckButton
 ## Session-only: translucent meshes on belt / chamber / bump / hand probe.
 var show_reload_volumes := false
+## Session-only: translucent hit volumes on every combatant.
+var show_hitboxes := false
 
 
 func _ready() -> void:
@@ -198,6 +219,7 @@ func _build_panel() -> void:
 	_build_presets_section(root)
 	_build_slowmo_section(root)
 	_build_replay_section(root)
+	_build_ragdoll_section(root)
 	_build_gunplay_section(root)
 	_build_movement_section(root)
 	_build_session_section(root)
@@ -276,6 +298,16 @@ func _build_replay_section(root: Control) -> void:
 		var widgets := _add_slider(root, key, range_def[0], range_def[1], range_def[2],
 				float(GameManager.tuning[key]), _replay_slider_changed(key))
 		_replay_sliders[property] = widgets
+
+
+func _build_ragdoll_section(root: Control) -> void:
+	_add_header(root, "Ragdoll / gore")
+	for property in RAGDOLL_SLIDERS:
+		var range_def: Array = RAGDOLL_SLIDERS[property]
+		var key := String(property)
+		var widgets := _add_slider(root, key, range_def[0], range_def[1], range_def[2],
+				float(GameManager.tuning[key]), _replay_slider_changed(key))
+		_ragdoll_sliders[property] = widgets
 
 
 func _replay_slider_changed(key: String) -> Callable:
@@ -386,6 +418,16 @@ func _build_gunplay_section(root: Control) -> void:
 		if GameManager.local_player != null:
 			GameManager.local_player.set_reload_volume_debug(pressed))
 	root.add_child(_reload_volume_toggle)
+
+	_hitbox_toggle = CheckButton.new()
+	_hitbox_toggle.text = "Show hitboxes"
+	_hitbox_toggle.button_pressed = show_hitboxes
+	_hitbox_toggle.toggled.connect(func(pressed: bool) -> void:
+		if _refreshing:
+			return
+		show_hitboxes = pressed
+		get_tree().call_group(Hitbox.GROUP, "set_debug_visible", pressed))
+	root.add_child(_hitbox_toggle)
 
 	_add_header(root, "VR Gun Release")
 	var holster_label := Label.new()
@@ -660,6 +702,11 @@ func _refresh_from_systems() -> void:
 		var replay_value: float = float(GameManager.tuning[property])
 		replay_widgets["slider"].value = replay_value
 		replay_widgets["label"].text = "%.2f" % replay_value
+	for property in _ragdoll_sliders:
+		var ragdoll_widgets: Dictionary = _ragdoll_sliders[property]
+		var ragdoll_value: float = float(GameManager.tuning[property])
+		ragdoll_widgets["slider"].value = ragdoll_value
+		ragdoll_widgets["label"].text = "%.2f" % ragdoll_value
 	if _bullet_slider != null:
 		_bullet_slider.value = GameManager.tuning["bullet_speed"]
 		_bullet_value.text = "%.2f" % GameManager.tuning["bullet_speed"]
@@ -675,6 +722,8 @@ func _refresh_from_systems() -> void:
 		rwidgets["label"].text = "%.2f" % rvalue
 	if _reload_volume_toggle != null:
 		_reload_volume_toggle.button_pressed = show_reload_volumes
+	if _hitbox_toggle != null:
+		_hitbox_toggle.button_pressed = show_hitboxes
 	if _holster_side_option != null:
 		_holster_side_option.selected = int(GameManager.tuning["holster_side"])
 	for key in _release_sliders:
@@ -788,3 +837,24 @@ func _add_slider(parent: Control, label_text: String, min_value: float,
 		on_change.call(value))
 
 	return {"slider": slider, "label": value_label}
+
+
+## Translucent stand-in for a collision shape (reload volumes, F3 hitboxes).
+func mesh_for_shape(shape: Shape3D) -> Mesh:
+	if shape is SphereShape3D:
+		var sphere := SphereMesh.new()
+		sphere.radius = (shape as SphereShape3D).radius
+		sphere.height = (shape as SphereShape3D).radius * 2.0
+		sphere.radial_segments = 16
+		sphere.rings = 8
+		return sphere
+	if shape is BoxShape3D:
+		var box := BoxMesh.new()
+		box.size = (shape as BoxShape3D).size
+		return box
+	if shape is CapsuleShape3D:
+		var capsule := CapsuleMesh.new()
+		capsule.radius = (shape as CapsuleShape3D).radius
+		capsule.height = (shape as CapsuleShape3D).height
+		return capsule
+	return null

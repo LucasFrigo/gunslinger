@@ -6,7 +6,7 @@
 | Status  | `partial`                                                                                                                                                                           |
 | Kind    | Player                                                                                                                                                                              |
 | In code | Controller `player/player.tscn`. Visible stand-in is the rigged mannequin `assets/models/characters/dummy.glb` (local player, AI, and remote avatar). The local head is hidden in first person until the corpse orbit. Legs step in place while the body moves. In VR the rest of the local body is hidden for now, so only the other player sees that step; the headset shows only the hands. Designed outfit `gunslinger.glb` (+ `gunslinger.blend`) is still not instanced |
-| Design  | `[../README.md](../README.md)`                                                                                                                                                      |
+| Design  | [`../README.md`](../README.md)                                                                                                                                                      |
 
 
 ## Look
@@ -16,7 +16,15 @@ An imposing, mysterious figure. The outfit mixes the American West with dark fan
 Reference pose: full body, standing, facing the camera. Arms hang at the sides. Both hands grip the edges of the overcoat.
 
 - **Hat:** Wide-brim cowboy hat, a little wider than the shoulders, so the silhouette reads at a distance. The crown is not the usual cloth crown. It is polished steel armor: a pointed iron crown with sharp teeth.
-- **Face:** Almost entirely hidden. A cloth mask covers the nose and mouth and leaves only the eyes, which read as intense. The little skin that shows small gaps, and the neck under the mask  is lightly tanned.
+- **Face:** Almost entirely hidden. A cloth mask covers the nose and mouth and leaves only the eyes, which read as intense. The little skin that shows — small gaps, and the neck under the mask — is lightly tanned.
 - **Mask and collar:** Bright cloth in blue, green, pink, yellow, orange, and purple. The same cloth continues down the neck as a collar or scarf.
 - **Coat:** Black overcoat that drips down to shin height, revealing a pair of black-and-white striped boots. In the reference pose the hands hold its sides.
+
+## Story
+
+`planned`; nothing here is in code.
+
+The Player hides their face because of [Half-head](half-head.md), who owns the railroad. He sold the top of his head for it, and the Player was in the room. What part the Player took is not said.
+
+The gauntlet climbs through the railroad's people to him. He is the last rung.
 

@@ -2,19 +2,19 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://ddi2rdvsuv8ug"
-path="res://.godot/imported/Silkscreen-Regular.ttf-0088f200f2f1c02c371962cb8d277333.fontdata"
+uid="uid://b4rdcutpi15cp"
+path="res://.godot/imported/Bitter-Regular.ttf-5017c63f88cbfd1b792c405105f4f8a2.fontdata"
 
 [deps]
 
-source_file="res://assets/fonts/Silkscreen-Regular.ttf"
-dest_files=["res://.godot/imported/Silkscreen-Regular.ttf-0088f200f2f1c02c371962cb8d277333.fontdata"]
+source_file="res://assets/fonts/Bitter-Regular.ttf"
+dest_files=["res://.godot/imported/Bitter-Regular.ttf-5017c63f88cbfd1b792c405105f4f8a2.fontdata"]
 
 [params]
 
 Rendering=null
-antialiasing=0
-generate_mipmaps=false
+antialiasing=1
+generate_mipmaps=true
 disable_embedded_bitmaps=true
 multichannel_signed_distance_field=false
 msdf_pixel_range=8

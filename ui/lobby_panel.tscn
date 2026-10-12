@@ -1,0 +1,89 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://ui/lobby_panel.gd" id="1"]
+[ext_resource type="Theme" path="res://ui/theme_duello.tres" id="2"]
+
+[node name="LobbyPanel" type="VBoxContainer"]
+theme = ExtResource("2")
+process_mode = 3
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+script = ExtResource("1")
+
+[node name="StatusLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="StartButton" type="Button" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "UI_START"
+
+[node name="BackToLobbyButton" type="Button" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "LOBBY_BACK_TO_LOBBY"
+
+[node name="MySideButton" type="Button" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="SlotCountRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SlotCountLabel" type="Label" parent="SlotCountRow"]
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+text = "LOBBY_SLOTS"
+
+[node name="SlotCountOption" type="OptionButton" parent="SlotCountRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ModeRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ModeLabel" type="Label" parent="ModeRow"]
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+text = "LOBBY_MODE"
+
+[node name="ModeOption" type="OptionButton" parent="ModeRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ArenaRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ArenaLabel" type="Label" parent="ArenaRow"]
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+text = "MENU_ARENA"
+
+[node name="ArenaOption" type="OptionButton" parent="ArenaRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SlotRows" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TeamWinsLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+horizontal_alignment = 1

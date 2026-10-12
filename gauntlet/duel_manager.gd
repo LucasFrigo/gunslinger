@@ -3,8 +3,9 @@ extends Node
 ## Duel state machine: Standoff -> WaitSignal -> Draw -> Resolution -> Reset.
 ## Lives as a child of the GameManager autoload so its node path is stable on
 ## every peer, which lets it own the multiplayer duel RPCs directly.
-## Works both vs AI (single-player, host runs everything) and PvP (host
-## authoritative, state broadcast to the client).
+## Works both vs AI (single-player, host runs everything) and in a lobby (2-4
+## slots of humans and NPCs, host authoritative, state broadcast to the clients;
+## the host runs the NPC slots).
 
 signal state_changed(state: int)
 signal duel_finished(local_player_won: bool, reason: String)
@@ -12,21 +13,41 @@ signal duel_finished(local_player_won: bool, reason: String)
 signal kill_cam_requested(trail_points: PackedVector3Array)
 
 enum State { IDLE, STANDOFF, WAIT_SIGNAL, DRAW, RESOLUTION }
+## Why a slot dropped out of an MP duel before it ended (`_mp_down`).
+enum Cause { KILLED, FOUL, LEFT }
 
 const SIGNAL_DELAY_MIN := 1.5
 const SIGNAL_DELAY_MAX := 5.0
+## Fouls by one slot in one duel that put it out when 3-4 duel. Each one before that
+## voids the standoff.
+const FOULS_OUT := 2
 
 var state: int = State.IDLE
 var is_mp := false
+## MP: the roster this duel runs on, taken at its start (`_mp_begin`). Slot index =
+## ReplayBuffer actor id = shooter id. Null outside an MP duel. Edits to the live roster
+## apply from the next duel.
+var snapshot: LobbyRoster
 
 var _timer := 0.0
 var _wait_duration := 0.0
-var _ai: DuelistAI
-var _peer_holstered := false
+var _ais: Array[DuelistAI] = []
+var _lineup_text := ""
+## A loss with two or more NPCs left: they fight on after the replay.
+var _survivors_fight := false
 var _bell_player: AudioStreamPlayer
 var _end_player: AudioStreamPlayer
-var _mp_health_host := CombatRules.DEFAULT_HEALTH
-var _mp_health_peer := CombatRules.DEFAULT_HEALTH
+## MP, one entry per snapshot slot. HP, holster state, and foul counts are the host's;
+## every peer keeps `_alive`.
+var _health: Array[float] = []
+var _alive: Array[bool] = []
+var _fouls: Array[int] = []
+var _holstered: Array[bool] = []
+## Client: this wait's foul has gone to the host.
+var _foul_reported := false
+## Horde wave clear: true plays the usual replay + DeathCam. False (a wave win) just
+## fires the kill-cam fly-along and skips ReplayBuffer.mark_death, so DeathCam never starts.
+var _replay_win := true
 
 
 func _ready() -> void:
@@ -41,27 +62,59 @@ func _ready() -> void:
 
 # -- Public API ---------------------------------------------------------------
 
-func start_ai_duel(ai: DuelistAI) -> void:
+func start_ai_duel(ais: Array[DuelistAI], lineup_text := "", replay_win := true) -> void:
 	stop()
 	is_mp = false
-	_ai = ai
-	if not _ai.died.is_connected(_on_enemy_died):
-		_ai.died.connect(_on_enemy_died)
+	_ais = ais.duplicate()
+	_lineup_text = lineup_text
+	_replay_win = replay_win
+	for ai in _ais:
+		ai.died.connect(_on_enemy_died.bind(ai))
 	_bind_player()
 	_enter(State.STANDOFF)
 
 
-func host_start_mp_duel(scenario_index: int, _new_peer: int) -> void:
+func host_start_mp_duel(scenario_index: int) -> void:
 	stop()
-	_mp_begin.rpc(scenario_index, randf())
+	_mp_begin.rpc(scenario_index, randf(), _roll_snapshot())
+
+
+## Host: the live roster packed for this duel, with every NPC slot settled so each peer
+## builds the same one: a Mixed slot rolls its archetype, and the slot takes the
+## archetype's name. The live roster keeps Mixed, to roll again next duel.
+func _roll_snapshot() -> Dictionary:
+	var rolled := LobbyRoster.new()
+	rolled.unpack(NetworkManager.roster.pack())
+	for slot in rolled.slots:
+		if slot["kind"] != LobbyRoster.Kind.NPC:
+			continue
+		var archetype: int = slot["archetype"]
+		if archetype < 0 or archetype >= GameManager.ARCHETYPES.size():
+			archetype = randi() % GameManager.ARCHETYPES.size()
+		slot["archetype"] = archetype
+		slot["name"] = GameManager.archetype_at(archetype).display_name
+	return rolled.pack()
+
+
+## Host: put `peer_id` in the waiting room on the arena the host stands in. 0 moves
+## everyone, this peer included, to the roster's arena under a fresh sky.
+func host_open_lobby(peer_id := 0) -> void:
+	if peer_id == 0:
+		_mp_lobby.rpc(NetworkManager.roster.scenario_index, randf())
+	else:
+		_mp_lobby.rpc_id(peer_id, GameManager.current_scenario_index,
+				GameManager.current_scenario.time_of_day)
 
 
 func stop() -> void:
 	state = State.IDLE
-	_ai = null
-	_peer_holstered = false
+	_ais = []
+	_survivors_fight = false
+	_replay_win = true
 	ReplayBuffer.abort()
+	# Before the snapshot goes: the death cam releases one actor per slot.
 	DeathCam.stop()
+	snapshot = null
 
 
 ## Hits only count during DRAW. Blocks post-foul / pre-bell damage (BUG-007).
@@ -69,31 +122,160 @@ func accepts_hits() -> bool:
 	return state == State.DRAW
 
 
-## Host-side bullets report authoritative hits here during MP duels.
-## `victim_is_local` is true when the HOST player was hit.
-func mp_report_hit(victim_is_local: bool, trail_points: PackedVector3Array,
+## Bullet gate for `Hitbox.receive_hit`: DRAW, or an NPC-on-NPC shot while the
+## survivors fight on after a loss.
+func accepts_hit(victim: Node, shooter: int) -> bool:
+	return accepts_hits() or (victim is DuelistAI and shooter >= 1 and survivors_fighting())
+
+
+## The survivors of a loss shoot at each other during the trailing orbit.
+func survivors_fighting() -> bool:
+	return _survivors_fight and state == State.RESOLUTION 			and DeathCam.phase == DeathCam.Phase.TRAILING
+
+
+## NPCs may draw and shoot: the live round, or the survivors' fight.
+func npcs_in_combat() -> bool:
+	return state == State.DRAW or survivors_fighting()
+
+
+## MP: `slot` is still in the duel (not killed, fouled out, or gone).
+func slot_alive(slot: int) -> bool:
+	return slot >= 0 and slot < _alive.size() and _alive[slot]
+
+
+## MP: the slots still in the duel.
+func live_slots() -> Array[int]:
+	var live: Array[int] = []
+	for slot in _alive.size():
+		if _alive[slot]:
+			live.append(slot)
+	return live
+
+
+## MP: the name messages use for `slot`.
+func slot_name(slot: int) -> String:
+	var slot_label := ""
+	if snapshot != null and slot >= 0 and slot < snapshot.slots.size():
+		slot_label = str(snapshot.slots[slot]["name"])
+	return slot_label if not slot_label.is_empty() else tr("NET_PLAYER_N") % (slot + 1)
+
+
+## MP: the local duelist is out of the running duel (killed, or fouled out).
+func local_down() -> bool:
+	return snapshot != null and not slot_alive(snapshot.local_slot())
+
+
+## Host-side bullets report authoritative hits here during MP duels. `victim_slot` and
+## `shooter_slot` are lobby slots (-1: shooter unknown); a self-kill is the same slot in
+## both and still that duelist's death. `cut` is the hole the hit makes
+## (`Hitbox.receive_hit`), sent ahead of the wound, the down, or the finish.
+func mp_report_hit(victim_slot: int, trail_points: PackedVector3Array,
 		region: StringName = CombatRules.REGION_TORSO, damage: float = 1.0,
-		shooter_is_local := false) -> void:
-	if not is_mp or not accepts_hits() or not NetworkManager.is_host():
+		shooter_slot := -1, cut := {}) -> void:
+	if not is_mp or not accepts_hits() or not NetworkManager.is_host() or not slot_alive(victim_slot):
 		return
-	var victim_is_host := victim_is_local
-	if victim_is_host:
-		var result := CombatRules.resolve(region, _mp_health_host, damage)
-		_mp_health_host = result["health"]
-		if result["died"]:
-			_mp_finish.rpc(false, "Clean kill", trail_points, shooter_is_local, true)
-			return
-		_mp_wound.rpc(true, String(region), _mp_health_host)
+	var result := CombatRules.resolve(region, _health[victim_slot], damage)
+	_health[victim_slot] = result["health"]
+	_send_chunk(victim_slot, cut, trail_points, result["died"])
+	if result["died"]:
+		_host_eliminate(victim_slot, shooter_slot, trail_points, Cause.KILLED)
 	else:
-		var peer_result := CombatRules.resolve(region, _mp_health_peer, damage)
-		_mp_health_peer = peer_result["health"]
-		if peer_result["died"]:
-			_mp_finish.rpc(true, "Clean kill", trail_points, shooter_is_local, false)
-			return
-		_mp_wound.rpc(false, String(region), _mp_health_peer)
+		_mp_wound.rpc(victim_slot, String(region), _health[victim_slot])
 
 
-## `killer_id` / `victim_id` are ReplayBuffer actor ids (0 host or SP player, 1 AI or joiner).
+## Host: the hole a hit made on the NPC in `slot`. The NPC resolves its own HP
+## (`DuelistAI.take_bullet_hit`) and does not cut itself here: `_mp_chunk` cuts it once on
+## every peer, this one included.
+func mp_report_npc_cut(slot: int, cut: Dictionary, trail_points: PackedVector3Array, lethal: bool) -> void:
+	if is_mp and NetworkManager.is_host() and slot_alive(slot):
+		_send_chunk(slot, cut, trail_points, lethal)
+
+
+## Host: every peer cuts the same hole at the host's clip time. Reliable channel 0, so
+## it lands before the `_mp_wound` / `_mp_down` / `_mp_finish` sent after it. `cut` is
+## empty for no hole.
+func _send_chunk(victim_slot: int, cut: Dictionary, trail_points: PackedVector3Array,
+		lethal: bool) -> void:
+	if cut.is_empty():
+		return
+	_mp_chunk.rpc(victim_slot, int(cut["bone"]), cut["local"] as Vector3, float(cut["radius"]),
+			DummyBody.shot_dir(trail_points), ReplayBuffer.clip_time(), lethal)
+
+
+## Host: `slot` is out of the duel. The last side standing wins it, and every slot of that
+## side is tallied, dead or alive; with two or more sides left the rest carry on.
+func _host_eliminate(slot: int, killer_slot: int, trail_points: PackedVector3Array, cause: int) -> void:
+	_alive[slot] = false
+	var sides := _live_sides()
+	# A leaver's avatar has to go on every peer even when the duel ends with it.
+	if sides.size() > 1 or cause == Cause.LEFT:
+		_mp_down.rpc(slot, killer_slot, trail_points, cause)
+	if sides.size() > 1:
+		return
+	var winning_side: int = sides[0] if not sides.is_empty() else -1
+	var winners: Array[int] = []
+	for winner in snapshot.slots.size():
+		if snapshot.side_of(winner) == winning_side and _occupant_stays(winner):
+			winners.append(winner)
+	NetworkManager.host_add_wins(winners)
+	_mp_finish.rpc(winning_side, _finish_reason(slot, cause), trail_points, killer_slot, slot)
+
+
+## Host: the live roster's `slot` still holds whoever began this duel in it. A leaver's
+## slot is an NPC's by now, and a new occupant starts its own tally.
+func _occupant_stays(slot: int) -> bool:
+	var live := NetworkManager.roster.slots
+	return slot < live.size() and live[slot]["kind"] == snapshot.slots[slot]["kind"] \
+			and live[slot]["peer_id"] == snapshot.slots[slot]["peer_id"]
+
+
+## Sides with a duelist still in. Free-for-all: every slot is its own side.
+func _live_sides() -> Array[int]:
+	var sides: Array[int] = []
+	for slot in _alive.size():
+		var side := snapshot.side_of(slot)
+		if _alive[slot] and not sides.has(side):
+			sides.append(side)
+	return sides
+
+
+## MP: the running duel is Teams with 3-4 duelists. Two duelists read as a 1v1 in either
+## mode: YOU WIN / YOU LOSE and the 1v1 reasons.
+func is_team_duel() -> bool:
+	return snapshot != null and snapshot.mode == LobbyRoster.Mode.TEAMS and snapshot.slots.size() > 2
+
+
+func _finish_reason(slot: int, cause: int) -> String:
+	# One wording for a kill, a foul-out, and a leaver: whoever went may be the
+	# reader's teammate, so "opponent" would be wrong for half the lobby.
+	if is_team_duel():
+		return "MSG_REASON_LAST_SIDE"
+	match cause:
+		Cause.FOUL:
+			return "MSG_REASON_FOUL_HOST" if slot == 0 else "MSG_REASON_FOUL_OPPONENT"
+		Cause.LEFT:
+			return "MSG_OPPONENT_LEFT"
+	return "MSG_REASON_CLEAN_KILL" if snapshot.slots.size() == 2 else "MSG_REASON_LAST_STANDING"
+
+
+## Host: `peer_id` dropped. In a running duel its slot counts as dead and its avatar goes
+## on every peer; after the finish only the avatar goes. False when it held no slot in
+## this duel (the waiting room).
+func host_peer_left(peer_id: int) -> bool:
+	if snapshot == null or state == State.IDLE:
+		return false
+	var slot := snapshot.slot_of_peer(peer_id)
+	if slot < 0:
+		return false
+	if state != State.RESOLUTION and slot_alive(slot):
+		_host_eliminate(slot, -1, PackedVector3Array(), Cause.LEFT)
+	else:
+		_mp_down.rpc(slot, -1, PackedVector3Array(), Cause.LEFT)
+	return true
+
+
+## `killer_id` / `victim_id` are ReplayBuffer actor ids: lobby slots in MP; the player
+## (0) and NPC i (i + 1) in single player.
 func notify_kill_shot(trail_points: PackedVector3Array, killer_id: int, victim_id: int) -> void:
 	_play_duel_end()
 	kill_cam_requested.emit(trail_points)
@@ -133,9 +315,8 @@ func _process(delta: float) -> void:
 				_timer = 0.0
 		State.WAIT_SIGNAL:
 			_watch_local_foul()
-			if _host_saw_foul():
-				return
-			if _timer >= _wait_duration:
+			# A foul may have ended the duel or voided the standoff.
+			if state == State.WAIT_SIGNAL and _timer >= _wait_duration:
 				_enter(State.DRAW)
 		State.DRAW:
 			pass  # resolved by hit reports / death signals
@@ -150,18 +331,21 @@ func _enter(new_state: int) -> void:
 
 
 func _apply_state() -> void:
+	_foul_reported = false
 	state_changed.emit(state)
 	match state:
 		State.STANDOFF:
 			ReplayBuffer.begin()
-			GameManager.show_message("Holster your weapon", 2.0)
+			var holster := tr("MSG_HOLSTER")
+			GameManager.show_message("%s\n%s" % [_lineup_text, holster] if not _lineup_text.is_empty() else holster, 2.0)
 		State.WAIT_SIGNAL:
-			GameManager.show_message("Wait for the bell...", 2.0)
+			GameManager.show_message(tr("MSG_WAIT_BELL"), 2.0)
 		State.DRAW:
 			_ring_bell()
-			GameManager.show_message("DRAW!", 1.5)
-			if not is_mp and is_instance_valid(_ai):
-				_ai.begin_draw()
+			GameManager.show_message(tr("MSG_DRAW"), 1.5)
+			for ai in _ais:
+				if is_instance_valid(ai):
+					ai.begin_draw()
 
 
 func _ring_bell() -> void:
@@ -171,33 +355,50 @@ func _ring_bell() -> void:
 
 # -- Foul & holster checks ------------------------------------------------------
 
+## MP (host): every human still in the duel has holstered. A dead or fouled-out
+## duelist cannot put its gun away, so it does not count.
 func _everyone_holstered() -> bool:
 	var player := GameManager.local_player
 	var local_ok := is_instance_valid(player) and not player.is_gun_drawn()
 	if not is_mp:
 		return local_ok
-	return local_ok and _peer_holstered
+	var local := snapshot.local_slot()
+	for slot in snapshot.slots.size():
+		if not _alive[slot]:
+			continue
+		if slot == local:
+			if not local_ok:
+				return false
+		elif snapshot.slots[slot]["kind"] == LobbyRoster.Kind.HUMAN and not _holstered[slot]:
+			return false
+	return true
 
 
 func _watch_local_foul() -> void:
 	if state != State.WAIT_SIGNAL:
 		return
 	var player := GameManager.local_player
-	if is_instance_valid(player) and player.is_gun_drawn():
-		if is_mp and not NetworkManager.is_host():
-			_mp_report_foul.rpc_id(1)
-		elif not is_mp:
-			_finish_sp(false, "Foul: you drew early")
+	if not is_instance_valid(player) or not player.is_gun_drawn():
+		return
+	if not is_mp:
+		_finish_sp(false, "MSG_REASON_FOUL_YOU")
+	elif NetworkManager.is_host():
+		_host_foul(snapshot.local_slot())
+	elif not _foul_reported and player.alive:
+		_foul_reported = true
+		_mp_report_foul.rpc_id(1)
 
 
-func _host_saw_foul() -> bool:
-	if not is_mp or not NetworkManager.is_host():
-		return false
-	var player := GameManager.local_player
-	if is_instance_valid(player) and player.is_gun_drawn():
-		_mp_finish.rpc(false, "Foul: host drew early", PackedVector3Array(), false, false)
-		return true
-	return false
+## Host: `slot` drew before the bell. Two duelists: the fouler loses at once. Three or
+## four: a slot's first foul voids the standoff and its second puts it out.
+func _host_foul(slot: int) -> void:
+	if state != State.WAIT_SIGNAL or not slot_alive(slot):
+		return
+	_fouls[slot] += 1
+	if snapshot.slots.size() > 2 and _fouls[slot] < FOULS_OUT:
+		_mp_void.rpc(slot)
+	else:
+		_host_eliminate(slot, -1, PackedVector3Array(), Cause.FOUL)
 
 
 # -- Single-player resolution ---------------------------------------------------
@@ -212,11 +413,34 @@ func _bind_player() -> void:
 		player.holstered_changed.connect(_on_local_holster_changed)
 
 
-func _on_enemy_died(trail_points: PackedVector3Array) -> void:
-	if not accepts_hits() or is_mp:
+func _on_enemy_died(trail_points: PackedVector3Array, ai: DuelistAI) -> void:
+	if not accepts_hits():
+		return  # a corpse falling while the survivors fight is just a corpse
+	if is_mp:
+		# Host: the NPC already fell here. `_mp_down` / `_mp_finish` drop its proxy on the
+		# clients and find no avatar to drop on this peer.
+		_host_eliminate(ai.actor_id, ai.killed_by, trail_points, Cause.KILLED)
 		return
-	notify_kill_shot(trail_points, ReplayBuffer.ACTOR_HOST, ReplayBuffer.ACTOR_OTHER)
-	_finish_sp(true, "Clean kill")
+	ReplayBuffer.note_death(ai.actor_id)
+	var left := _live_npc_count()
+	if left > 0:
+		GameManager.show_message(tr("MSG_NPCS_LEFT") % left, 1.5)
+		return
+	if _replay_win:
+		notify_kill_shot(trail_points, ai.killed_by, ai.actor_id)
+	else:
+		# Horde wave clear: the fly-along and the sting, but no DeathCam / replay.
+		_play_duel_end()
+		kill_cam_requested.emit(trail_points)
+	_finish_sp(true, "MSG_REASON_CLEAN_KILL" if _ais.size() == 1 else "MSG_REASON_LAST_STANDING")
+
+
+func _live_npc_count() -> int:
+	var count := 0
+	for ai in _ais:
+		if is_instance_valid(ai) and ai.is_alive():
+			count += 1
+	return count
 
 
 func _on_player_died(trail_points: PackedVector3Array) -> void:
@@ -226,8 +450,11 @@ func _on_player_died(trail_points: PackedVector3Array) -> void:
 	var player := GameManager.local_player
 	if is_instance_valid(player) and player.killed_by_self:
 		killer = ReplayBuffer.ACTOR_HOST
+	elif is_instance_valid(player) and player.killed_by >= ReplayBuffer.ACTOR_OTHER:
+		killer = player.killed_by
+	_survivors_fight = _live_npc_count() >= 2
 	notify_kill_shot(trail_points, killer, ReplayBuffer.ACTOR_HOST)
-	var reason := "You shot yourself" if is_instance_valid(player) and player.killed_by_self else "Shot down"
+	var reason := "MSG_REASON_SELF" if is_instance_valid(player) and player.killed_by_self else "MSG_REASON_SHOT_DOWN"
 	_finish_sp(false, reason)
 
 
@@ -235,25 +462,63 @@ func _finish_sp(local_won: bool, reason: String) -> void:
 	if state == State.RESOLUTION:
 		return
 	state = State.RESOLUTION
-	if is_instance_valid(_ai):
-		_ai.on_duel_over(local_won)
+	if not _survivors_fight:
+		for ai in _ais:
+			if is_instance_valid(ai):
+				ai.on_duel_over(local_won)
 	duel_finished.emit(local_won, reason)
 
 
 # -- Multiplayer RPCs -----------------------------------------------------------
 
+## Waiting room: the arena is loaded and everyone stands on their slot's spawn and can
+## walk. No duel runs (IDLE), so hits are off.
 @rpc("authority", "call_local", "reliable")
-func _mp_begin(scenario_index: int, time_of_day: float) -> void:
+func _mp_lobby(scenario_index: int, time_of_day: float) -> void:
+	if not NetworkManager.is_active():
+		return  # still mid-handshake: the host has not given this peer a slot
+	stop()
+	is_mp = true
+	GameManager.setup_mp_lobby(scenario_index, time_of_day)
+
+
+## True on a peer inside an MP duel: it holds a slot and took this duel's `_mp_begin`.
+## A peer still in the handshake gets the broadcasts too and must ignore them.
+func _in_mp_duel() -> bool:
+	return is_mp and snapshot != null and NetworkManager.is_active()
+
+
+## `snapshot_data` is the roster this duel runs on (`LobbyRoster.pack()`): mode, and per
+## slot kind / peer / name / side / archetype (an NPC's rolled one) / wins.
+@rpc("authority", "call_local", "reliable")
+func _mp_begin(scenario_index: int, time_of_day: float, snapshot_data: Dictionary) -> void:
+	if not NetworkManager.is_active():
+		return  # still mid-handshake: the host has not given this peer a slot
+	var roster := LobbyRoster.new()
+	if not roster.unpack(snapshot_data) or roster.local_slot() < 0:
+		return
 	DeathCam.stop()
 	ReplayBuffer.abort()
 	is_mp = true
-	_peer_holstered = false
-	_mp_health_host = CombatRules.player_max_health()
-	_mp_health_peer = CombatRules.player_max_health()
+	snapshot = roster
+	_lineup_text = ""
+	var count := roster.slots.size()
+	_health.resize(count)
+	_health.fill(CombatRules.player_max_health())
+	_alive.resize(count)
+	_alive.fill(true)
+	_fouls.resize(count)
+	_fouls.fill(0)
+	_holstered.resize(count)
+	_holstered.fill(false)
 	# Bind before setup: reset_for_duel emits holstered_changed, which the
 	# client must relay to the host.
 	_bind_player()
 	GameManager.setup_mp_duel(scenario_index, time_of_day)
+	# The host runs the NPC slots; a client has none.
+	_ais = GameManager.current_ais.duplicate()
+	for ai in _ais:
+		ai.died.connect(_on_enemy_died.bind(ai))
 	state = State.STANDOFF
 	_timer = 0.0
 	_apply_state()
@@ -261,19 +526,25 @@ func _mp_begin(scenario_index: int, time_of_day: float) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func _mp_set_state(new_state: int) -> void:
+	if not _in_mp_duel():
+		return
 	state = new_state
 	_apply_state()
 
 
 @rpc("any_peer", "call_remote", "reliable")
 func _mp_report_foul() -> void:
-	if NetworkManager.is_host() and state == State.WAIT_SIGNAL:
-		_mp_finish.rpc(true, "Foul: opponent drew early", PackedVector3Array(), false, false)
+	if NetworkManager.is_host() and _in_mp_duel():
+		_host_foul(snapshot.slot_of_peer(multiplayer.get_remote_sender_id()))
 
 
 @rpc("any_peer", "call_remote", "reliable")
 func _mp_holstered_state(holstered: bool) -> void:
-	_peer_holstered = holstered
+	if not NetworkManager.is_host() or not _in_mp_duel():
+		return
+	var slot := snapshot.slot_of_peer(multiplayer.get_remote_sender_id())
+	if slot >= 0:
+		_holstered[slot] = holstered
 
 
 func _on_local_holster_changed(holstered: bool) -> void:
@@ -282,25 +553,112 @@ func _on_local_holster_changed(holstered: bool) -> void:
 
 
 @rpc("authority", "call_local", "reliable")
-func _mp_wound(victim_is_host: bool, region_str: String, new_health: float) -> void:
-	if state == State.RESOLUTION:
+func _mp_wound(victim_slot: int, region_str: String, new_health: float) -> void:
+	if not _in_mp_duel() or state == State.RESOLUTION:
 		return
-	var i_am_victim := victim_is_host == NetworkManager.is_host()
-	if i_am_victim and is_instance_valid(GameManager.local_player):
+	if victim_slot == snapshot.local_slot() and is_instance_valid(GameManager.local_player):
 		GameManager.local_player.apply_wound(StringName(region_str), new_health)
 
 
+## Every peer cuts the victim's body: `bone` / `local` / `radius` rebuild the cut
+## (`DummyBody.cut_on_bone`), `dir` is the shot, `clip_t` the host's clip time.
 @rpc("authority", "call_local", "reliable")
-func _mp_finish(winner_is_host: bool, reason: String, trail_points: PackedVector3Array,
-		killer_is_host: bool, victim_is_host: bool) -> void:
-	if state == State.RESOLUTION:
+func _mp_chunk(victim_slot: int, bone: int, local: Vector3, radius: float, dir: Vector3,
+		clip_t: float, lethal: bool) -> void:
+	if not _in_mp_duel():
+		return
+	var victim := GameManager.actor_node(victim_slot)
+	if is_instance_valid(victim) and victim.has_method("corpse_body"):
+		var body: DummyBody = victim.corpse_body()
+		if body != null:
+			body.knock_chunk({"bone": bone, "local": local, "radius": radius}, dir, clip_t, lethal)
+
+
+## A duelist is out while the duel goes on. KILLED: the body falls and the gun drops, with
+## no kill cam and no sting. FOUL (a second foul): no fall, the body stands frozen. LEFT:
+## the avatar goes. The host also sends LEFT after the finish, to clear a leaver's avatar.
+## A local duelist who is killed or fouled out goes on to spectate the living (`DeathCam`).
+@rpc("authority", "call_local", "reliable")
+func _mp_down(victim_slot: int, killer_slot: int, trail_points: PackedVector3Array, cause: int) -> void:
+	if not _in_mp_duel() or victim_slot < 0 or victim_slot >= _alive.size():
+		return
+	_alive[victim_slot] = false
+	if cause == Cause.KILLED:
+		ReplayBuffer.note_death(victim_slot)
+	var player := GameManager.local_player
+	var is_local := victim_slot == snapshot.local_slot() and is_instance_valid(player)
+	var avatar := GameManager.actor_node(victim_slot) as RemoteAvatar
+	var lines: PackedStringArray = []
+	match cause:
+		Cause.LEFT:
+			GameManager.free_avatar(victim_slot)
+			lines.append(tr("MSG_DUELIST_LEFT") % slot_name(victim_slot))
+		Cause.FOUL:
+			if is_local:
+				player.play_death_feedback()
+			elif avatar != null:
+				avatar.put_out()
+			lines.append(tr("MSG_FOUL_OUT") % slot_name(victim_slot))
+		_:
+			if is_local:
+				player.play_death_feedback()
+				player.collapse(trail_points)
+			elif avatar != null:
+				avatar.collapse(trail_points)
+			# Named for everyone, from the slot ids this RPC already carries.
+			if killer_slot >= 0 and killer_slot != victim_slot:
+				lines.append(tr("MSG_DUELIST_SHOT") % [slot_name(victim_slot), slot_name(killer_slot)])
+			else:
+				lines.append(tr("MSG_DUELIST_DOWN") % slot_name(victim_slot))
+	if state != State.RESOLUTION:
+		lines.append(tr("MSG_NPCS_LEFT") % live_slots().size())
+	GameManager.show_message("\n".join(lines), 2.0)
+	if is_local and cause != Cause.LEFT and state != State.RESOLUTION:
+		DeathCam.start_spectate(killer_slot, cause == Cause.KILLED)
+
+
+## A first foul with 3-4 duelists: back to the standoff where everyone stands. No arena
+## reload and no teleport; everyone holsters again and the host rolls a new bell delay.
+@rpc("authority", "call_local", "reliable")
+func _mp_void(fouler_slot: int) -> void:
+	if not _in_mp_duel() or state == State.RESOLUTION:
+		return
+	state = State.STANDOFF
+	_timer = 0.0
+	_foul_reported = false
+	state_changed.emit(state)
+	GameManager.show_message(tr("MSG_FOUL_VOID") % slot_name(fouler_slot), 3.0)
+
+
+## `winning_side` is a `LobbyRoster.side_of` value. An empty trail is a foul or a leaver:
+## nobody falls and `killer_slot` is -1.
+@rpc("authority", "call_local", "reliable")
+func _mp_finish(winning_side: int, reason: String, trail_points: PackedVector3Array,
+		killer_slot: int, victim_slot: int) -> void:
+	if not _in_mp_duel() or state == State.RESOLUTION:
 		return
 	state = State.RESOLUTION
-	var local_won := winner_is_host == NetworkManager.is_host()
-	if not trail_points.is_empty():
-		var killer := ReplayBuffer.ACTOR_HOST if killer_is_host else ReplayBuffer.ACTOR_OTHER
-		var victim := ReplayBuffer.ACTOR_HOST if victim_is_host else ReplayBuffer.ACTOR_OTHER
-		notify_kill_shot(trail_points, killer, victim)
-	if not local_won and is_instance_valid(GameManager.local_player):
-		GameManager.local_player.play_death_feedback()
+	var local := snapshot.local_slot()
+	var local_won := snapshot.side_of(local) == winning_side
+	var killed := not trail_points.is_empty()
+	if victim_slot >= 0 and victim_slot < _alive.size():
+		_alive[victim_slot] = false
+	if killed:
+		# Before the fly-along starts: it restores the camera it finds, which must be the
+		# player's own and not a spectator's orbit.
+		DeathCam.end_spectate()
+		notify_kill_shot(trail_points, killer_slot, victim_slot)
+	# Only a killing shot falls; a foul has no trail and the loser stays frozen.
+	var player := GameManager.local_player
+	if not local_won and is_instance_valid(player) and player.alive:
+		player.play_death_feedback()
+	if killed and victim_slot == local and is_instance_valid(player):
+		player.collapse(trail_points)
+	elif killed:
+		var avatar := GameManager.actor_node(victim_slot) as RemoteAvatar
+		if avatar != null:
+			avatar.collapse(trail_points)
+	for ai in _ais:
+		if is_instance_valid(ai):
+			ai.on_duel_over(local_won)
 	duel_finished.emit(local_won, reason)

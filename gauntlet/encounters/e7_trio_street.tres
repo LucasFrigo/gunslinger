@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="DuelEncounter" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://gauntlet/duel_encounter.gd" id="1"]
+[ext_resource type="Resource" path="res://ai/archetypes/ghost.tres" id="2"]
+[ext_resource type="Resource" path="res://ai/archetypes/sheriff.tres" id="3"]
+[ext_resource type="Resource" path="res://ai/archetypes/drunk.tres" id="4"]
+[ext_resource type="Script" path="res://ai/ai_archetype.gd" id="5"]
+
+[resource]
+script = ExtResource("1")
+label = "Mexican standoff"
+archetype = ExtResource("2")
+extra_archetypes = Array[ExtResource("5")]([ExtResource("3"), ExtResource("4")])
+scenario_index = 0
+health_mult = 1.0
+score_reward = 1000

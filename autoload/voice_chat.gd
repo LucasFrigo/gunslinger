@@ -1,9 +1,14 @@
 extends Node
-## Autoload. Proximity voice chat for 1v1 sessions. Captures the local mic off
+## Autoload. Proximity voice chat for lobbies of 2-4. Captures the local mic off
 ## the muted `Mic` bus, gates it on mute / push-to-talk / voice activity, and
-## streams 16 kHz mono PCM16 frames to the peer over the same MultiplayerAPI
-## that carries poses. Incoming frames play out of the remote avatar's mouth,
-## so distance falloff is just an AudioStreamPlayer3D on the `Voice` bus.
+## streams 16 kHz mono PCM16 frames to the other humans over the same
+## MultiplayerAPI that carries poses. Each sender plays out of its own avatar's
+## mouth, so distance falloff is just an AudioStreamPlayer3D on the `Voice` bus.
+##
+## Between STANDOFF and DRAW of a duel the lobby splits in two channels, the dead
+## and the living: a packet goes only to peers in the speaker's life state, and a
+## receiver drops one from the other (`voice_recipients`, `accepts_voice_from`).
+## A dead speaker plays without distance falloff for the other dead.
 ##
 ## Transport-agnostic: works the same over LAN ENet (all SKUs, including the
 ## Quest APK) and Steam Datagram Relay, because no transport-specific voice API
@@ -53,8 +58,25 @@ var transmitting := false
 
 var _mic_player: AudioStreamPlayer
 var _capture: AudioEffectCapture
-var _voice_player: AudioStreamPlayer3D
-var _playback: AudioStreamGeneratorPlayback
+## One remote speaker: the avatar mouth their voice plays from and the jitter state
+## for it. `player` is null while there is no avatar (only the mute flag is kept).
+class Sender:
+	var player: AudioStreamPlayer3D
+	var playback: AudioStreamGeneratorPlayback
+	var last_seq := 0
+	## Newest incoming packets, oldest at front. Overflow drops the front.
+	var rx: Array[PackedByteArray] = []
+	var muted := false
+	## The player's attenuation as the avatar scene has it, for when `flat` ends.
+	var model: AudioStreamPlayer3D.AttenuationModel = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+	## Playing without distance falloff: a dead speaker among the dead.
+	var flat := false
+
+## The one stream every bound voice player plays. A generator playback keeps a raw
+## pointer to its stream, and the audio thread reads it for one more mix after the
+## player is freed, so the stream must never be freed first (BUG-021): it holds a
+## reference that is never released.
+var _generator: AudioStreamGenerator
 var _capturing := false
 var _session_wants_capture := false
 ## Settings holds a monitor open while it is on screen so the level bar works
@@ -62,9 +84,7 @@ var _session_wants_capture := false
 var _monitors := 0
 var _retry_accum := 0.0
 var _seq := 0
-var _last_seq := 0
 var _vad_hang := 0.0
-var _peer_muted := false
 ## Last local mute value acted on, so a volume tweak does not re-broadcast.
 var _local_muted := false
 var _permission_requested := false
@@ -72,8 +92,11 @@ var _permission_requested := false
 var _hp_x := 0.0
 var _hp_y := 0.0
 var _hp_coeff := 0.0
-## Newest incoming packets, oldest at front. Overflow drops the front.
-var _rx_queue: Array[PackedByteArray] = []
+## Sender peer id -> Sender.
+var _senders := {}
+## Sender peer id -> packets taken into the jitter queue this session (autotest and
+## the debug readout).
+var packets_accepted := {}
 
 
 func _ready() -> void:
@@ -85,9 +108,15 @@ func _ready() -> void:
 	_mic_player.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(_mic_player)
 	_hp_coeff = exp(-TAU * HP_CUTOFF_HZ / float(SEND_RATE))
+	_generator = AudioStreamGenerator.new()
+	_generator.mix_rate = float(SEND_RATE)
+	_generator.buffer_length = PLAYBACK_BUFFER_SEC
+	_generator.reference()
 	NetworkManager.session_started.connect(_on_session_started)
 	NetworkManager.session_ended.connect(_on_session_ended)
 	NetworkManager.peer_joined.connect(_on_peer_joined)
+	NetworkManager.peer_left.connect(_on_peer_left)
+	NetworkManager.roster_changed.connect(_prune_senders)
 	PlayerSettings.audio_devices_changed.connect(_on_devices_changed)
 	PlayerSettings.voice_changed.connect(_on_voice_settings_changed)
 	GameManager.tuning_changed.connect(_on_tuning_changed)
@@ -104,6 +133,7 @@ func _process(delta: float) -> void:
 		if _retry_accum >= RETRY_INTERVAL:
 			_retry_accum = 0.0
 			_update_capture_state()
+	_refresh_falloff()
 	_flush_rx_queue()
 
 
@@ -134,31 +164,58 @@ func remove_monitor() -> void:
 	_update_capture_state()
 
 
-## GameManager hands over the spawned avatar's player (or null on despawn).
-func bind_voice_player(player: AudioStreamPlayer3D) -> void:
-	_playback = null
-	_voice_player = player
-	_last_seq = 0
-	_rx_queue.clear()
+## GameManager hands over the player of the avatar standing for human `peer_id`
+## (null when it despawns). Binding again replaces the old player, its playback,
+## and its queue.
+func bind_voice_player(peer_id: int, player: AudioStreamPlayer3D) -> void:
+	var sender: Sender = _senders.get(peer_id)
 	if player == null:
+		if sender == null:
+			return
+		sender.player = null
+		sender.playback = null
+		sender.last_seq = 0
+		sender.rx.clear()
+		sender.flat = false
+		if not sender.muted:
+			_senders.erase(peer_id)
 		return
-	var generator := AudioStreamGenerator.new()
-	generator.mix_rate = float(SEND_RATE)
-	generator.buffer_length = PLAYBACK_BUFFER_SEC
+	if sender == null:
+		sender = Sender.new()
+		_senders[peer_id] = sender
+	sender.player = player
+	sender.last_seq = 0
+	sender.rx.clear()
+	sender.model = player.attenuation_model
+	sender.flat = _speaker_flat(peer_id)
 	player.bus = VOICE_BUS
-	player.stream = generator
-	_apply_voice_tuning()
+	player.stream = _generator
+	_apply_player_tuning(sender)
 	player.play()
-	_playback = player.get_stream_playback() as AudioStreamGeneratorPlayback
-	if _playback == null:
-		call_deferred("_grab_playback")
-	_apply_peer_mute()
+	sender.playback = player.get_stream_playback() as AudioStreamGeneratorPlayback
+	if sender.playback == null:
+		call_deferred("_grab_playback", peer_id, player)
+	_apply_peer_mute(peer_id)
 
 
-func _grab_playback() -> void:
-	if _voice_player == null:
-		return
-	_playback = _voice_player.get_stream_playback() as AudioStreamGeneratorPlayback
+## The player bound for `peer_id`, or null.
+func bound_player(peer_id: int) -> AudioStreamPlayer3D:
+	var sender: Sender = _senders.get(peer_id)
+	return sender.player if sender != null and is_instance_valid(sender.player) else null
+
+
+func bound_peers() -> Array[int]:
+	var peers: Array[int] = []
+	for peer_id: int in _senders:
+		if (_senders[peer_id] as Sender).player != null:
+			peers.append(peer_id)
+	return peers
+
+
+func _grab_playback(peer_id: int, player: AudioStreamPlayer3D) -> void:
+	var sender: Sender = _senders.get(peer_id)
+	if sender != null and sender.player == player and is_instance_valid(player):
+		sender.playback = player.get_stream_playback() as AudioStreamGeneratorPlayback
 
 
 ## True when voice could physically work here: a real audio driver, the Mic bus
@@ -176,7 +233,8 @@ func is_available() -> bool:
 
 func _on_session_started(_as_host: bool) -> void:
 	_seq = 0
-	_last_seq = 0
+	_senders.clear()
+	packets_accepted.clear()
 	_vad_hang = 0.0
 	_local_muted = PlayerSettings.voice_muted
 	_session_wants_capture = true
@@ -187,10 +245,21 @@ func _on_peer_joined(_peer_id: int) -> void:
 	_send_mute_state()
 
 
+func _on_peer_left(peer_id: int) -> void:
+	_senders.erase(peer_id)
+
+
+## A sender that holds no slot any more (a client sees a leaver only here) loses its state.
+func _prune_senders() -> void:
+	var roster := _roster()
+	for peer_id: int in _senders.keys():
+		if roster.slot_of_peer(peer_id) < 0:
+			_senders.erase(peer_id)
+
+
 func _on_session_ended(_reason: String) -> void:
 	_session_wants_capture = false
-	_peer_muted = false
-	bind_voice_player(null)
+	_senders.clear()
 	_update_capture_state()
 
 
@@ -214,7 +283,7 @@ func _on_voice_settings_changed() -> void:
 	# The mute bind is a bare keypress, so confirm it somewhere the player is
 	# already looking. The peer gets the X over the mouth instead.
 	if NetworkManager.is_active():
-		GameManager.show_message("Mic muted" if _local_muted else "Mic live", 1.2)
+		GameManager.show_message(tr("MSG_MIC_MUTED") if _local_muted else tr("MSG_MIC_LIVE"), 1.2)
 
 
 func _on_tuning_changed(key: String, _value: Variant) -> void:
@@ -293,13 +362,28 @@ func _pump_capture(delta: float) -> void:
 		drained_any = true
 		var pcm := _encode(_capture.get_buffer(needed))
 		rms = maxf(rms, last_rms)
-		if _gate_open(last_rms, packet_sec):
-			_voice.rpc(_seq, pcm)
-			_seq += 1
+		if _gate_open(last_rms, packet_sec) and _send_packet(pcm):
 			sent_any = true
 	mic_level = maxf(rms, mic_level - delta * 3.0)
 	if drained_any:
 		transmitting = sent_any
+
+
+## One packet to everyone `voice_recipients` names. False when nobody is eligible.
+func _send_packet(pcm: PackedByteArray) -> bool:
+	var peers := voice_recipients()
+	if peers.is_empty():
+		return false
+	for peer_id in peers:
+		_voice.rpc_id(peer_id, _seq, pcm)
+	_seq += 1
+	return true
+
+
+## Autotest only: feeds one PCM packet into the send path the microphone uses, past
+## the mute / push-to-talk / noise gate.
+func send_test_packet(pcm: PackedByteArray) -> bool:
+	return _send_packet(pcm)
 
 
 ## Frames of driver-rate audio that make up one SEND_RATE packet. Standard mix
@@ -386,57 +470,147 @@ func _encode(frames: PackedVector2Array) -> PackedByteArray:
 	return pcm
 
 
-func _push_playback(pcm: PackedByteArray) -> void:
-	if _playback == null:
+func _push_playback(sender: Sender, pcm: PackedByteArray) -> void:
+	var playback := sender.playback
+	if playback == null:
 		return
 	var count := pcm.size() / 2
-	if count <= 0 or _playback.get_frames_available() < count:
+	if count <= 0 or playback.get_frames_available() < count:
 		return
 	var frames := PackedVector2Array()
 	frames.resize(count)
 	for i in count:
 		var value := float(pcm.decode_s16(i * 2)) / 32767.0
 		frames[i] = Vector2(value, value)
-	_playback.push_buffer(frames)
+	playback.push_buffer(frames)
 
 
-func _queued_frames() -> int:
-	if _playback == null:
+func _queued_frames(sender: Sender) -> int:
+	if sender.playback == null:
 		return 0
 	var capacity := int(float(SEND_RATE) * PLAYBACK_BUFFER_SEC)
-	return maxi(capacity - _playback.get_frames_available(), 0)
+	return maxi(capacity - sender.playback.get_frames_available(), 0)
 
 
 func _flush_rx_queue() -> void:
-	if _playback == null or _rx_queue.is_empty():
-		return
 	var target := int(float(SEND_RATE) * PLAYBACK_TARGET_SEC)
-	while not _rx_queue.is_empty() and _queued_frames() <= target:
-		if _playback.get_frames_available() < FRAME_SAMPLES:
-			break
-		_push_playback(_rx_queue.pop_front())
+	for peer_id: int in _senders:
+		var sender: Sender = _senders[peer_id]
+		if sender.playback == null:
+			continue
+		while not sender.rx.is_empty() and _queued_frames(sender) <= target:
+			if sender.playback.get_frames_available() < FRAME_SAMPLES:
+				break
+			_push_playback(sender, sender.rx.pop_front())
+
+
+# -- Channels -------------------------------------------------------------------
+
+func _roster() -> LobbyRoster:
+	var snapshot := GameManager.duel.snapshot
+	return snapshot if snapshot != null else NetworkManager.roster
+
+
+## True from the standoff to the draw of an MP duel, the span where the lobby splits in the
+## dead and the living. The waiting room, the finish, and the rematch gap hear everyone.
+func _channels_split() -> bool:
+	var duel := GameManager.duel
+	return duel.snapshot != null and duel.state in [
+			DuelManager.State.STANDOFF, DuelManager.State.WAIT_SIGNAL, DuelManager.State.DRAW]
+
+
+func _same_channel(slot_a: int, slot_b: int) -> bool:
+	return not _channels_split() or GameManager.duel.slot_alive(slot_a) == GameManager.duel.slot_alive(slot_b)
+
+
+## A dead speaker among the dead plays without distance falloff: the listener is on a
+## spectator camera, not near the corpse.
+func _speaker_flat(peer_id: int) -> bool:
+	return _channels_split() and not GameManager.duel.slot_alive(_roster().slot_of_peer(peer_id))
+
+
+## The peers this machine's packet goes to right now: every other human in the same
+## channel. An NPC slot has no peer, so it is never one. A human who left or was kicked
+## is gone from the live roster even while the running duel's snapshot still names them.
+func voice_recipients() -> Array[int]:
+	var peers: Array[int] = []
+	if not NetworkManager.is_active():
+		return peers
+	var roster := _roster()
+	var local := roster.local_slot()
+	if local < 0:
+		return peers
+	for slot in roster.slots.size():
+		var peer_id := int(roster.slots[slot]["peer_id"])
+		if slot != local and roster.slots[slot]["kind"] == LobbyRoster.Kind.HUMAN \
+				and NetworkManager.roster.slot_of_peer(peer_id) >= 0 and _same_channel(local, slot):
+			peers.append(peer_id)
+	return peers
+
+
+## Whether a packet from `peer_id` is heard now: a human still in the lobby that holds a
+## slot other than ours, in our channel. This covers a packet in flight when its sender died.
+func accepts_voice_from(peer_id: int) -> bool:
+	if not NetworkManager.is_active() or NetworkManager.roster.slot_of_peer(peer_id) < 0:
+		return false
+	var roster := _roster()
+	var from := roster.slot_of_peer(peer_id)
+	var local := roster.local_slot()
+	return from >= 0 and local >= 0 and from != local and _same_channel(from, local)
+
+
+func _refresh_falloff() -> void:
+	for peer_id: int in _senders:
+		var sender: Sender = _senders[peer_id]
+		if not is_instance_valid(sender.player):
+			continue
+		var flat := _speaker_flat(peer_id)
+		if flat != sender.flat:
+			sender.flat = flat
+			_apply_player_tuning(sender)
 
 
 # -- Net ----------------------------------------------------------------------
 
 @rpc("any_peer", "call_remote", "unreliable", VOICE_CHANNEL)
 func _voice(seq: int, pcm: PackedByteArray) -> void:
-	if not NetworkManager.is_active():
-		return
+	_take_packet(multiplayer.get_remote_sender_id(), seq, pcm)
+
+
+## The receive path. False when the packet is dropped: a sender we do not hear now or
+## have no avatar for, or a straggler.
+func _take_packet(peer_id: int, seq: int, pcm: PackedByteArray) -> bool:
+	if not accepts_voice_from(peer_id):
+		return false
+	var sender: Sender = _senders.get(peer_id)
+	if sender == null or not is_instance_valid(sender.player):
+		return false
 	# Deliberately unordered: a late packet is already stale, and waiting for it
 	# would add latency to every packet behind it.
-	if seq <= _last_seq and _last_seq - seq < SEQ_REORDER_WINDOW:
-		return
-	_last_seq = seq
-	_rx_queue.append(pcm)
-	while _rx_queue.size() > MAX_RX_QUEUE:
-		_rx_queue.pop_front()
+	if seq <= sender.last_seq and sender.last_seq - seq < SEQ_REORDER_WINDOW:
+		return false
+	sender.last_seq = seq
+	sender.rx.append(pcm)
+	while sender.rx.size() > MAX_RX_QUEUE:
+		sender.rx.pop_front()
+	packets_accepted[peer_id] = int(packets_accepted.get(peer_id, 0)) + 1
+	return true
 
 
 @rpc("any_peer", "call_remote", "reliable", VOICE_STATE_CHANNEL)
 func _voice_state(muted: bool) -> void:
-	_peer_muted = muted
-	_apply_peer_mute()
+	_take_mute(multiplayer.get_remote_sender_id(), muted)
+
+
+func _take_mute(peer_id: int, muted: bool) -> void:
+	if not NetworkManager.is_active() or _roster().slot_of_peer(peer_id) < 0:
+		return
+	var sender: Sender = _senders.get(peer_id)
+	if sender == null:
+		sender = Sender.new()
+		_senders[peer_id] = sender
+	sender.muted = muted
+	_apply_peer_mute(peer_id)
 
 
 ## The pose stream carries the same bit 30 times a second; this just covers the
@@ -448,16 +622,28 @@ func _send_mute_state() -> void:
 
 # -- Playback ------------------------------------------------------------------
 
-func _apply_peer_mute() -> void:
-	if is_instance_valid(GameManager.remote_avatar):
-		GameManager.remote_avatar.set_voice_muted(_peer_muted)
+func _apply_peer_mute(peer_id: int) -> void:
+	var sender: Sender = _senders.get(peer_id)
+	var avatar := GameManager.avatar_of_peer(peer_id)
+	if sender != null and avatar != null:
+		avatar.set_voice_muted(sender.muted)
 
 
 func _apply_voice_tuning() -> void:
-	if _voice_player == null:
+	for peer_id: int in _senders:
+		var sender: Sender = _senders[peer_id]
+		if is_instance_valid(sender.player):
+			_apply_player_tuning(sender)
+
+
+func _apply_player_tuning(sender: Sender) -> void:
+	if sender.flat:
+		sender.player.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
+		sender.player.max_distance = 0.0
 		return
-	_voice_player.max_distance = float(GameManager.tuning.get("voice_max_distance", 26.0))
-	_voice_player.unit_size = float(GameManager.tuning.get("voice_unit_size", 6.0))
+	sender.player.attenuation_model = sender.model
+	sender.player.max_distance = float(GameManager.tuning.get("voice_max_distance", 26.0))
+	sender.player.unit_size = float(GameManager.tuning.get("voice_unit_size", 6.0))
 
 
 func _has_mic_permission() -> bool:

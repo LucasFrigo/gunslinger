@@ -7,6 +7,7 @@ Fiction and art direction for characters, arenas, set pieces, and story. Not a s
 | Folder | Use |
 |---|---|
 | [`characters/`](characters/) | NPC and player-facing designs (look, voice, combat read, story role) |
+| [`characters/ptbr/`](characters/ptbr/) | Brazilian Portuguese translations of the character pages, same file names. The English page is the source; update both together |
 | `scenarios/` | Arena / set-piece / encounter briefs (create when the first one lands) |
 | `story/` | World, campaign beats, tone (create when the first one lands) |
 

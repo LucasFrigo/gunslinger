@@ -15,8 +15,6 @@ const TICK := 0.06
 const LEVER_REACH := 0.16
 const LEVER_PULL := 1.1
 const FLASH_TIME := 2.5
-const TOPPER_IDLE := "LUCKY 7"
-const TOPPER_WIN := "WINNER!"
 const TOPPER_COLOR := Color(1.0, 0.82, 0.35)
 const TOPPER_FLASH := Color(1.0, 0.35, 0.2)
 
@@ -40,7 +38,7 @@ func _ready() -> void:
 	_rng.randomize()
 	for i in _reels.size():
 		_reels[i].text = SYMBOLS[i % SYMBOLS.size()]
-	_topper.text = TOPPER_IDLE
+	_topper.text = tr("SLOT_TOPPER_IDLE")
 	_topper.modulate = TOPPER_COLOR
 
 
@@ -90,7 +88,7 @@ func pull() -> bool:
 	_result = roll(_rng)
 	_stopped = [false, false, false]
 	_flash_left = 0.0
-	_topper.text = TOPPER_IDLE
+	_topper.text = tr("SLOT_TOPPER_IDLE")
 	_topper.modulate = TOPPER_COLOR
 	var tween := create_tween()
 	tween.tween_property(_lever, "rotation:x", LEVER_PULL, 0.12)
@@ -129,7 +127,7 @@ func _finish() -> void:
 	var won := is_win(_result)
 	if won:
 		_flash_left = FLASH_TIME
-		_topper.text = TOPPER_WIN
+		_topper.text = tr("SLOT_TOPPER_WIN")
 		ImpactFeedback.slot_win(_tray.global_position, global_basis.z)
 	spin_finished.emit(won)
 
@@ -139,7 +137,7 @@ func _update_flash(delta: float) -> void:
 		return
 	_flash_left -= delta
 	if _flash_left <= 0.0:
-		_topper.text = TOPPER_IDLE
+		_topper.text = tr("SLOT_TOPPER_IDLE")
 		_topper.modulate = TOPPER_COLOR
 		return
 	_topper.modulate = TOPPER_FLASH if int(_flash_left * 6.0) % 2 == 0 else TOPPER_COLOR

@@ -7,7 +7,7 @@ extends Node
 signal mode_changed(mode: int)
 signal tuning_changed(key: String, value: Variant)
 
-enum GameMode { BOOT, MENU, FREE_DUEL, GAUNTLET, MULTIPLAYER, PRACTICE, MESH_LAB }
+enum GameMode { BOOT, MENU, FREE_DUEL, GAUNTLET, MULTIPLAYER, PRACTICE, MESH_LAB, HORDE }
 
 const TUNING_PATH := "user://tuning.cfg"
 
@@ -31,11 +31,17 @@ const ARCHETYPES: Array[String] = [
 	"res://ai/archetypes/ghost.tres",
 ]
 
+## Most NPCs in one SP standoff.
+const MAX_NPCS := 3
+## Body-color shift between copies of one archetype: lighter for the 2nd, darker for the 3rd.
+const NPC_TINT_SHIFT := 0.25
+
 const PLAYER_SCENE := "res://player/player.tscn"
 const AI_SCENE := "res://ai/duelist.tscn"
 const AVATAR_SCENE := "res://player/remote_avatar.tscn"
 const HUD_SCENE := "res://ui/hud.tscn"
 const GAUNTLET_LADDER := "res://gauntlet/ladder_default.tres"
+const HORDE_WAVES := "res://gauntlet/horde_default.tres"
 
 ## Live gameplay tuning, editable from the debug menu, persisted to disk.
 var tuning := {
@@ -164,6 +170,32 @@ var tuning := {
 	"replay_slow_seconds": 2.0,
 	## Playback rate during that tail (1 = normal speed).
 	"replay_slow_factor": 0.35,
+	## Corpse ragdoll. 0 holds the death pose; the NPC tips over stiff again.
+	"ragdoll_enabled": 1.0,
+	## Kick (N·s) at the body nearest the hit, along the shot.
+	"ragdoll_hit_impulse": 30.0,
+	## Shove (N·s) shared by hips, spine, and chest along the shot.
+	"ragdoll_torso_push": 90.0,
+	## Share of the torso shove that goes up instead of along the shot.
+	"ragdoll_lift": 0.25,
+	"ragdoll_angular_damp": 2.0,
+	## Every body slower than this (m/s) for 0.4 s ends the fall.
+	"ragdoll_settle_speed": 0.12,
+	## Seconds before the fall is cut off and the pose is kept.
+	"ragdoll_max_time": 3.5,
+	## Speed (m/s) a dying gun is flung with.
+	"ragdoll_gun_fling": 7.0,
+	## Share of accepted hits that cut a hole where the bullet landed.
+	"chunk_chance": 1.0,
+	## Hole radius (m) rolled between these on the head and torso.
+	"cut_min": 0.05,
+	"cut_max": 0.10,
+	## Arm and leg holes are no wider than this (m).
+	"cut_limb_max": 0.06,
+	## Speed (m/s) a knocked chunk leaves along the shot.
+	"gib_speed": 3.5,
+	## Gibs alive at once. The oldest is freed past this.
+	"gib_cap": 16.0,
 }
 
 var mode: int = GameMode.BOOT
@@ -171,16 +203,29 @@ var is_vr := false
 var world_root: Node3D
 var main_root: Node3D
 var local_player: Player
-var remote_avatar: RemoteAvatar
+## Multiplayer: lobby slot -> the RemoteAvatar standing for it: every human but this one,
+## and on a client the proxy of each NPC the host runs (in `current_ais` there).
+var avatars := {}
 var current_scenario: ScenarioBase
 var current_scenario_index := 0
-var current_archetype_index := 0
-var current_ai: DuelistAI
+## The free-duel lineup the restart replays.
+var current_lineup: Array[AIArchetype] = []
+var current_ais: Array[DuelistAI] = []
 var hud: Hud
 
 var duel: DuelManager
 var gauntlet: GauntletController
+var horde: HordeController
 var _action_generation := 0
+## The multiplayer arena is loaded (set by the first `_mp_lobby` of a session).
+var _mp_room := false
+## Slot count the waiting room's ring points were laid out for.
+var _lobby_ring := 0
+## Lobby humans the last roster showed, peer id -> { name, slot }. Empty until this peer
+## holds a slot, so a joiner is not told about everyone already there.
+var _lobby_humans := {}
+## The join announcement the host's "everyone is here" line carries with it.
+var _join_line := ""
 var _mesh_lab_open := false
 var _mesh_lab_puppet: MeshLabPuppet
 var _mesh_lab_flycam: MeshLabFlycam
@@ -194,14 +239,21 @@ func _ready() -> void:
 	gauntlet = GauntletController.new()
 	gauntlet.name = "GauntletController"
 	add_child(gauntlet)
+	horde = HordeController.new()
+	horde.name = "HordeController"
+	add_child(horde)
 	_load_tuning()
 
 	NetworkManager.session_started.connect(_on_session_started)
 	NetworkManager.session_ended.connect(_on_session_ended)
 	NetworkManager.peer_joined.connect(_on_peer_joined)
 	NetworkManager.peer_left.connect(_on_peer_left)
+	NetworkManager.roster_changed.connect(_sync_lobby_avatars)
+	NetworkManager.roster_changed.connect(_announce_roster_changes)
 	NetworkManager.pose_received.connect(_on_pose_received)
 	NetworkManager.shot_received.connect(_on_shot_received)
+	NetworkManager.npc_pose_received.connect(_on_npc_pose_received)
+	NetworkManager.npc_shot_received.connect(_on_npc_shot_received)
 	duel.duel_finished.connect(_on_duel_finished)
 
 
@@ -266,6 +318,7 @@ func go_to_menu() -> void:
 	NetworkManager.leave()
 	duel.stop()
 	gauntlet.stop()
+	horde.stop()
 	TimeManager.reset()
 	_clear_combatants()
 	_set_mode(GameMode.MENU)
@@ -324,6 +377,7 @@ func enter_mesh_lab() -> void:
 	NetworkManager.leave()
 	duel.stop()
 	gauntlet.stop()
+	horde.stop()
 	TimeManager.reset()
 	_clear_combatants()
 	if is_instance_valid(hud):
@@ -405,16 +459,25 @@ func is_menu_backdrop() -> bool:
 	return mode == GameMode.MENU and not is_vr
 
 
-func start_free_duel(scenario_index: int, archetype_index: int) -> void:
+## `archetype_index == ARCHETYPES.size()` is Mixed: each slot rolls its own archetype.
+func start_free_duel(scenario_index: int, archetype_index: int, count := 1) -> void:
 	if is_instance_valid(hud):
 		hud.close_pause()
 	_bump_action_generation()
 	_set_mode(GameMode.FREE_DUEL)
 	hud.hide_menu()
 	_remove_vr_menu_panel()
-	current_archetype_index = clampi(archetype_index, 0, ARCHETYPES.size() - 1)
-	var archetype: AIArchetype = load(ARCHETYPES[current_archetype_index])
-	_begin_ai_duel(scenario_index, archetype, 1.0)
+	current_lineup = _roll_lineup(archetype_index, count)
+	_begin_ai_duel(scenario_index, current_lineup, 1.0)
+
+
+func _roll_lineup(archetype_index: int, count: int) -> Array[AIArchetype]:
+	var lineup: Array[AIArchetype] = []
+	var mixed := archetype_index >= ARCHETYPES.size()
+	var fixed := clampi(archetype_index, 0, ARCHETYPES.size() - 1)
+	for _slot in clampi(count, 1, MAX_NPCS):
+		lineup.append(load(ARCHETYPES[randi() % ARCHETYPES.size() if mixed else fixed]))
+	return lineup
 
 
 func start_gauntlet() -> void:
@@ -427,6 +490,22 @@ func start_gauntlet() -> void:
 	gauntlet.start(load(GAUNTLET_LADDER))
 
 
+## Endless single-player survival on one arena, one life. `scenario_index` is the
+## Horde row's own remembered pick (separate from the free-duel row).
+func start_horde(scenario_index: int) -> void:
+	if is_instance_valid(hud):
+		hud.close_pause()
+	_bump_action_generation()
+	_set_mode(GameMode.HORDE)
+	hud.hide_menu()
+	_remove_vr_menu_panel()
+	TimeManager.reset()
+	_clear_combatants()
+	_load_scenario(scenario_index)
+	_place_local_player(current_scenario.get_player_spawn())
+	horde.start(load(HORDE_WAVES))
+
+
 ## Restart the active free duel, gauntlet encounter, or (host) MP rematch.
 func reset_current_duel() -> void:
 	if is_instance_valid(hud):
@@ -435,9 +514,8 @@ func reset_current_duel() -> void:
 		GameMode.FREE_DUEL:
 			_bump_action_generation()
 			TimeManager.reset()
-			var archetype: AIArchetype = load(ARCHETYPES[current_archetype_index])
-			_begin_ai_duel(current_scenario_index, archetype, 1.0)
-			show_message("Duel reset", 1.5)
+			_begin_ai_duel(current_scenario_index, current_lineup, 1.0)
+			show_message(tr("MSG_DUEL_RESET"), 1.5)
 		GameMode.GAUNTLET:
 			if not gauntlet.running:
 				return
@@ -445,43 +523,159 @@ func reset_current_duel() -> void:
 			TimeManager.reset()
 			var encounter := gauntlet.ladder.encounters[gauntlet.encounter_index]
 			begin_gauntlet_encounter(encounter)
-			show_message("Encounter reset", 1.5)
+			show_message(tr("MSG_ENCOUNTER_RESET"), 1.5)
 		GameMode.MULTIPLAYER:
 			if not NetworkManager.is_host():
-				show_message("Only the host can reset the duel.", 2.0)
+				show_message(tr("MSG_HOST_ONLY_RESET"), 2.0)
 				return
-			if NetworkManager.peer_count() <= 0:
-				show_message("No opponent connected.", 2.0)
-				return
-			_bump_action_generation()
-			TimeManager.reset()
-			duel.host_start_mp_duel(current_scenario_index, 0)
-			show_message("Duel reset", 1.5)
+			var restarting := not in_mp_lobby()
+			if NetworkManager.host_start() and restarting:
+				show_message(tr("MSG_DUEL_RESET"), 1.5)
 		GameMode.PRACTICE:
 			if in_practice():
 				practice_hub().reset_range()
-				show_message("Range reset", 1.5)
+				show_message(tr("MSG_RANGE_RESET"), 1.5)
+		GameMode.HORDE:
+			_bump_action_generation()
+			start_horde(current_scenario_index)
+			show_message(tr("MSG_HORDE_RESTARTED"), 1.5)
 		_:
-			show_message("No active duel to reset.", 1.5)
+			show_message(tr("MSG_NO_ACTIVE_DUEL"), 1.5)
 
 
 ## Called by the gauntlet controller for each rung of the ladder.
 func begin_gauntlet_encounter(encounter: DuelEncounter) -> void:
-	_begin_ai_duel(encounter.scenario_index, encounter.archetype, encounter.health_mult)
+	_begin_ai_duel(encounter.scenario_index, encounter.lineup(), encounter.health_mult)
 
 
-func _begin_ai_duel(scenario_index: int, archetype: AIArchetype, health_mult: float) -> void:
+func _begin_ai_duel(scenario_index: int, lineup: Array[AIArchetype], health_mult: float) -> void:
 	_clear_combatants()
 	_load_scenario(scenario_index)
 	_place_local_player(current_scenario.get_player_spawn())
 
-	current_ai = load(AI_SCENE).instantiate()
-	world_root.add_child(current_ai)
-	current_ai.global_transform = current_scenario.get_enemy_spawn()
-	current_ai.capture_spawn()
-	current_ai.setup(archetype, health_mult, local_player)
+	var spawns := current_scenario.get_enemy_spawns(lineup.size())
+	_spawn_npcs(lineup, spawns, health_mult, 1.0)
 
-	duel.start_ai_duel(current_ai)
+	# One NPC faces you before the bell; several pick their targets at the bell.
+	if current_ais.size() == 1:
+		current_ais[0].set_target(local_player)
+	var text := lineup_text(lineup)
+	show_message(text, 2.0)
+	duel.start_ai_duel(current_ais, text if lineup.size() >= 2 else "")
+
+
+## Spawns `lineup` on `spawns` (actor ids, tint shades for repeated archetypes,
+## current_ais). Shared by the free duel / gauntlet path, Horde's wave spawner, and a
+## lobby host's NPC slots. `actor_ids` gives each NPC its id (its lobby slot); empty is
+## single player, where NPC i is actor i + 1.
+func _spawn_npcs(lineup: Array[AIArchetype], spawns: Array[Transform3D],
+		health_mult: float, speed_mult: float, actor_ids: Array[int] = []) -> void:
+	var copies := {}
+	for slot in lineup.size():
+		var ai: DuelistAI = load(AI_SCENE).instantiate()
+		ai.actor_id = actor_ids[slot] if slot < actor_ids.size() else slot + 1
+		world_root.add_child(ai)
+		ai.global_transform = spawns[slot]
+		ai.capture_spawn()
+		var seen: int = copies.get(lineup[slot], 0)
+		copies[lineup[slot]] = seen + 1
+		ai.setup(lineup[slot], health_mult, [0.0, NPC_TINT_SHIFT, -NPC_TINT_SHIFT][seen], speed_mult)
+		current_ais.append(ai)
+
+
+## Called by HordeController for each wave: clears the last wave's corpses/bullets/trails,
+## heals and reloads the player in place (no teleport), spawns the lineup clear of the
+## player, points every NPC at the player, and starts the round.
+func begin_horde_wave(lineup: Array[AIArchetype], speed_mult: float, wave: int) -> void:
+	_clear_combatants()
+	local_player.reset_for_wave()
+	_capture_flat_mouse()
+	var spawns := current_scenario.get_horde_spawns(
+			lineup.size(), local_player.get_head_position(), horde.waves.spawn_min_distance)
+	lineup = lineup.slice(0, spawns.size())
+	_spawn_npcs(lineup, spawns, 1.0, speed_mult)
+	for ai in current_ais:
+		ai.focus_player = true
+		ai.set_target(local_player)
+		ai.died.connect(horde.note_kill.bind(ai))
+	var text := tr("MSG_HORDE_WAVE") % [wave, lineup_text(lineup)]
+	show_message(text, 2.0)
+	duel.start_ai_duel(current_ais, text if lineup.size() >= 2 else "", false)
+
+
+## "A", "A & B", or "A, B & C" from the archetype display names.
+func lineup_text(lineup: Array[AIArchetype]) -> String:
+	var names: PackedStringArray = []
+	for archetype in lineup:
+		names.append(archetype.display_name)
+	if names.size() <= 1:
+		return "".join(names)
+	return tr("MSG_LINEUP_AND") % [", ".join(names.slice(0, names.size() - 1)), names[names.size() - 1]]
+
+
+## The node this machine shows for a ReplayBuffer actor id, or null. Multiplayer: the
+## local player for its own lobby slot; for any other, that slot's avatar (a human, or a
+## client's NPC proxy), else the NPC the host runs in it. Single player: the player (0)
+## or NPC i (i + 1).
+func actor_node(actor_id: int) -> Node3D:
+	if NetworkManager.is_active():
+		if actor_id == local_actor_id():
+			return local_player
+		var avatar: RemoteAvatar = avatars.get(actor_id)
+		if is_instance_valid(avatar):
+			return avatar
+		for ai in current_ais:
+			if is_instance_valid(ai) and ai.actor_id == actor_id:
+				return ai
+		return null
+	if actor_id == 0:
+		return local_player
+	if actor_id >= 1 and actor_id <= current_ais.size() and is_instance_valid(current_ais[actor_id - 1]):
+		return current_ais[actor_id - 1]
+	return null
+
+
+## The local player's ReplayBuffer actor id (and shooter id): its lobby slot in
+## multiplayer, 0 in single player.
+func local_actor_id() -> int:
+	return maxi(_mp_roster().local_slot(), 0) if NetworkManager.is_active() else 0
+
+
+## The side `node` fights on, or -1 for a node that is no duelist. Multiplayer: its
+## slot's `LobbyRoster.side_of`. Single player: its own actor id (everyone for themselves).
+func side_of(node: Node) -> int:
+	var actor_id := -1
+	if node == local_player:
+		actor_id = local_actor_id()
+	elif node is RemoteAvatar:
+		actor_id = (node as RemoteAvatar).slot
+	elif node is DuelistAI:
+		actor_id = (node as DuelistAI).actor_id
+	if actor_id < 0 or not NetworkManager.is_active():
+		return actor_id
+	var roster := _mp_roster()
+	return roster.side_of(actor_id) if actor_id < roster.slots.size() else -1
+
+
+## What an NPC may aim at: the local player (if alive), every NPC still standing, and on
+## a lobby host every other human still in the duel.
+func live_duelists() -> Array[Node3D]:
+	var live: Array[Node3D] = []
+	if is_instance_valid(local_player) and local_player.alive:
+		live.append(local_player)
+	for ai in current_ais:
+		if is_instance_valid(ai) and ai.is_alive():
+			live.append(ai)
+	for slot: int in avatars:
+		var avatar: RemoteAvatar = avatars[slot]
+		if is_instance_valid(avatar) and not avatar.npc_proxy and duel.slot_alive(slot):
+			live.append(avatar)
+	return live
+
+
+## `index` into ARCHETYPES, clamped.
+func archetype_at(index: int) -> AIArchetype:
+	return load(ARCHETYPES[clampi(index, 0, ARCHETYPES.size() - 1)])
 
 
 # -- Multiplayer flow ---------------------------------------------------------
@@ -491,6 +685,7 @@ func _on_session_started(as_host: bool) -> void:
 		hud.close_pause()
 	_bump_action_generation()
 	_set_mode(GameMode.MULTIPLAYER)
+	_mp_room = false
 	hud.hide_menu()
 	_remove_vr_menu_panel()
 	duel.stop()
@@ -498,93 +693,324 @@ func _on_session_started(as_host: bool) -> void:
 	if as_host:
 		if NetworkManager.transport_kind() == "steam":
 			show_message(
-					"Waiting for a challenger… Steam lobby (%s). Esc → Invite friends, or Shift+Tab."
+					tr("MSG_WAIT_STEAM")
 					% NetworkManager.steam_lobby_label(), 12.0)
 		else:
 			var ips := NetworkManager.lan_addresses()
-			var ip_hint := ", ".join(ips) if not ips.is_empty() else "(no LAN IPv4)"
-			show_message("Waiting for a challenger… LAN %s" % ip_hint, 12.0)
-		_load_scenario(current_scenario_index)
-		_place_local_player(current_scenario.get_player_spawn())
+			var ip_hint := ", ".join(ips) if not ips.is_empty() else tr("MSG_NO_LAN_IP")
+			show_message(tr("MSG_WAIT_LAN") % ip_hint, 12.0)
+		duel.host_open_lobby()
 	else:
-		show_message("Connected. Waiting for the host...")
+		show_message(tr("MSG_CONNECTED"))
 
 
+## Host: the joiner has a slot. Send it to the waiting room; the duel waits for START.
 func _on_peer_joined(peer_id: int) -> void:
-	if NetworkManager.is_host() and mode == GameMode.MULTIPLAYER:
-		# Host picks the arena and kicks off the duel for everyone.
-		duel.host_start_mp_duel(current_scenario_index, peer_id)
+	if not NetworkManager.is_host() or mode != GameMode.MULTIPLAYER:
+		return
+	duel.host_open_lobby(peer_id)
+	if NetworkManager.roster.can_start():
+		var ready_line := tr("MSG_LOBBY_READY")
+		show_message(ready_line if _join_line.is_empty() else _join_line + "\n" + ready_line, 8.0)
 
 
-func _on_peer_left(_peer_id: int) -> void:
+## Host: a peer that held a slot is gone. Mid-duel it counts as dead (`_mp_down`); in
+## the waiting room the roster sync that follows just removes its avatar.
+func _on_peer_left(peer_id: int) -> void:
 	if mode == GameMode.MULTIPLAYER:
-		duel.stop()
-		_despawn_avatar()
-		show_message("Opponent left.")
+		duel.host_peer_left(peer_id)
 
 
 func _on_session_ended(reason: String) -> void:
+	_lobby_humans.clear()
+	_join_line = ""
+	if is_instance_valid(local_player):
+		local_player.set_body_tint(Player.BODY_TINT)
 	if mode == GameMode.MULTIPLAYER:
-		show_message("Session ended: %s" % reason)
+		show_message(tr("MSG_SESSION_ENDED") % reason)
 		go_to_menu()
 
 
-## Called by DuelManager on every peer when an MP duel begins.
-## `time_of_day` is the host's roll so both peers share one sky.
+## True in the multiplayer waiting room: the arena is loaded and no duel runs.
+func in_mp_lobby() -> bool:
+	return mode == GameMode.MULTIPLAYER and _mp_room and duel.state == DuelManager.State.IDLE
+
+
+## Host: start or restart the duel for everyone. `NetworkManager.host_start()` is the
+## gate; nothing else calls this.
+func begin_mp_duel() -> void:
+	_bump_action_generation()
+	TimeManager.reset()
+	duel.host_start_mp_duel(NetworkManager.roster.scenario_index)
+
+
+## Called by DuelManager on every peer entering the waiting room.
+func setup_mp_lobby(scenario_index: int, time_of_day: float) -> void:
+	# Drops a rematch still waiting on its timer.
+	_bump_action_generation()
+	KillCam.cancel()
+	TimeManager.reset()
+	_clear_combatants()
+	_load_scenario(scenario_index, time_of_day)
+	var roster := NetworkManager.roster
+	_place_local_player(_mp_spawns(roster, true).get(roster.local_slot(), current_scenario.get_player_spawn()))
+	_lobby_ring = roster.slots.size()
+	_mp_room = true
+	_sync_lobby_avatars()
+	if not NetworkManager.is_host():
+		# A rematch that could not start falls back here: say why, as the host's message does.
+		var refusal := NetworkManager.roster_refusal()
+		show_message(tr(refusal if not refusal.is_empty() else "MSG_LOBBY_WAIT_HOST"), 8.0)
+
+
+## The roster the arena is built from: the running duel's snapshot, else the live roster
+## (the waiting room).
+func _mp_roster() -> LobbyRoster:
+	return duel.snapshot if duel.snapshot != null else NetworkManager.roster
+
+
+## Slot -> spawn on the loaded arena. A duel hands the ring points (`get_duel_spawns`) out
+## in `roster.spawn_order()`: slot order in free-for-all, so two slots stand on PlayerSpawn
+## / EnemySpawn; in Teams the smaller side first, teammates on neighbouring points. The
+## waiting room (`in_room`) is always slot order, so a side pick there never leaves two
+## players on one point.
+func _mp_spawns(roster: LobbyRoster, in_room := false) -> Dictionary:
+	var spawns := current_scenario.get_duel_spawns(roster.slots.size())
+	var order := roster.spawn_order()
+	var by_slot := {}
+	for point in order.size():
+		by_slot[point if in_room else order[point]] = spawns[point]
+	return by_slot
+
+
+## Lobby body colours, the same for one actor on every peer (`LobbyRoster.tint_of`: per
+## side in Teams, per slot in free-for-all): the local body, every avatar and NPC proxy,
+## and the host's NPCs, whose archetype colour is single-player only. Read from the duel's
+## snapshot while one runs, else from the live roster (the waiting room).
+func _apply_lobby_tints() -> void:
+	var roster := _mp_roster()
+	var local := roster.local_slot()
+	if local >= 0 and is_instance_valid(local_player):
+		local_player.set_body_tint(roster.tint_of(local))
+	for slot: int in avatars:
+		var avatar: RemoteAvatar = avatars[slot]
+		if is_instance_valid(avatar) and slot < roster.slots.size():
+			avatar.set_tint(roster.tint_of(slot))
+	for ai in current_ais:
+		if is_instance_valid(ai) and ai.actor_id < roster.slots.size():
+			ai.set_tint(roster.tint_of(ai.actor_id))
+
+
+## Tells this peer who joined or left the waiting room, from the roster alone. A kick in the
+## waiting room reads as a leave here; one in the rematch gap (when a leaver becomes an NPC
+## instead) reads as a removal. A leaver mid-duel is named by `DuelManager._mp_down`.
+func _announce_roster_changes() -> void:
+	var roster := NetworkManager.roster
+	if not NetworkManager.is_active() or roster.local_slot() < 0:
+		return
+	var humans := {}
+	for slot in roster.slots.size():
+		if roster.slots[slot]["kind"] == LobbyRoster.Kind.HUMAN:
+			humans[int(roster.slots[slot]["peer_id"])] = {"name": str(roster.slots[slot]["name"]), "slot": slot}
+	var before := _lobby_humans
+	_lobby_humans = humans
+	if before.is_empty():
+		return
+	var joined := PackedStringArray()
+	var gone := PackedStringArray()
+	for peer_id: int in humans:
+		if not before.has(peer_id):
+			joined.append(tr("MSG_LOBBY_JOINED") % humans[peer_id]["name"])
+	var key := "MSG_LOBBY_REMOVED" if duel.state == DuelManager.State.RESOLUTION else "MSG_LOBBY_LEFT"
+	for peer_id: int in before:
+		var slot: int = before[peer_id]["slot"]
+		if not humans.has(peer_id) and slot < roster.slots.size() \
+				and roster.slots[slot]["kind"] == LobbyRoster.Kind.OPEN:
+			gone.append(tr(key) % before[peer_id]["name"])
+	_join_line = "\n".join(joined)
+	var lines := joined + gone
+	if not lines.is_empty():
+		show_message("\n".join(lines), 3.0)
+
+
+## Waiting room: one avatar per other human, each on its own slot's spawn, and every
+## body in its roster colour, kept in step with the live roster (a side pick or a mode
+## change recolours at once). A duel builds its own from the snapshot in `setup_mp_duel`.
+func _sync_lobby_avatars() -> void:
+	if not in_mp_lobby():
+		return
+	var roster := NetworkManager.roster
+	var local := roster.local_slot()
+	var spawns := _mp_spawns(roster, true)
+	# Another slot count is another ring: everyone goes to their slot's point on it.
+	if roster.slots.size() != _lobby_ring:
+		_lobby_ring = roster.slots.size()
+		if local >= 0:
+			_place_local_player(spawns[local])
+		for slot: int in avatars.keys():
+			free_avatar(slot)
+	for slot: int in avatars.keys():
+		if slot == local or slot >= roster.slots.size() or roster.slots[slot]["kind"] != LobbyRoster.Kind.HUMAN:
+			free_avatar(slot)
+	for slot in roster.slots.size():
+		if slot != local and roster.slots[slot]["kind"] == LobbyRoster.Kind.HUMAN and not avatars.has(slot):
+			_spawn_avatar(slot, spawns[slot])
+	_apply_lobby_tints()
+	_bind_voice()
+
+
+## Called by DuelManager on every peer when an MP duel begins: the local player and an
+## avatar for every other human, each on its slot's ring point. An NPC slot is a
+## `DuelistAI` on the host, which runs it, and a proxy avatar on a client. Any of them may
+## be the one on PlayerSpawn (`_mp_spawns`). `time_of_day` is the host's roll so every
+## peer shares one sky.
 func setup_mp_duel(scenario_index: int, time_of_day: float) -> void:
 	_clear_combatants()
 	_load_scenario(scenario_index, time_of_day)
-	var my_spawn := current_scenario.get_player_spawn() if NetworkManager.is_host() \
-			else current_scenario.get_enemy_spawn()
-	var their_spawn := current_scenario.get_enemy_spawn() if NetworkManager.is_host() \
-			else current_scenario.get_player_spawn()
-	_place_local_player(my_spawn)
-	_spawn_avatar(their_spawn)
+	var roster := duel.snapshot
+	var local := roster.local_slot()
+	var spawns := _mp_spawns(roster)
+	var npc_lineup: Array[AIArchetype] = []
+	var npc_spawns: Array[Transform3D] = []
+	var npc_slots: Array[int] = []
+	for slot in roster.slots.size():
+		var kind: int = roster.slots[slot]["kind"]
+		if slot == local:
+			_place_local_player(spawns[slot])
+		elif kind == LobbyRoster.Kind.HUMAN:
+			_spawn_avatar(slot, spawns[slot])
+		elif kind == LobbyRoster.Kind.NPC and not NetworkManager.is_host():
+			_spawn_avatar(slot, spawns[slot], true)
+		elif kind == LobbyRoster.Kind.NPC:
+			npc_lineup.append(archetype_at(roster.slots[slot]["archetype"]))
+			npc_spawns.append(spawns[slot])
+			npc_slots.append(slot)
+	_spawn_npcs(npc_lineup, npc_spawns, 1.0, 1.0, npc_slots)
+	_apply_lobby_tints()
+	_bind_voice()
 
 
-func _spawn_avatar(spawn: Transform3D) -> void:
-	_despawn_avatar()
-	remote_avatar = load(AVATAR_SCENE).instantiate()
-	world_root.add_child(remote_avatar)
-	remote_avatar.global_transform = spawn
-	VoiceChat.bind_voice_player(remote_avatar.voice_player)
+func _spawn_avatar(slot: int, spawn: Transform3D, npc_proxy := false) -> RemoteAvatar:
+	free_avatar(slot)
+	var avatar: RemoteAvatar = load(AVATAR_SCENE).instantiate()
+	avatar.slot = slot
+	avatar.npc_proxy = npc_proxy
+	# Placed before it enters the tree: its `_ready` takes the rest pose from here.
+	avatar.transform = world_root.global_transform.affine_inverse() * spawn
+	world_root.add_child(avatar)
+	avatars[slot] = avatar
+	return avatar
 
 
-func _despawn_avatar() -> void:
-	VoiceChat.bind_voice_player(null)
-	if is_instance_valid(remote_avatar):
-		remote_avatar.queue_free()
-	remote_avatar = null
+## Removes one slot's avatar (a leaver).
+func free_avatar(slot: int) -> void:
+	var avatar: RemoteAvatar = avatars.get(slot)
+	avatars.erase(slot)
+	if is_instance_valid(avatar):
+		avatar.queue_free()
+	_bind_voice()
 
 
-func _on_pose_received(_peer_id: int, head: Transform3D, left: Transform3D,
+func _despawn_avatars() -> void:
+	for avatar: RemoteAvatar in avatars.values():
+		if is_instance_valid(avatar):
+			avatar.queue_free()
+	avatars.clear()
+	_bind_voice()
+
+
+## Brings `VoiceChat` in step with `avatars`: each human's avatar plays that human's voice,
+## and a gone avatar lets go of its sender. A bound avatar is left alone (rebinding
+## restarts the stream). An NPC proxy has no voice.
+func _bind_voice() -> void:
+	var roster := _mp_roster()
+	var wanted := {}
+	for slot: int in avatars:
+		var avatar: RemoteAvatar = avatars[slot]
+		if is_instance_valid(avatar) and not avatar.npc_proxy and slot < roster.slots.size() \
+				and roster.slots[slot]["kind"] == LobbyRoster.Kind.HUMAN:
+			wanted[int(roster.slots[slot]["peer_id"])] = avatar.voice_player
+	for peer_id in VoiceChat.bound_peers():
+		if wanted.get(peer_id) != VoiceChat.bound_player(peer_id):
+			VoiceChat.bind_voice_player(peer_id, null)
+	for peer_id: int in wanted:
+		if VoiceChat.bound_player(peer_id) != wanted[peer_id]:
+			VoiceChat.bind_voice_player(peer_id, wanted[peer_id])
+
+
+## The avatar standing for `peer_id`, or null: an unknown sender, or one with no avatar here.
+func avatar_of_peer(peer_id: int) -> RemoteAvatar:
+	var avatar: RemoteAvatar = avatars.get(_mp_roster().slot_of_peer(peer_id))
+	return avatar if is_instance_valid(avatar) else null
+
+
+func _on_pose_received(peer_id: int, head: Transform3D, left: Transform3D,
 		right: Transform3D, flags: int, gun: Transform3D, hands: int, objects: int,
 		prop: Transform3D, round_xf: Transform3D) -> void:
-	if DeathCam.blocks_remote_pose():
+	var avatar := avatar_of_peer(peer_id)
+	if avatar != null and not DeathCam.blocks_remote_pose(avatar.slot):
+		avatar.apply_pose(head, left, right, flags, gun, hands, objects, prop, round_xf)
+
+
+func _on_shot_received(peer_id: int, origin: Vector3, direction: Vector3) -> void:
+	# A remote player fired. Everyone spawns the tracer; only the host's simulation is
+	# authoritative for damage. The sender's slot is the shooter id; a sender with no
+	# slot, or one already out of the duel, fires nothing.
+	var slot := _mp_roster().slot_of_peer(peer_id)
+	if slot < 0 or (duel.snapshot != null and not duel.slot_alive(slot)):
 		return
-	if is_instance_valid(remote_avatar):
-		remote_avatar.apply_pose(head, left, right, flags, gun, hands, objects, prop, round_xf)
-
-
-func _on_shot_received(_peer_id: int, origin: Vector3, direction: Vector3) -> void:
-	# Remote player fired. Everyone spawns the tracer; only the host's
-	# simulation is authoritative for damage.
 	var exclude: Array[RID] = []
 	var grace: Array[RID] = []
-	if is_instance_valid(remote_avatar):
-		exclude = remote_avatar.hitbox_rids()
-		grace = remote_avatar.gun_hand_hitbox_rids()
-	ReplayBuffer.record_shot(origin, direction, ReplayBuffer.ACTOR_OTHER)
+	var avatar: RemoteAvatar = avatars.get(slot)
+	if is_instance_valid(avatar):
+		exclude = avatar.hitbox_rids()
+		grace = avatar.gun_hand_hitbox_rids()
+	ReplayBuffer.record_shot(origin, direction, slot)
 	Bullet.spawn(main_root, origin, direction, tuning["bullet_speed"],
 			NetworkManager.is_host(), exclude, false,
-			float(tuning.get("self_hit_grace", 0.28)), grace)
+			float(tuning.get("self_hit_grace", 0.28)), grace, slot)
+
+
+## The proxy standing for the NPC in `slot` of the running duel, or null: a slot that is
+## no NPC in the snapshot, or no proxy on this machine (the host runs the NPC itself).
+func _npc_proxy(slot: int) -> RemoteAvatar:
+	var snapshot := duel.snapshot
+	if snapshot == null or slot < 0 or slot >= snapshot.slots.size() \
+			or snapshot.slots[slot]["kind"] != LobbyRoster.Kind.NPC:
+		return null
+	var avatar: RemoteAvatar = avatars.get(slot)
+	return avatar if is_instance_valid(avatar) and avatar.npc_proxy else null
+
+
+func _on_npc_pose_received(slot: int, head: Transform3D, flags: int, gun: Transform3D) -> void:
+	var proxy := _npc_proxy(slot)
+	if proxy != null and not DeathCam.blocks_remote_pose(slot):
+		proxy.apply_npc_pose(head, flags, gun)
+
+
+func _on_npc_shot_received(slot: int, origin: Vector3, direction: Vector3) -> void:
+	# The host's NPC fired: a tracer only, the hit is the host's. A dead NPC fires nothing.
+	var proxy := _npc_proxy(slot)
+	if proxy == null or not duel.slot_alive(slot):
+		return
+	Bullet.spawn(main_root, origin, direction,
+			archetype_at(duel.snapshot.slots[slot]["archetype"]).bullet_speed,
+			false, proxy.hitbox_rids(), false, 0.0, [], slot)
 
 
 # -- Duel results -------------------------------------------------------------
 
 func _on_duel_finished(local_player_won: bool, reason: String) -> void:
-	var headline := "YOU WIN" if local_player_won else "YOU LOSE"
-	var message := "%s\n%s" % [headline, reason]
+	var headline := tr("MSG_YOU_WIN") if local_player_won else tr("MSG_YOU_LOSE")
+	if duel.is_team_duel():
+		headline = tr("MSG_SIDE_WON") if local_player_won else tr("MSG_SIDE_LOST")
+	var message := "%s\n%s" % [headline, tr(reason)]
+	if mode == GameMode.MULTIPLAYER and not local_player_won and not duel.is_team_duel() \
+			and duel.snapshot != null and duel.snapshot.slots.size() > 2 and duel.live_slots().size() == 1:
+		# Free-for-all of 3-4: the loser is told who took it (the one duelist left standing).
+		message += "\n" + tr("MSG_LOBBY_WINNER") % duel.slot_name(duel.live_slots()[0])
+	if mode == GameMode.HORDE and local_player_won:
+		message = horde.clear_wave()
 	var generation_at_finish := _action_generation
 	var delay_vr_banner := is_vr and KillCam.is_playing
 	if delay_vr_banner:
@@ -599,6 +1025,9 @@ func _on_duel_finished(local_player_won: bool, reason: String) -> void:
 				_after_delay(4.0, go_to_menu)
 			GameMode.GAUNTLET:
 				_after_delay(3.5, gauntlet.on_duel_finished.bind(local_player_won))
+			GameMode.HORDE:
+				_after_delay(horde.break_seconds() if local_player_won else 3.5,
+						horde.on_duel_finished.bind(local_player_won))
 			GameMode.MULTIPLAYER:
 				if NetworkManager.is_host():
 					_after_delay(5.0, _mp_rematch)
@@ -628,9 +1057,10 @@ func _on_duel_finished(local_player_won: bool, reason: String) -> void:
 		schedule_next.call()
 
 
+## Host: the same roster again, or back to the waiting room when it can no longer start.
 func _mp_rematch() -> void:
-	if mode == GameMode.MULTIPLAYER and NetworkManager.peer_count() > 0:
-		duel.host_start_mp_duel(current_scenario_index, 0)
+	if mode == GameMode.MULTIPLAYER and not NetworkManager.host_start():
+		NetworkManager.host_back_to_lobby()
 
 
 func _after_delay(seconds: float, callable: Callable) -> void:
@@ -675,15 +1105,30 @@ func _instance_scenario(resource: ScenarioResource, time_of_day := -1.0) -> void
 
 func _place_local_player(spawn: Transform3D) -> void:
 	local_player.reset_for_duel(spawn)
+	_capture_flat_mouse()
+
+
+## Flat play owns the cursor from the first frame of a match or wave, so look
+## works without a click to re-capture. Menus, pause, the debug panel, and the
+## mesh lab (its own toggle) keep the cursor.
+func _capture_flat_mouse() -> void:
+	if is_vr or OS.has_feature("headless"):
+		return
+	if mode in [GameMode.BOOT, GameMode.MENU, GameMode.MESH_LAB]:
+		return
+	if is_pause_open() or DebugMenu.panel.visible:
+		return
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _clear_combatants() -> void:
 	DeathCam.stop()
 	ReplayBuffer.abort()
-	if is_instance_valid(current_ai):
-		current_ai.queue_free()
-	current_ai = null
-	_despawn_avatar()
+	for ai in current_ais:
+		if is_instance_valid(ai):
+			ai.queue_free()
+	current_ais = []
+	_despawn_avatars()
 	# Free live projectiles before trails — otherwise clear_all frees the trail
 	# while Bullet._physics_process still calls add_point on it.
 	Bullet.clear_all()
