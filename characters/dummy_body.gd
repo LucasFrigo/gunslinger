@@ -50,11 +50,15 @@ const PART_BODY := &"body"
 const PART_HEAD := &"head"
 const PART_HAND := &"hand"
 const SKIN_ROUGHNESS := 0.9
+## Welded outline mesh: positions closer than this share one averaged normal.
+const WELD_EPSILON := 0.0001
 ## The skin snap casts the shot from this far before the hit volume's point, up to this
 ## far past it. Hit volumes sit off the skin (the torso by up to its radius).
 const SNAP_BACK := 0.15
 const SNAP_REACH := 0.3
 const SNAP_NUDGE := 0.001
+## Seconds the skin's hit flash takes to fade from white.
+const FLASH_TIME := 0.1
 
 var _skeleton: Skeleton3D
 var _mesh: MeshInstance3D
@@ -62,6 +66,8 @@ var _body_mesh: MeshInstance3D
 var _head_mesh: MeshInstance3D
 var _hand_meshes: Array[MeshInstance3D] = []
 var _parts: Array[MeshInstance3D] = []
+## One "Outline" child per part: the welded copy that wears the ink line.
+var _outline_parts: Array[MeshInstance3D] = []
 var _body_shelved := false
 var _head_hidden := false
 var _ik: Dictionary = {}
@@ -80,11 +86,20 @@ var _fp_clip := false
 ## Body and head share one skin; the cavity is its `next_pass` while there are holes.
 var _skin_material: ShaderMaterial
 var _cavity_material: ShaderMaterial
-## Parsed `Reto` per mesh resource: the intact part meshes every body shares and each
-## skin bind's rest triangles for the skin snap.
+var _hand_material: ShaderMaterial
+## Ink line of the body and head (takes the skin's holes) and of the hands (never holed).
+var _outline_material: ShaderMaterial
+var _hand_outline_material: ShaderMaterial
+## Parsed `Reto` per mesh resource: the intact part meshes every body shares, their welded
+## outline copies, and each skin bind's rest triangles for the skin snap.
 static var _split_cache := {}
 var _split: Dictionary = {}
 var _chunks: BodyChunks
+var _flash_tween: Tween
+## Clip times of the accepted hits that flashed, and whether a replay has fired each.
+var _flash_times: Array[float] = []
+var _flash_fired: Array[bool] = []
+var _flash_replaying := false
 var _legs: Array[Dictionary] = []
 var _travel: Node3D
 var _travel_ready := false
@@ -227,6 +242,16 @@ func knock_chunk(cut: Dictionary, dir: Vector3, clip_t: float, lethal: bool) -> 
 		_chunks.knock(cut, dir, clip_t, lethal)
 
 
+## Blink the skin white (body and head, not the hands) on an accepted hit, whether or not
+## it cut a hole. `clip_t` is `ReplayBuffer.clip_time()` (the host's in MP); the replay
+## re-flashes at it.
+func flash(clip_t: float) -> void:
+	if not _flash_replaying:
+		_flash_times.append(clip_t)
+		_flash_fired.append(false)
+	_blink()
+
+
 ## Holes showing now (at this point of a replay), at most `BodyChunks.HOLE_CAP`.
 func chunk_count() -> int:
 	return _chunks.hole_count() if _chunks != null else 0
@@ -234,24 +259,37 @@ func chunk_count() -> int:
 
 ## Every hole healed. Thrown gibs stay where they lie.
 func reset_chunks() -> void:
+	_flash_times.clear()
+	_flash_fired.clear()
+	_flash_replaying = false
 	if _chunks != null:
 		_chunks.reset()
 
 
 ## Replay start: holes cut inside the clip heal until their clip time.
 func chunks_replay_begin(clip_begin: float) -> void:
+	_flash_replaying = true
+	for i in _flash_times.size():
+		var t := _flash_times[i]
+		_flash_fired[i] = not (t >= 0.0 and t >= clip_begin)
 	if _chunks != null:
 		_chunks.replay_begin(clip_begin)
 
 
 ## Replay at clip time `t`: holes open and their gibs re-fly.
 func chunks_replay_at(t: float) -> void:
+	if _flash_replaying:
+		for i in _flash_times.size():
+			if not _flash_fired[i] and t >= _flash_times[i]:
+				_flash_fired[i] = true
+				_blink()
 	if _chunks != null:
 		_chunks.replay_at(t)
 
 
 ## The replay ended: every hole open, every gib settled. No-op outside a replay.
 func chunks_hold_final() -> void:
+	_flash_replaying = false
 	if _chunks != null:
 		_chunks.hold_final()
 
@@ -374,12 +412,15 @@ func set_body_shelved(shelved: bool) -> void:
 	_apply_part_visibility()
 
 
-## Visual layer for body and head. Hands stay on the default layer.
+## Visual layer for body and head, and their outlines. Hands stay on the default layer.
 func set_body_render_layers(layers: int) -> void:
 	if _body_mesh != null:
 		_body_mesh.layers = layers
 	if _head_mesh != null:
 		_head_mesh.layers = layers
+	for line in _outline_parts:
+		if not _hand_meshes.has(line.get_parent()):
+			line.layers = layers
 
 
 func set_hand_scale(scale: float) -> void:
@@ -515,24 +556,84 @@ func _process(delta: float) -> void:
 	_apply_walk(delta)
 
 
-## Body and head wear the shared skin (holes, first-person clip); hands stay solid.
+## Body and head wear the shared skin (holes, first-person clip); hands wear a hole-free copy.
+## Each part's outline child wears the matching ink material.
 func _apply_material() -> void:
 	if _skin_material == null:
 		_skin_material = BodyChunks.skin_material_new()
 		_cavity_material = BodyChunks.cavity_material_new()
+		_hand_material = BodyChunks.skin_material_new()
+		_outline_material = BodyChunks.outline_material_new()
+		_hand_outline_material = BodyChunks.outline_material_new()
+		GameManager.tuning_changed.connect(_on_look_tuning_changed)
 	var clip := FP_CLIP_RADIUS if _fp_clip else 0.0
 	_skin_material.set_shader_parameter("albedo", _albedo)
 	_skin_material.set_shader_parameter("roughness_amount", SKIN_ROUGHNESS)
 	_skin_material.set_shader_parameter("clip_radius", clip)
 	_cavity_material.set_shader_parameter("clip_radius", clip)
+	_outline_material.set_shader_parameter("clip_radius", clip)
+	# Hands never clip or take holes, so they cannot share the body skin's uniforms.
+	_hand_material.set_shader_parameter("albedo", _albedo)
+	_hand_material.set_shader_parameter("roughness_amount", SKIN_ROUGHNESS)
+	_hand_material.set_shader_parameter("clip_radius", 0.0)
+	_hand_material.set_shader_parameter("hole_count", 0)
+	_hand_material.set_shader_parameter("edge_strength", 0.0)
+	_hand_outline_material.set_shader_parameter("clip_radius", 0.0)
+	_hand_outline_material.set_shader_parameter("hole_count", 0)
+	_apply_edge()
+	_apply_outline()
 	var targets: Array[MeshInstance3D] = _parts
 	if targets.is_empty() and _mesh != null:
 		targets = [_mesh]
 	for mesh in targets:
 		if _hand_meshes.has(mesh):
-			mesh.material_override = _solid_material()
+			if mesh.material_override != _hand_material:
+				mesh.material_override = _hand_material
 		elif mesh.material_override != _skin_material:
 			mesh.material_override = _skin_material
+	for line in _outline_parts:
+		var ink := _hand_outline_material if _hand_meshes.has(line.get_parent()) else _outline_material
+		if line.material_override != ink:
+			line.material_override = ink
+
+
+func _blink() -> void:
+	if _skin_material == null:
+		return
+	if _flash_tween != null and _flash_tween.is_valid():
+		_flash_tween.kill()
+	_skin_material.set_shader_parameter("flash", 1.0)
+	_flash_tween = create_tween()
+	# Real seconds: a kill's slow-mo must not stretch the blink.
+	_flash_tween.set_speed_scale(1.0 / maxf(Engine.time_scale, 0.05))
+	_flash_tween.tween_method(_set_flash, 1.0, 0.0, FLASH_TIME)
+
+
+func _set_flash(value: float) -> void:
+	_skin_material.set_shader_parameter("flash", value)
+
+
+## Skin rim tuning. Hands stay solid: no rim, and they never flash.
+func _apply_edge() -> void:
+	_skin_material.set_shader_parameter("edge_strength", _tune("edge_strength", 0.35))
+	_skin_material.set_shader_parameter("edge_power", _tune("edge_power", 3.0))
+
+
+## Ink line tuning: width on both materials, and every outline child shown or hidden.
+func _apply_outline() -> void:
+	var width := _tune("outline_width", 0.004)
+	var on := _tune("outline_enabled", 1.0) > 0.5
+	_outline_material.set_shader_parameter("width", width)
+	_hand_outline_material.set_shader_parameter("width", width)
+	for line in _outline_parts:
+		line.visible = on
+
+
+func _on_look_tuning_changed(key: String, _value: Variant) -> void:
+	if key == "edge_strength" or key == "edge_power":
+		_apply_edge()
+	elif key == "outline_width" or key == "outline_enabled":
+		_apply_outline()
 
 
 func _solid_material() -> StandardMaterial3D:
@@ -704,20 +805,23 @@ func _split_parts() -> void:
 	_split = _split_of(_mesh, _skeleton)
 	if not _split.is_empty():
 		var intact: Dictionary = _split["intact"]
-		_body_mesh = _make_part("BodyMesh", intact[PART_BODY])
-		_head_mesh = _make_part("HeadMesh", intact[PART_HEAD])
+		var outline: Dictionary = _split["outline"]
+		_body_mesh = _make_part("BodyMesh", intact[PART_BODY], outline[PART_BODY])
+		_head_mesh = _make_part("HeadMesh", intact[PART_HEAD], outline[PART_HEAD])
 		if intact.has(PART_HAND):
-			_hand_meshes.append(_make_part("HandMesh", intact[PART_HAND]))
+			_hand_meshes.append(_make_part("HandMesh", intact[PART_HAND], outline[PART_HAND]))
 		_mesh.visible = false
 	_apply_material()
 	_chunks = BodyChunks.new()
 	_chunks.name = "BodyChunks"
 	add_child(_chunks)
-	_chunks.setup(self, _skin_material, _cavity_material)
+	_chunks.setup(self, _skin_material, _cavity_material, _outline_material)
 	_apply_part_visibility()
 
 
-func _make_part(part_name: String, mesh: ArrayMesh) -> MeshInstance3D:
+## `outline` is the part's welded copy: a child on the same skin and skeleton that wears
+## the ink line, shown and hidden with the part.
+func _make_part(part_name: String, mesh: ArrayMesh, outline: ArrayMesh) -> MeshInstance3D:
 	var part := MeshInstance3D.new()
 	part.name = part_name
 	part.mesh = mesh
@@ -729,6 +833,15 @@ func _make_part(part_name: String, mesh: ArrayMesh) -> MeshInstance3D:
 	part.layers = _mesh.layers
 	part.skeleton = part.get_path_to(_skeleton)
 	_parts.append(part)
+	var line := MeshInstance3D.new()
+	line.name = "Outline"
+	line.mesh = outline
+	line.skin = _mesh.skin
+	part.add_child(line)
+	line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	line.layers = part.layers
+	line.skeleton = line.get_path_to(_skeleton)
+	_outline_parts.append(line)
 	return part
 
 
@@ -785,6 +898,7 @@ static func _parse_split(mesh: ArrayMesh, skin: Skin, skeleton: Skeleton3D) -> D
 	for bind: int in corners:
 		bind_tris[bind] = PackedVector3Array(corners[bind])
 	var intact := {}
+	var outline := {}
 	for part: StringName in lists:
 		var all := PackedInt32Array(lists[part])
 		if all.is_empty():
@@ -794,7 +908,40 @@ static func _parse_split(mesh: ArrayMesh, skin: Skin, skeleton: Skeleton3D) -> D
 		var part_mesh := ArrayMesh.new()
 		part_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, part_arrays, [], {}, flags)
 		intact[part] = part_mesh
-	return {"intact": intact, "bind_tris": bind_tris}
+		outline[part] = _weld_normals(part_mesh, flags)
+	return {"intact": intact, "outline": outline, "bind_tris": bind_tris}
+
+
+## A copy of `mesh` (one skinned surface) for the ink hull: the normal at every vertex is
+## the sum over all vertices sharing its position, normalized, so the hull stays closed
+## along the flat-shaded facet edges. Indices, bones, and weights are kept; UVs and
+## tangents are dropped.
+static func _weld_normals(mesh: ArrayMesh, flags: int) -> ArrayMesh:
+	var source := mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = source[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = source[Mesh.ARRAY_NORMAL]
+	var cells: Array[Vector3i] = []
+	var sums := {}
+	for i in verts.size():
+		var cell := Vector3i((verts[i] / WELD_EPSILON).round())
+		cells.append(cell)
+		sums[cell] = (sums[cell] as Vector3 if sums.has(cell) else Vector3.ZERO) + normals[i]
+	var welded := PackedVector3Array()
+	welded.resize(verts.size())
+	for i in verts.size():
+		var sum: Vector3 = sums[cells[i]]
+		# Opposed normals at one point cancel; keep the vertex's own then.
+		welded[i] = sum.normalized() if sum.length_squared() > 0.000001 else normals[i]
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = welded
+	arrays[Mesh.ARRAY_BONES] = source[Mesh.ARRAY_BONES]
+	arrays[Mesh.ARRAY_WEIGHTS] = source[Mesh.ARRAY_WEIGHTS]
+	arrays[Mesh.ARRAY_INDEX] = source[Mesh.ARRAY_INDEX]
+	var out := ArrayMesh.new()
+	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
+	return out
 
 
 ## Every surface's arrays end to end, indices offset.

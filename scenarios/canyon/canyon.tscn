@@ -2,13 +2,25 @@
 
 [ext_resource type="Script" uid="uid://rqeigq13k8h7" path="res://scenarios/scenario_base.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://d2mq1t0ld1b6w" path="res://assets/models/scenarios/canyon/canyon.glb" id="2"]
+[ext_resource type="Shader" path="res://scenarios/sky_western.gdshader" id="sky_shader"]
+[ext_resource type="Texture2D" path="res://scenarios/sky_clouds.tres" id="sky_clouds"]
 
-[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
-sky_top_color = Color(0.25, 0.15, 0.3, 1)
-sky_horizon_color = Color(0.95, 0.5, 0.25, 1)
-ground_bottom_color = Color(0.72, 0.4, 0.2, 1)
-ground_horizon_color = Color(0.95, 0.55, 0.28, 1)
-ground_curve = 0.12
+[sub_resource type="ShaderMaterial" id="sky_mat"]
+shader = ExtResource("sky_shader")
+shader_parameter/sky_top = Color(0.25, 0.15, 0.3, 1)
+shader_parameter/sky_horizon = Color(0.95, 0.5, 0.25, 1)
+shader_parameter/sky_curve = 0.15
+shader_parameter/ground_bottom = Color(0.72, 0.4, 0.2, 1)
+shader_parameter/ground_horizon = Color(0.95, 0.55, 0.28, 1)
+shader_parameter/ground_curve = 0.12
+shader_parameter/bands = 0.0
+shader_parameter/sun_radius = 0.015
+shader_parameter/sun_halo = 0.35
+shader_parameter/cloud_tex = ExtResource("sky_clouds")
+shader_parameter/cloud_cover = 0.35
+shader_parameter/cloud_scale = 0.25
+shader_parameter/cloud_offset = Vector2(0, 0)
+shader_parameter/cloud_color = Color(1, 0.76, 0.61, 1)
 
 [sub_resource type="Sky" id="sky"]
 sky_material = SubResource("sky_mat")

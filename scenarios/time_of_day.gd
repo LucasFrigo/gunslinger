@@ -4,12 +4,18 @@ extends RefCounted
 ## Only colors, sun elevation, and fog sun-scatter change. Fog distances,
 ## sky/ground curves, and shadow fade stay on the scene so a recolor cannot
 ## draw the canyon's 6 km edge or pop the train belt out of the fog.
-## fog_light_color is always copied from ground_horizon_color after the lerp.
+## The sky is a ShaderMaterial (`sky_western.gdshader`); its gradient uniforms share the
+## keyframe key names. fog_light_color is always copied from `ground_horizon` after the lerp,
+## and `cloud_color` is `light_color` pulled toward white.
 
 const DAWN_ELEVATION_DEG := 8.0
 const NOON_ELEVATION_DEG := 70.0
 const AFTERNOON_ELEVATION_DEG := 32.0
 const DUSK_ELEVATION_DEG := 12.0
+const CLOUD_WHITE_MIX := 0.4
+
+## Silhouette rim color (`edge_light` global in `body_skin.gdshader`) where no sun sets it.
+const EDGE_DEFAULT := Color(1.0, 0.75, 0.5)
 
 const KEYFRAMES: Array = [
 	{
@@ -22,6 +28,7 @@ const KEYFRAMES: Array = [
 		"ground_bottom": Color(0.32, 0.2, 0.14),
 		"ground_horizon": Color(0.93, 0.6, 0.44),
 		"fog_sun_scatter": 0.48,
+		"trail_solid": 0.15,
 	},
 	{
 		"t": 1.0 / 3.0,
@@ -33,6 +40,7 @@ const KEYFRAMES: Array = [
 		"ground_bottom": Color(0.42, 0.36, 0.26),
 		"ground_horizon": Color(0.66, 0.74, 0.84),
 		"fog_sun_scatter": 0.12,
+		"trail_solid": 0.75,
 	},
 	{
 		"t": 2.0 / 3.0,
@@ -44,6 +52,7 @@ const KEYFRAMES: Array = [
 		"ground_bottom": Color(0.4, 0.3, 0.18),
 		"ground_horizon": Color(0.84, 0.7, 0.48),
 		"fog_sun_scatter": 0.28,
+		"trail_solid": 0.4,
 	},
 	{
 		"t": 1.0,
@@ -55,11 +64,12 @@ const KEYFRAMES: Array = [
 		"ground_bottom": Color(0.55, 0.28, 0.16),
 		"ground_horizon": Color(0.95, 0.55, 0.28),
 		"fog_sun_scatter": 0.4,
+		"trail_solid": 0.15,
 	},
 ]
 
 
-## Recolor `root`'s Sun and procedural sky. No Sun means leave the scene
+## Recolor `root`'s Sun and sky shader. No Sun means leave the scene
 ## alone (Saloon). `sun_yaw` is the authored azimuth, kept across samples.
 static func apply(root: Node3D, t: float, sun_yaw: float) -> void:
 	var sun := root.get_node_or_null("Sun") as DirectionalLight3D
@@ -68,20 +78,27 @@ static func apply(root: Node3D, t: float, sun_yaw: float) -> void:
 	var sample := _sample(t)
 	_aim_sun(sun, float(sample["elevation_deg"]), sun_yaw)
 	sun.light_color = sample["light_color"]
+	set_edge(sun.light_color)
+	BulletTrail.solid = float(sample["trail_solid"])
 	sun.light_energy = float(sample["light_energy"])
 	var world := root.get_node_or_null("WorldEnvironment") as WorldEnvironment
 	if world == null or world.environment == null or world.environment.sky == null:
 		return
-	var mat := world.environment.sky.sky_material as ProceduralSkyMaterial
+	var mat := world.environment.sky.sky_material as ShaderMaterial
 	if mat == null:
 		return
-	mat.sky_top_color = sample["sky_top"]
-	mat.sky_horizon_color = sample["sky_horizon"]
-	mat.ground_bottom_color = sample["ground_bottom"]
-	mat.ground_horizon_color = sample["ground_horizon"]
+	for key in [&"sky_top", &"sky_horizon", &"ground_bottom", &"ground_horizon"]:
+		mat.set_shader_parameter(key, sample[key])
+	mat.set_shader_parameter(&"cloud_color",
+			(sample["light_color"] as Color).lerp(Color.WHITE, CLOUD_WHITE_MIX))
 	# The opaque fog must be the sky ground, or the distant plain draws a line.
-	world.environment.fog_light_color = mat.ground_horizon_color
+	world.environment.fog_light_color = sample["ground_horizon"]
 	world.environment.fog_sun_scatter = float(sample["fog_sun_scatter"])
+
+
+## Skin rim color on every body. `ScenarioBase` resets it per load; `apply` follows the sun.
+static func set_edge(color: Color) -> void:
+	RenderingServer.global_shader_parameter_set(&"edge_light", color)
 
 
 static func _sample(t: float) -> Dictionary:
@@ -111,6 +128,7 @@ static func _lerp_frame(a: Dictionary, b: Dictionary, u: float) -> Dictionary:
 		"ground_bottom": (a["ground_bottom"] as Color).lerp(b["ground_bottom"], u),
 		"ground_horizon": (a["ground_horizon"] as Color).lerp(b["ground_horizon"], u),
 		"fog_sun_scatter": lerpf(float(a["fog_sun_scatter"]), float(b["fog_sun_scatter"]), u),
+		"trail_solid": lerpf(float(a["trail_solid"]), float(b["trail_solid"]), u),
 	}
 
 

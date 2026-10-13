@@ -114,6 +114,7 @@ func _knock_next(press: int) -> void:
 	var dir := -_dummy.front_dir()
 	var bone := _dummy.bone_index(target[0])
 	var cut := _dummy.cut_on_bone(bone, aim - dir * DummyBody.SNAP_BACK, dir, target[2])
+	_dummy.flash(-1.0)
 	_dummy.knock_chunk(cut, dir, -1.0, false)
 
 

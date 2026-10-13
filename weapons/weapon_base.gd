@@ -12,6 +12,8 @@ signal shells_ejected(ejected: int)
 ## Empty cylinder, open gate, uncocked hammer, or jam — trigger pulled with no shot.
 signal dry_fired(reason: StringName)
 
+const MUZZLE_FLASH_SHADER := preload("res://weapons/muzzle_flash.gdshader")
+const MUZZLE_FLASH_SIZE := 0.3
 const COLLISION_LAYER_WORLD := 1
 const COLLISION_LAYER_WEAPON := 32  # physics layer 6
 ## Local COM for hang gravity (barrel/cylinder), not the trigger pivot.
@@ -623,7 +625,7 @@ func try_fire(auto_cock: bool, override_direction := Vector3.ZERO) -> bool:
 		direction = -muzzle.global_transform.basis.z
 	_play(AudioCatalog.get_stream(&"gunshot"))
 	_muzzle_flash()
-	ImpactFeedback.shot_fired(muzzle.global_transform, shooting_hand)
+	ImpactFeedback.shot_fired(muzzle.global_transform, shooting_hand, muzzle)
 	fired.emit(muzzle.global_position, direction.normalized())
 	state_changed.emit()
 	return true
@@ -663,9 +665,32 @@ func _muzzle_flash() -> void:
 	light.omni_range = 3.0
 	add_child(light)
 	light.position = get_muzzle().position
+	var quad := make_muzzle_flash_quad()
+	add_child(quad)
+	quad.position = get_muzzle().position
+	var mat := quad.material_override as ShaderMaterial
 	var tween := create_tween()
+	tween.set_parallel(true)
 	tween.tween_property(light, "light_energy", 0.0, 0.08)
-	tween.tween_callback(light.queue_free)
+	tween.tween_method(func(v: float) -> void: mat.set_shader_parameter("life", v),
+			1.0, 0.0, 0.08)
+	tween.chain().tween_callback(light.queue_free)
+	tween.tween_callback(quad.queue_free)
+
+
+## Billboarded star quad for the muzzle flash. Shared with the boot warmup.
+static func make_muzzle_flash_quad() -> MeshInstance3D:
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(MUZZLE_FLASH_SIZE, MUZZLE_FLASH_SIZE)
+	var mat := ShaderMaterial.new()
+	mat.shader = MUZZLE_FLASH_SHADER
+	mat.set_shader_parameter("seed", randf() * TAU)
+	mat.set_shader_parameter("life", 1.0)
+	var quad := MeshInstance3D.new()
+	quad.mesh = mesh
+	quad.material_override = mat
+	quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return quad
 
 
 func _make_audio() -> AudioStreamPlayer3D:

@@ -13,7 +13,7 @@ func _ready() -> void:
 		emitting = true
 		finished.connect(queue_free)
 		# Safety if finished never fires (e.g. zero lifetime).
-		get_tree().create_timer(lifetime + 0.5, true, false, true).timeout.connect(
+		get_tree().create_timer(lifetime * 2.0 + 0.5, true, false, true).timeout.connect(
 			func() -> void:
 				if is_instance_valid(self):
 					queue_free()

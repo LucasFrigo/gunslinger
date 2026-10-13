@@ -9,3 +9,7 @@ display_name = "Canyon at Dusk"
 description = "Long shadows and long shots between the canyon walls."
 scene = ExtResource("2")
 duel_distance = 22.0
+wind_volume_db = -20.0
+gust_interval_min = 10.0
+gust_interval_max = 26.0
+gust_strength = 1.0

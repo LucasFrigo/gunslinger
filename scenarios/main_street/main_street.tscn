@@ -19,13 +19,25 @@
 [ext_resource type="PackedScene" uid="uid://bc0hp44nv237a" path="res://assets/models/scenarios/main_street/prp_barrels.glb" id="16"]
 [ext_resource type="PackedScene" uid="uid://cx1uk146m2625" path="res://assets/models/scenarios/main_street/prp_hitching_rail.glb" id="17"]
 [ext_resource type="PackedScene" uid="uid://bimj4uhhrnpri" path="res://assets/models/scenarios/main_street/prp_cow.glb" id="18"]
+[ext_resource type="Shader" path="res://scenarios/sky_western.gdshader" id="sky_shader"]
+[ext_resource type="Texture2D" path="res://scenarios/sky_clouds.tres" id="sky_clouds"]
 
-[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
-sky_top_color = Color(0.28, 0.55, 0.92, 1)
-sky_horizon_color = Color(0.7, 0.84, 0.98, 1)
-sky_curve = 0.08
-ground_bottom_color = Color(0.4, 0.32, 0.22, 1)
-ground_horizon_color = Color(0.58, 0.52, 0.4, 1)
+[sub_resource type="ShaderMaterial" id="sky_mat"]
+shader = ExtResource("sky_shader")
+shader_parameter/sky_top = Color(0.28, 0.55, 0.92, 1)
+shader_parameter/sky_horizon = Color(0.7, 0.84, 0.98, 1)
+shader_parameter/sky_curve = 0.08
+shader_parameter/ground_bottom = Color(0.4, 0.32, 0.22, 1)
+shader_parameter/ground_horizon = Color(0.58, 0.52, 0.4, 1)
+shader_parameter/ground_curve = 0.02
+shader_parameter/bands = 0.0
+shader_parameter/sun_radius = 0.015
+shader_parameter/sun_halo = 0.35
+shader_parameter/cloud_tex = ExtResource("sky_clouds")
+shader_parameter/cloud_cover = 0.35
+shader_parameter/cloud_scale = 0.25
+shader_parameter/cloud_offset = Vector2(0, 0)
+shader_parameter/cloud_color = Color(1, 0.96, 0.89, 1)
 
 [sub_resource type="Sky" id="sky"]
 sky_material = SubResource("sky_mat")

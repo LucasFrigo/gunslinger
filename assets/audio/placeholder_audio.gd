@@ -95,6 +95,58 @@ static func slot_win() -> AudioStreamWAV:
 		return _tone(1320.0, 0.9, 0.45, 3.0))
 
 
+## Seamless looping wind: low-passed noise whose level swells on whole cycles of the loop.
+static func wind_bed() -> AudioStreamWAV:
+	return _cached("wind_bed", func() -> AudioStreamWAV:
+		var duration := 4.0
+		var frames := int(duration * SAMPLE_RATE)
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 4242
+		var noise := PackedFloat32Array()
+		noise.resize(frames)
+		for i in frames:
+			noise[i] = rng.randf_range(-1.0, 1.0)
+		# Two passes around the ring: the second starts on the first's settled state.
+		var low := 0.0
+		var smooth := PackedFloat32Array()
+		smooth.resize(frames)
+		for pass_index in 2:
+			for i in frames:
+				low += 0.06 * (noise[i] - low)
+				smooth[i] = low
+		var data := PackedByteArray()
+		data.resize(frames * 2)
+		for i in frames:
+			var phase := TAU * float(i) / frames
+			var swell := 0.7 + 0.2 * sin(phase) + 0.1 * sin(phase * 3.0 + 1.3)
+			var value := int(clampf(smooth[i] * 3.0 * swell, -1.0, 1.0) * 0.6 * 32767.0)
+			data.encode_s16(i * 2, value)
+		var stream := _wav(data)
+		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		stream.loop_begin = 0
+		stream.loop_end = frames
+		return stream)
+
+
+## One gust: noise that swells and fades, brightening at the peak.
+static func wind_gust() -> AudioStreamWAV:
+	return _cached("wind_gust", func() -> AudioStreamWAV:
+		var duration := 1.8
+		var frames := int(duration * SAMPLE_RATE)
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 9001
+		var data := PackedByteArray()
+		data.resize(frames * 2)
+		var low := 0.0
+		for i in frames:
+			var u := float(i) / frames
+			var envelope := pow(sin(PI * u), 2.0)
+			low += lerpf(0.04, 0.18, envelope) * (rng.randf_range(-1.0, 1.0) - low)
+			var value := int(clampf(low * 3.0 * envelope, -1.0, 1.0) * 0.7 * 32767.0)
+			data.encode_s16(i * 2, value)
+		return _wav(data))
+
+
 static func _cached(key: String, generator: Callable) -> AudioStreamWAV:
 	if not _cache.has(key):
 		_cache[key] = generator.call()

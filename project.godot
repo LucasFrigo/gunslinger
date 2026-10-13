@@ -37,6 +37,7 @@ VoiceChat="*res://autoload/voice_chat.gd"
 KillCam="*res://autoload/kill_cam.gd"
 ReplayBuffer="*res://autoload/replay_buffer.gd"
 DeathCam="*res://autoload/death_cam.gd"
+ScreenOverlay="*res://autoload/screen_overlay.gd"
 XRToolsUserSettings="*uid://bqgb8i74tm0t"
 XRToolsRumbleManager="*uid://by853dk86g1qw"
 
@@ -156,6 +157,43 @@ common/physics_ticks_per_second=90
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
+
+[shader_globals]
+
+edge_light={
+"type": "color",
+"value": Color(1, 0.75, 0.5, 1)
+}
+
+band_low={
+"type": "float",
+"value": 0.65
+}
+
+band_soft={
+"type": "float",
+"value": 0.03
+}
+
+grain_strength_mult={
+"type": "float",
+"value": 1.0
+}
+
+grain_scale_mult={
+"type": "float",
+"value": 1.0
+}
+
+wind_ambient={
+"type": "float",
+"value": 0.0
+}
+
+wind_gust={
+"type": "float",
+"value": 0.0
+}
 
 [steam]
 

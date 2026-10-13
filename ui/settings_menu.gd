@@ -41,6 +41,8 @@ func _ready() -> void:
 	%HolsterOption.item_selected.connect(_on_holster_selected)
 	%GoreCheck.toggled.connect(_on_gore_toggled)
 	PlayerSettings.gore_changed.connect(_refresh_gore)
+	%ScreenEffectsCheck.toggled.connect(_on_screen_effects_toggled)
+	PlayerSettings.screen_effects_changed.connect(_refresh_screen_effects)
 	%TurnModeOption.item_selected.connect(_on_turn_mode_selected)
 	%SmoothTurnSlider.value_changed.connect(_on_smooth_turn_changed)
 	%SnapTurnSlider.value_changed.connect(_on_snap_turn_changed)
@@ -121,6 +123,7 @@ func refresh() -> void:
 	_fill_device_options()
 	%HolsterOption.selected = int(GameManager.tuning.get("holster_side", 0))
 	_refresh_gore()
+	_refresh_screen_effects()
 	%TurnModeOption.selected = MovementConfig.turn_mode
 	%SmoothTurnSlider.value = MovementConfig.smooth_turn_speed
 	%SmoothTurnValue.text = tr("SETTINGS_DEG_PER_SEC") % int(round(MovementConfig.smooth_turn_speed))
@@ -260,6 +263,13 @@ func _refresh_gore() -> void:
 	_refreshing = was_refreshing
 
 
+func _refresh_screen_effects() -> void:
+	var was_refreshing := _refreshing
+	_refreshing = true
+	%ScreenEffectsCheck.button_pressed = PlayerSettings.screen_effects_enabled
+	_refreshing = was_refreshing
+
+
 func _fill_device_options() -> void:
 	_fill_device_option(%InputDeviceOption, PlayerSettings.input_device_choices(),
 			PlayerSettings.input_device)
@@ -332,6 +342,12 @@ func _on_gore_toggled(pressed: bool) -> void:
 	if _refreshing:
 		return
 	PlayerSettings.set_gore_enabled(pressed)
+
+
+func _on_screen_effects_toggled(pressed: bool) -> void:
+	if _refreshing:
+		return
+	PlayerSettings.set_screen_effects_enabled(pressed)
 
 
 func _on_voice_gate_changed(value: float) -> void:

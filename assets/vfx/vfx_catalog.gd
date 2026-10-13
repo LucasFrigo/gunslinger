@@ -4,16 +4,18 @@ extends RefCounted
 ## for real art without changing call sites.
 ##
 ## Cue names: muzzle_smoke, world_dust, wood_chip, blood_burst, near_miss_whoosh,
-## glass_shatter, coin_burst
+## glass_shatter, coin_burst, barrel_smoke, wind_gust
 
 const _SCENES := {
 	&"muzzle_smoke": preload("res://assets/vfx/muzzle_smoke.tscn"),
+	&"barrel_smoke": preload("res://assets/vfx/barrel_smoke.tscn"),
 	&"world_dust": preload("res://assets/vfx/world_dust.tscn"),
 	&"wood_chip": preload("res://assets/vfx/wood_chip.tscn"),
 	&"blood_burst": preload("res://assets/vfx/blood_burst.tscn"),
 	&"near_miss_whoosh": preload("res://assets/vfx/near_miss_whoosh.tscn"),
 	&"glass_shatter": preload("res://assets/vfx/glass_shatter.tscn"),
 	&"coin_burst": preload("res://assets/vfx/coin_burst.tscn"),
+	&"wind_gust": preload("res://assets/vfx/wind_gust.tscn"),
 }
 
 ## Optional cue → PackedScene overrides.

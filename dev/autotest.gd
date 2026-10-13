@@ -1,6 +1,8 @@
 extends Node
 ## Headless smoke tests, launched via `--autotest=<mode>` after `--`:
-##   duel     - free duel vs AI; passes when bullets actually resolve the duel
+##   duel     - the `ScreenOverlay` state first (hurt per region and its fade, the kill-cam
+##              iris on the kill-cam camera, abort, a freed camera, the Settings toggle),
+##              then a free duel vs AI; passes when bullets actually resolve the duel
 ##   props    - equips the cigarette / coin / ace / bottle and throws them
 ##   gauntlet - clears two gauntlet rungs by force-killing the AI;
 ##              first rung also checks the pain-jerk toss
@@ -119,6 +121,8 @@ func _ready() -> void:
 
 func _test_duel() -> void:
 	await _sleep(1.0)
+	if not await _screen_overlay_ok():
+		return
 	GameManager.start_free_duel(0, 0)
 	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
 		return _fail("duel never reached DRAW")
@@ -128,6 +132,108 @@ func _test_duel() -> void:
 		return _fail("duel did not resolve (no bullet hit landed)")
 	print("AUTOTEST: duel finished, local won=%s (%s)" % [result[0], result[1]])
 	_pass()
+
+
+## `ScreenOverlay` is checked as state; headless draws no shader. The NPC is slowed so its
+## bullets do not land mid-test.
+func _screen_overlay_ok() -> bool:
+	var saved_speed: float = GameManager.tuning["ai_speed_mult"]
+	GameManager.tuning["ai_speed_mult"] = MULTI_AI_SPEED
+	var ok := await _screen_overlay_steps()
+	GameManager.tuning["ai_speed_mult"] = saved_speed
+	PlayerSettings.screen_effects_enabled = true
+	ScreenOverlay.reset()
+	return ok
+
+
+func _screen_overlay_steps() -> bool:
+	GameManager.start_free_duel(0, 0)
+	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
+		_fail("overlay: the duel never reached DRAW")
+		return false
+	var player := GameManager.local_player
+	var trail := PackedVector3Array([Vector3(0.0, 1.5, 0.0), Vector3(0.0, 1.5, -2.0)])
+	var quad_idle := func() -> bool:
+		return not ScreenOverlay._quad.visible and ScreenOverlay._quad.get_parent() == ScreenOverlay
+	var calm := func() -> bool: return not ScreenOverlay.is_active()
+	if GameManager.hud.get_node_or_null("RedFlash") != null or GameManager.hud.has_method("flash_red"):
+		_fail("overlay: the HUD still has the red flash")
+		return false
+
+	# A wound scales with the region, then fades and the quad parks hidden under the autoload.
+	ScreenOverlay.reset()
+	for wound in [[CombatRules.REGION_TORSO, "hurt_torso"], [CombatRules.REGION_ARM, "hurt_limb"]]:
+		player.take_bullet_hit(0.0, PackedVector3Array(), wound[0])
+		var want := float(GameManager.tuning[wound[1]])
+		if not is_equal_approx(ScreenOverlay.hurt_level(), want) or not ScreenOverlay.is_active():
+			_fail("overlay: a %s hit set hurt to %.2f, expected %.2f" % [wound[0], ScreenOverlay.hurt_level(), want])
+			return false
+		if not await _wait_for(calm, 3.0) or not quad_idle.call():
+			_fail("overlay: the %s vignette did not fade and park" % wound[0])
+			return false
+
+	# Toggle off: a wound and the kill cam leave the overlay idle.
+	PlayerSettings.screen_effects_enabled = false
+	player.take_bullet_hit(0.0, PackedVector3Array(), CombatRules.REGION_TORSO)
+	GameManager.duel.kill_cam_requested.emit(trail)
+	await get_tree().process_frame
+	if not KillCam.is_playing or ScreenOverlay.is_active() or ScreenOverlay.hurt_level() != 0.0:
+		_fail("overlay: effects off, but the overlay woke (kill cam playing %s)" % KillCam.is_playing)
+		return false
+	KillCam.cancel()
+	PlayerSettings.screen_effects_enabled = true
+
+	# Kill cam: shut on its own camera, opens, closes at the end, then opens on the next view.
+	GameManager.duel.kill_cam_requested.emit(trail)
+	var cam: Camera3D = KillCam._camera
+	if not KillCam.is_playing or not is_instance_valid(cam) or not ScreenOverlay.is_active() 			or ScreenOverlay.iris_level() != 0.0 or not ScreenOverlay._quad.visible 			or ScreenOverlay._quad.get_parent() != cam:
+		_fail("overlay: the kill cam did not start shut on its camera")
+		return false
+	if not await _wait_for(func() -> bool: return ScreenOverlay.iris_level() >= ScreenOverlay.IRIS_OPEN, 3.0):
+		_fail("overlay: the iris never opened on the kill cam")
+		return false
+	if not await _wait_for(func() -> bool: return not KillCam.is_playing, 10.0) 			or not await _wait_for(calm, 3.0) or not quad_idle.call() 			or ScreenOverlay.iris_level() != ScreenOverlay.IRIS_OPEN:
+		_fail("overlay: after the kill cam the iris is not open with the quad parked")
+		return false
+
+	# Abort: cancel mid-wipe leaves it open, clear and parked at once.
+	GameManager.duel.kill_cam_requested.emit(trail)
+	await get_tree().process_frame
+	if not ScreenOverlay.is_active():
+		_fail("overlay: the second kill cam did not wake the overlay")
+		return false
+	KillCam.cancel()
+	if ScreenOverlay.is_active() or ScreenOverlay.iris_level() != ScreenOverlay.IRIS_OPEN 			or ScreenOverlay.hurt_level() != 0.0 or not quad_idle.call():
+		_fail("overlay: cancelling the kill cam left the overlay up")
+		return false
+
+	# A camera freed under the quad does not take it, or the running effect, with it.
+	var temp := Camera3D.new()
+	add_child(temp)
+	temp.current = true
+	ScreenOverlay.hurt(0.5, 5.0)
+	await get_tree().process_frame
+	if ScreenOverlay._quad.get_parent() != temp:
+		_fail("overlay: the quad did not ride the current camera")
+		return false
+	temp.free()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if not is_instance_valid(ScreenOverlay._quad) or not ScreenOverlay._quad.is_inside_tree() 			or ScreenOverlay.hurt_level() <= 0.0:
+		_fail("overlay: freeing the camera under the quad broke the overlay")
+		return false
+	ScreenOverlay.reset()
+
+	# A kill: the strongest vignette, carried onto the kill-cam camera, then idle.
+	player.take_bullet_hit(99.0, trail, CombatRules.REGION_HEAD)
+	if not is_equal_approx(ScreenOverlay.hurt_level(), float(GameManager.tuning["hurt_kill"])) 			or not KillCam.is_playing or ScreenOverlay._quad.get_parent() != KillCam._camera:
+		_fail("overlay: a kill did not show the vignette on the kill-cam camera")
+		return false
+	if not await _wait_for(func() -> bool: return not KillCam.is_playing, 10.0) 			or not await _wait_for(calm, 3.0) or not quad_idle.call():
+		_fail("overlay: the overlay did not go idle after the kill cam")
+		return false
+	print("AUTOTEST: screen overlay hurt per region, iris on the kill cam, abort, freed camera, and toggle ok")
+	return true
 
 
 func _test_gauntlet() -> void:
@@ -875,6 +981,13 @@ func _test_ragdoll() -> void:
 	var bodies := dummy.get_node("BodyRagdoll").get_child_count()
 	if bodies != 0:
 		return _fail("ragdoll: %d bodies or joints left after settling" % bodies)
+	# The ink hulls ride the fallen skeleton: same skin and skeleton, still shown.
+	if dummy._outline_parts.is_empty():
+		return _fail("ragdoll: the body has no outline children")
+	for line in dummy._outline_parts:
+		if line.skin != dummy._mesh.skin or line.get_node(line.skeleton) != skeleton \
+				or not line.is_visible_in_tree() or line.material_override == null:
+			return _fail("ragdoll: the corpse's %s outline left the skeleton or is hidden" % line.get_parent().name)
 	var held_chest := skeleton.get_bone_global_pose(chest_bone)
 	var start_pose := dummy._ragdoll.track_at(0.0)
 	var end_pose := dummy._ragdoll.track_at(dummy._ragdoll.track_length())
@@ -937,6 +1050,9 @@ func _ragdoll_player_ok() -> bool:
 			CombatRules.REGION_TORSO)
 	if player.alive or not dummy.has_corpse():
 		_fail("ragdoll: the player's death made no corpse")
+		return false
+	if dummy._flash_times.size() != 1 or not is_equal_approx(float(dummy._skin_material.get_shader_parameter("flash")), 1.0):
+		_fail("ragdoll: the killing shot did not flash the body (%d logged)" % dummy._flash_times.size())
 		return false
 	if player.revolver.held or player.revolver.freeze:
 		_fail("ragdoll: the dead player's revolver is still held or frozen")
@@ -1022,7 +1138,7 @@ func _chunks_ok() -> bool:
 	var ai := GameManager.current_ais[0]
 	var dummy := ai.corpse_body()
 	ai.health = 1000.0
-	if not _chunks_parse_ok(dummy) or not await _chunks_warmup_ok():
+	if not _chunks_parse_ok(dummy) or not _chunks_outline_ok(dummy) or not await _chunks_warmup_ok():
 		return false
 	await get_tree().physics_frame
 	await get_tree().physics_frame
@@ -1059,6 +1175,17 @@ func _chunks_ok() -> bool:
 		return false
 	print("AUTOTEST: chunks: bullet cut UpperArm.L (r %.3f), uniforms match, gib left %.3f m from the bone" % [
 			arm_cut["radius"], gap])
+	# Hit flash: the accepted hit logged one; flash() raises the skin uniform and never the hands'.
+	if dummy._flash_times.size() != 1:
+		_fail("chunks: the arm bullet logged %d flashes" % dummy._flash_times.size())
+		return false
+	dummy.flash(ReplayBuffer.clip_time())
+	var hand_flash: Variant = dummy._hand_material.get_shader_parameter("flash")
+	if not is_equal_approx(float(dummy._skin_material.get_shader_parameter("flash")), 1.0) 			or (hand_flash != null and float(hand_flash) != 0.0) 			or float(dummy._hand_material.get_shader_parameter("edge_strength")) != 0.0:
+		_fail("chunks: flash() skin %s hand %s" % [dummy._skin_material.get_shader_parameter("flash"), hand_flash])
+		return false
+	dummy._flash_times.pop_back()
+	dummy._flash_fired.pop_back()
 
 	# 5. chunk_chance 0 cuts nothing.
 	GameManager.tuning["chunk_chance"] = 0.0
@@ -1069,6 +1196,9 @@ func _chunks_ok() -> bool:
 	GameManager.tuning["chunk_chance"] = 1.0
 	if dummy.chunk_count() != 1 or events.size() != 1:
 		_fail("chunks: chunk_chance 0 still cut a hole")
+		return false
+	if dummy._flash_times.size() != 2:
+		_fail("chunks: a hit with an empty cut logged %d flashes, wanted 2" % dummy._flash_times.size())
 		return false
 
 	# 6. The gib settles: frozen, with a track, on the ground.
@@ -1221,15 +1351,101 @@ func _chunks_parse_ok(dummy: DummyBody) -> bool:
 		_fail("chunks: body and head do not wear the shared skin shader")
 		return false
 	for hand in dummy._hand_meshes:
-		if not hand.material_override is StandardMaterial3D:
-			_fail("chunks: a hand wears %s, not the solid material" % hand.material_override)
+		if hand.material_override != dummy._hand_material \
+				or dummy._hand_material == dummy._skin_material:
+			_fail("chunks: a hand wears %s, not its own banded skin" % hand.material_override)
 			return false
 	print("AUTOTEST: chunks: snap triangles (%s)" % ", ".join(line))
 	return true
 
 
-## 2. Boot warmup (skipped headless): a probe with both hole passes plus one frozen gib the
-## cap does not count.
+## 1b. Every part carries an "Outline" child: the cached welded copy on the part's skin and
+## skeleton, wearing the ink shader. The weld closes the flat-shaded cracks (one normal per
+## position) and keeps the part's vertex and index counts. The tuning knobs and the
+## first-person clip reach it.
+func _chunks_outline_ok(dummy: DummyBody) -> bool:
+	var welded: Dictionary = dummy._split.get("outline", {})
+	var parts: Array[MeshInstance3D] = [dummy._body_mesh, dummy._head_mesh]
+	parts.append_array(dummy._hand_meshes)
+	if dummy._outline_parts.size() != parts.size():
+		_fail("chunks: %d outline children for %d parts" % [dummy._outline_parts.size(), parts.size()])
+		return false
+	var cracked := 0
+	var worst := 0.0
+	for part in parts:
+		var line := part.get_node_or_null("Outline") as MeshInstance3D
+		var ink: ShaderMaterial = dummy._hand_outline_material if dummy._hand_meshes.has(part) else dummy._outline_material
+		if line == null or not dummy._outline_parts.has(line) or line.skin != part.skin \
+				or line.get_node(line.skeleton) != dummy._skeleton \
+				or line.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or line.layers != part.layers:
+			_fail("chunks: %s has no outline child on its skin and skeleton" % part.name)
+			return false
+		if line.material_override != ink or ink.shader != BodyChunks.OUTLINE_SHADER:
+			_fail("chunks: the %s outline wears %s, not its ink" % [part.name, line.material_override])
+			return false
+		if not welded.values().has(line.mesh):
+			_fail("chunks: the %s outline is not the cached welded mesh" % part.name)
+			return false
+		var source := part.mesh.surface_get_arrays(0)
+		var arrays := line.mesh.surface_get_arrays(0)
+		var verts: PackedVector3Array = source[Mesh.ARRAY_VERTEX]
+		if (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() != verts.size() \
+				or (arrays[Mesh.ARRAY_INDEX] as PackedInt32Array).size() != (source[Mesh.ARRAY_INDEX] as PackedInt32Array).size():
+			_fail("chunks: the %s outline changed the vertex or index count" % part.name)
+			return false
+		var was: PackedVector3Array = source[Mesh.ARRAY_NORMAL]
+		var now: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		var first_was := {}
+		var first_now := {}
+		for i in verts.size():
+			var cell := Vector3i((verts[i] / DummyBody.WELD_EPSILON).round())
+			if not first_now.has(cell):
+				first_now[cell] = now[i]
+				first_was[cell] = was[i]
+				continue
+			worst = maxf(worst, (now[i] - (first_now[cell] as Vector3)).length())
+			if (was[i] - (first_was[cell] as Vector3)).length() > 0.1:
+				cracked += 1
+	if worst > 0.001:
+		_fail("chunks: welded outline normals at one position still differ by %.4f" % worst)
+		return false
+	if cracked == 0:
+		_fail("chunks: the source parts have no split normals, so the weld proves nothing")
+		return false
+	# The knobs: width on both inks, visibility on every child, clip on the body's ink only.
+	var saved_on: Variant = GameManager.tuning.get("outline_enabled", 1.0)
+	var saved_width: Variant = GameManager.tuning.get("outline_width", 0.004)
+	GameManager.tuning["outline_width"] = 0.01
+	GameManager.tuning_changed.emit("outline_width", 0.01)
+	var width_ok := is_equal_approx(float(dummy._outline_material.get_shader_parameter("width")), 0.01) \
+			and is_equal_approx(float(dummy._hand_outline_material.get_shader_parameter("width")), 0.01)
+	GameManager.tuning["outline_enabled"] = 0.0
+	GameManager.tuning_changed.emit("outline_enabled", 0.0)
+	var hidden := dummy._outline_parts.all(func(line: MeshInstance3D) -> bool: return not line.visible)
+	GameManager.tuning["outline_enabled"] = saved_on
+	GameManager.tuning["outline_width"] = saved_width
+	GameManager.tuning_changed.emit("outline_enabled", saved_on)
+	GameManager.tuning_changed.emit("outline_width", saved_width)
+	var shown := dummy._outline_parts.all(func(line: MeshInstance3D) -> bool: return line.visible)
+	if not width_ok or not hidden or not shown:
+		_fail("chunks: outline knobs: width %s, hidden at 0 %s, shown again %s" % [width_ok, hidden, shown])
+		return false
+	var before := dummy._fp_clip
+	dummy.set_first_person_clip(true)
+	var body_clip := float(dummy._outline_material.get_shader_parameter("clip_radius"))
+	var hand_clip := float(dummy._hand_outline_material.get_shader_parameter("clip_radius"))
+	dummy.set_first_person_clip(before)
+	if body_clip != DummyBody.FP_CLIP_RADIUS or hand_clip != 0.0 \
+			or float(dummy._outline_material.get_shader_parameter("clip_radius")) != (DummyBody.FP_CLIP_RADIUS if before else 0.0):
+		_fail("chunks: outline clip body %.2f hand %.2f" % [body_clip, hand_clip])
+		return false
+	print("AUTOTEST: chunks: %d outline children, welded normals within %.5f (%d split in the source)" % [
+			parts.size(), worst, cracked])
+	return true
+
+
+## 2. Boot warmup (skipped headless): a probe with both hole passes and an ink hull child,
+## plus one frozen gib the cap does not count.
 func _chunks_warmup_ok() -> bool:
 	var warm := Node3D.new()
 	add_child(warm)
@@ -1241,14 +1457,19 @@ func _chunks_warmup_ok() -> bool:
 	var skin := (probes[0] as MeshInstance3D).material_override as ShaderMaterial if not probes.is_empty() else null
 	var passes := skin != null and skin.shader == BodyChunks.SKIN_SHADER and skin.next_pass != null \
 			and (skin.next_pass as ShaderMaterial).shader == BodyChunks.CAVITY_SHADER
+	var hull := (probes[0] as Node).get_node_or_null("Outline") as MeshInstance3D if not probes.is_empty() else null
+	var hull_ink := hull.material_override as ShaderMaterial if hull != null else null
+	var inked := hull_ink != null and hull_ink.shader == BodyChunks.OUTLINE_SHADER \
+			and int(hull_ink.get_shader_parameter("hole_count")) == 1
 	# Probe first: the headless renderer logs a null material if the gib goes before it.
 	await get_tree().process_frame
 	if not probes.is_empty():
 		(probes[0] as Node).free()
 	warm.free()
-	if warm_count != 2 or warm_gibs.size() != 1 or not warm_frozen or not passes or BodyGib.alive_count() != 0:
-		_fail("chunks: warmup drew %d nodes, %d gibs (frozen %s), both passes %s, %d counted" % [warm_count,
-				warm_gibs.size(), warm_frozen, passes, BodyGib.alive_count()])
+	if warm_count != 2 or warm_gibs.size() != 1 or not warm_frozen or not passes or not inked \
+			or BodyGib.alive_count() != 0:
+		_fail("chunks: warmup drew %d nodes, %d gibs (frozen %s), both passes %s, ink hull %s, %d counted" % [
+				warm_count, warm_gibs.size(), warm_frozen, passes, inked, BodyGib.alive_count()])
 		return false
 	return true
 
@@ -1351,6 +1572,14 @@ func _chunks_uniforms_ok(dummy: DummyBody, label: String) -> bool:
 				or absf(hole.w - float(cuts[i]["radius"])) > 0.0001:
 			_fail("chunks: %s hole %d is %s, the cut is at %s r %.3f" % [label, i, hole, center, cuts[i]["radius"]])
 			return false
+	# The ink hull is cut by the same holes; the hands' ink never is.
+	var ink: ShaderMaterial = dummy._outline_material
+	if int(ink.get_shader_parameter("hole_count")) != count or ink.get_shader_parameter("holes") != holes \
+			or int(dummy._hand_outline_material.get_shader_parameter("hole_count")) != 0:
+		_fail("chunks: %s ink hull hole_count %d (skin %d), hands' ink %s" % [label,
+				int(ink.get_shader_parameter("hole_count")), count,
+				dummy._hand_outline_material.get_shader_parameter("hole_count")])
+		return false
 	return true
 
 
@@ -1363,10 +1592,17 @@ func _chunks_replay_ok(dummy: DummyBody, event: Dictionary, gib: BodyGib) -> boo
 	if dummy.chunk_count() != 0 or gib.visible or not _chunks_uniforms_ok(dummy, "replay begin"):
 		_fail("chunks: replay begin did not heal the hole and hide the gib")
 		return false
+	dummy._flash_tween.kill()
+	dummy._skin_material.set_shader_parameter("flash", 0.0)
 	dummy.chunks_replay_at(t_hit - 0.1)
-	if dummy.chunk_count() != 0 or gib.visible:
-		_fail("chunks: the hole opened before its clip time")
+	if dummy.chunk_count() != 0 or gib.visible 			or float(dummy._skin_material.get_shader_parameter("flash")) != 0.0:
+		_fail("chunks: the hole opened or the body flashed before its clip time")
 		return false
+	dummy.chunks_replay_at(t_hit + 0.001)
+	if not is_equal_approx(float(dummy._skin_material.get_shader_parameter("flash")), 1.0):
+		_fail("chunks: the replay did not re-flash at the hit")
+		return false
+	dummy._flash_tween.kill()
 	var since := minf(0.2, gib.track_length())
 	dummy.chunks_replay_at(t_hit + since)
 	if dummy.chunk_count() != 1 or not gib.visible or not _chunks_uniforms_ok(dummy, "replay pop") \
@@ -5434,6 +5670,14 @@ func _test_load_all() -> void:
 				return _fail("train rooftop scenery belt built %d pieces" % count)
 		instance.queue_free()
 		print("AUTOTEST: loaded %s" % path)
+	if not _bullet_trail_ok():
+		return
+	if not _puff_cues_ok():
+		return
+	if not _world_globals_ok():
+		return
+	if not _world_surface_ok():
+		return
 	var resources: Array = []
 	resources.append_array(GameManager.SCENARIOS)
 	resources.append_array(GameManager.ARCHETYPES)
@@ -5466,6 +5710,8 @@ func _test_load_all() -> void:
 		return
 	if not _time_of_day_ok():
 		return
+	if not await _wind_ok():
+		return
 	if not ImpactFeedback.has_warmed_up():
 		return _fail("boot warmup did not run")
 	if Bullet.ensure_mesh() == null or AudioCatalog.get_stream(&"gunshot") == null:
@@ -5473,8 +5719,205 @@ func _test_load_all() -> void:
 	_pass()
 
 
+## The trail is a ShaderMaterial on the trail shader and its ribbon carries UVs
+## (UV.y 0 at the tail, 1 at the bullet). Headless skips shader compiles: wiring only.
+func _bullet_trail_ok() -> bool:
+	var mat := BulletTrail.make_material(Color.WHITE)
+	if mat == null or mat.shader != BulletTrail.SHADER:
+		_fail("bullet trail material is not a ShaderMaterial on bullet_trail.gdshader")
+		return false
+	var trail := BulletTrail.new()
+	add_child(trail)
+	for i in 4:
+		trail.add_point(Vector3(0.0, 0.0, -float(i)))
+	trail._rebuild_ribbon()
+	var arrays := (trail.mesh as ImmediateMesh).surface_get_arrays(0)
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var lo := 1.0
+	var hi := 0.0
+	for uv in uvs:
+		lo = minf(lo, uv.y)
+		hi = maxf(hi, uv.y)
+	trail.queue_free()
+	if uvs.size() != 8 or not is_zero_approx(lo) or not is_equal_approx(hi, 1.0):
+		_fail("bullet trail ribbon UVs: %d verts, UV.y %.2f..%.2f" % [uvs.size(), lo, hi])
+		return false
+	return true
+
+
+## The world shader globals are declared in project.godot, and F3 `band_low` / `band_soft`
+## reach them (one value for skin, cavity, hands, and the world). The headless renderer keeps
+## the declared names but returns null on a read, so the value is compared only when it exists.
+func _world_globals_ok() -> bool:
+	var declared := RenderingServer.global_shader_parameter_get_list()
+	for key in ["band_low", "band_soft", "grain_strength_mult", "grain_scale_mult",
+			"wind_ambient", "wind_gust"]:
+		if not declared.has(StringName(key)):
+			_fail("shader global %s is not declared in project.godot" % key)
+			return false
+	var saved_low: float = GameManager.tuning["band_low"]
+	GameManager.set_tuning("band_low", 0.4)
+	var pushed: Variant = RenderingServer.global_shader_parameter_get(&"band_low")
+	GameManager.set_tuning("band_low", saved_low)
+	if pushed != null and not is_equal_approx(float(pushed), 0.4):
+		_fail("band_low tuning did not reach the shader global (%s)" % pushed)
+		return false
+	print("AUTOTEST: world shader globals declared; band tuning drives them")
+	return true
+
+
+## Every scenario GLB surface (the five scenes, which also hold the Train Rooftop belt's GLB
+## instances) wears `world_surface.gdshader`: the swap is made at import, so a missing
+## reimport shows up here as a StandardMaterial3D. Sway sits only on plants and hay, the hinge
+## only on the four named slabs, and collision proxies stay bare. Headless skips the compile.
+func _world_surface_ok() -> bool:
+	var shader := load("res://assets/shaders/world_surface.gdshader") as Shader
+	var plants := ["M_Yucca", "M_Scrub", "M_ScrubDry", "M_Hay"]
+	var slabs := [&"Sign", &"PorchSign", &"Canopy", &"ShedAwning"]
+	var hinged := {}
+	var swayed := 0
+	var surfaces := 0
+	for path in [
+		"res://scenarios/main_street/main_street.tscn",
+		"res://scenarios/saloon/saloon.tscn",
+		"res://scenarios/train_rooftop/train_rooftop.tscn",
+		"res://scenarios/canyon/canyon.tscn",
+		"res://scenarios/practice_hub/practice_hub.tscn",
+	]:
+		var instance := (load(path) as PackedScene).instantiate()
+		add_child(instance)
+		for node in instance.find_children("*", "MeshInstance3D", true, false):
+			var mi := node as MeshInstance3D
+			if mi.mesh == null or not _in_scenario_glb(mi):
+				continue
+			for surface in mi.mesh.get_surface_count():
+				var mat := mi.get_active_material(surface)
+				if mat == null:
+					continue
+				surfaces += 1
+				var label := "%s %s surface %d" % [path.get_file(), mi.name, surface]
+				if not (mat is ShaderMaterial and (mat as ShaderMaterial).shader == shader):
+					_fail("%s is not on world_surface.gdshader (reimport the GLBs?)" % label)
+					return false
+				var sm := mat as ShaderMaterial
+				if sm.get_shader_parameter("grain_local") != true:
+					_fail("%s does not use grain_local" % label)
+					return false
+				var sway: Variant = sm.get_shader_parameter("sway_amount")
+				var swaying: bool = sway != null and float(sway) > 0.0
+				if swaying != plants.has(String(sm.resource_name)):
+					_fail("%s sway_amount does not follow its material %s" % [label, sm.resource_name])
+					return false
+				if swaying:
+					swayed += 1
+					if path.ends_with("train_rooftop.tscn") and instance.get_node("Scenery").is_ancestor_of(mi):
+						_fail("%s: a belt piece sways" % label)
+						return false
+				var hinge: Variant = sm.get_shader_parameter("hinge_amount")
+				var hinging: bool = hinge != null and float(hinge) > 0.0
+				if hinging != slabs.has(StringName(mi.name)):
+					_fail("%s hinge_amount does not follow its node name" % label)
+					return false
+				if hinging:
+					hinged[mi.name] = true
+		for body in instance.find_children("*", "StaticBody3D", true, false):
+			if _in_scenario_glb(body) and body.find_children("*", "MeshInstance3D", false, false).size() > 0:
+				_fail("%s collision proxy %s grew a mesh" % [path.get_file(), body.name])
+				return false
+		instance.queue_free()
+	if surfaces < 500 or swayed == 0 or hinged.size() != slabs.size():
+		_fail("world surface: %d surfaces, %d swaying, hinges on %s" % [surfaces, swayed, hinged.keys()])
+		return false
+	print("AUTOTEST: %d scenario surfaces wear world_surface.gdshader (%d sway, hinges %s)" % [
+			surfaces, swayed, hinged.keys()])
+	return true
+
+
+## True under an instanced scenario GLB (a scene or a belt piece), not for nodes authored in a .tscn.
+func _in_scenario_glb(node: Node) -> bool:
+	var parent := node.get_parent()
+	while parent != null:
+		var file := parent.scene_file_path
+		if file.ends_with(".glb"):
+			return file.contains("/models/scenarios/")
+		parent = parent.get_parent()
+	return false
+
+
+## The smoke and dust cues draw puff.gdshader on a QuadMesh with a spin range, so the
+## shader reads an angle and the scale is the puff diameter. Wiring only: headless skips compiles.
+func _puff_cues_ok() -> bool:
+	var shader := load("res://assets/vfx/puff.gdshader") as Shader
+	if shader == null:
+		_fail("puff.gdshader failed to load")
+		return false
+	for cue in [&"muzzle_smoke", &"world_dust", &"barrel_smoke"]:
+		var node := (load("res://assets/vfx/%s.tscn" % cue) as PackedScene).instantiate() as GPUParticles3D
+		var mesh := node.draw_pass_1 as QuadMesh
+		var mat := mesh.material as ShaderMaterial if mesh != null else null
+		var proc := node.process_material as ParticleProcessMaterial
+		var ok := mat != null and mat.shader == shader and proc != null 				and proc.angle_max > proc.angle_min and proc.scale_curve != null
+		node.free()
+		if not ok:
+			_fail("%s does not draw puff.gdshader on a quad with a spin range" % cue)
+			return false
+	return true
+
+
 ## Outdoor times recolor the sky but keep the fog distances and shadow fade
 ## that hide the canyon plain and the train belt. Saloon has no sun.
+## Outdoor arenas build a wind bed and gust timer from their ScenarioResource; the
+## Saloon builds none. A forced gust spawns the `wind_gust` cue and a 3D player.
+func _wind_ok() -> bool:
+	var paths: Array[String] = GameManager.SCENARIOS.duplicate()
+	paths.append(GameManager.PRACTICE_HUB)
+	for path in paths:
+		var res := load(path) as ScenarioResource
+		var instance := res.scene.instantiate() as ScenarioBase
+		instance.scenario_resource = res
+		add_child(instance)
+		var wind := res.wind_volume_db > ScenarioBase.WIND_OFF_DB
+		if instance.has_wind() != wind or (instance._wind_player != null) != wind:
+			instance.queue_free()
+			_fail("%s wind setup does not match its resource" % res.display_name)
+			return false
+		# `world_surface.gdshader` sway: the wind globals follow the arena, and zero in the Saloon.
+		if (instance.get_wind_ambient() > 0.0) != instance.has_wind() or instance.get_wind_gust() != 0.0:
+			instance.queue_free()
+			_fail("%s wind globals: ambient %.2f, gust %.2f, wind %s" % [res.display_name,
+					instance.get_wind_ambient(), instance.get_wind_gust(), instance.has_wind()])
+			return false
+		if wind:
+			var saved_scale: float = GameManager.tuning["sway_scale"]
+			GameManager.set_tuning("sway_scale", 0.0)
+			var held := instance.get_wind_ambient()
+			GameManager.set_tuning("sway_scale", saved_scale)
+			if held != 0.0 or instance.get_wind_ambient() <= 0.0:
+				instance.queue_free()
+				_fail("%s sway_scale does not scale the ambient wind" % res.display_name)
+				return false
+			var before := instance.get_child_count()
+			instance.fire_gust()
+			await get_tree().process_frame
+			await get_tree().process_frame
+			if instance.get_wind_gust() <= 0.0:
+				instance.queue_free()
+				_fail("%s gust did not pulse wind_gust" % res.display_name)
+				return false
+			var gust := false
+			var spatial := false
+			for child in instance.get_children():
+				gust = gust or (child is OneShotParticles and child.name == &"WindGust")
+				spatial = spatial or child is AudioStreamPlayer3D
+			if instance.get_child_count() != before + 2 or not gust or not spatial:
+				instance.queue_free()
+				_fail("%s forced gust did not spawn dust and a 3D player" % res.display_name)
+				return false
+		instance.queue_free()
+	print("AUTOTEST: wind bed and gusts follow the scenario resource")
+	return true
+
+
 func _time_of_day_ok() -> bool:
 	var outdoor := [
 		"res://scenarios/main_street/main_street.tscn",
@@ -5483,6 +5926,9 @@ func _time_of_day_ok() -> bool:
 	]
 	for path in outdoor:
 		if not _outdoor_time_ok(path):
+			return false
+	for path in ["res://scenarios/practice_hub/practice_hub.tscn", GameManager.MESH_LAB_SCENE]:
+		if not _sky_scene_ok(path):
 			return false
 	if not _saloon_time_ok():
 		return false
@@ -5493,15 +5939,22 @@ func _time_of_day_ok() -> bool:
 func _outdoor_time_ok(path: String) -> bool:
 	var instance := (load(path) as PackedScene).instantiate() as ScenarioBase
 	add_child(instance)
+	if _sky_shader(instance) == null:
+		instance.queue_free()
+		_fail("%s sky is not sky_western.gdshader" % path)
+		return false
 	var snap := _horizon_snapshot(instance)
+	var cover := -1.0
+	var offset := Vector2.ZERO
 	for t in [0.0, 0.5, 1.0]:
 		instance.apply_time(t)
 		if not _horizon_unchanged(instance, snap, path):
 			instance.queue_free()
 			return false
 		var world := instance.get_node("WorldEnvironment") as WorldEnvironment
-		var mat := world.environment.sky.sky_material as ProceduralSkyMaterial
-		if not world.environment.fog_light_color.is_equal_approx(mat.ground_horizon_color):
+		var mat := _sky_shader(instance)
+		var ground: Color = mat.get_shader_parameter(&"ground_horizon")
+		if not world.environment.fog_light_color.is_equal_approx(ground):
 			instance.queue_free()
 			_fail("%s fog tint drifted from the sky ground at t=%.1f" % [path, t])
 			return false
@@ -5515,6 +5968,26 @@ func _outdoor_time_ok(path: String) -> bool:
 			instance.queue_free()
 			_fail("%s sun yaw moved off the authored azimuth" % path)
 			return false
+		var want_cloud := sun.light_color.lerp(Color.WHITE, TimeOfDay.CLOUD_WHITE_MIX)
+		var got_cloud: Color = mat.get_shader_parameter(&"cloud_color")
+		if not got_cloud.is_equal_approx(want_cloud):
+			instance.queue_free()
+			_fail("%s cloud tint does not follow the sun color at t=%.1f" % [path, t])
+			return false
+		var rolled := float(mat.get_shader_parameter(&"cloud_cover"))
+		var rolled_offset: Vector2 = mat.get_shader_parameter(&"cloud_offset")
+		if cover < 0.0:
+			cover = rolled
+			offset = rolled_offset
+			if cover < ScenarioBase.CLOUD_COVER_MIN - 0.001 \
+					or cover > ScenarioBase.CLOUD_COVER_MAX + 0.001:
+				instance.queue_free()
+				_fail("%s cloud cover %.2f is outside the rolled band" % [path, cover])
+				return false
+		elif not is_equal_approx(rolled, cover) or not rolled_offset.is_equal_approx(offset):
+			instance.queue_free()
+			_fail("%s cloud roll changed while scrubbing time of day" % path)
+			return false
 		if t == 0.0 or t == 1.0:
 			var elev := rad_to_deg(asin(clampf(sun.global_transform.basis.z.y, -1.0, 1.0)))
 			var expect: float = TimeOfDay.DUSK_ELEVATION_DEG
@@ -5524,8 +5997,54 @@ func _outdoor_time_ok(path: String) -> bool:
 				instance.queue_free()
 				_fail("%s sun elevation %.1f, expected %.1f" % [path, elev, expect])
 				return false
+	var ok := _cloud_drift_ok(instance, path)
 	instance.queue_free()
+	return ok
+
+
+## The deck moves `cloud_speed` per second in one direction, wraps inside [0, 1), and
+## stops (no `_process`) at speed 0.
+func _cloud_drift_ok(instance: ScenarioBase, path: String) -> bool:
+	var mat := _sky_shader(instance)
+	var before: Vector2 = mat.get_shader_parameter(&"cloud_offset")
+	instance._process(1.0)
+	var after: Vector2 = mat.get_shader_parameter(&"cloud_offset")
+	var moved := Vector2(wrapf(after.x - before.x, -0.5, 0.5), wrapf(after.y - before.y, -0.5, 0.5))
+	if absf(moved.length() - instance.cloud_speed) > 0.0005:
+		_fail("%s clouds drifted %.4f in 1 s, expected %.4f" % [path, moved.length(), instance.cloud_speed])
+		return false
+	if after.x < 0.0 or after.x >= 1.0 or after.y < 0.0 or after.y >= 1.0:
+		_fail("%s cloud offset %s left [0, 1)" % [path, after])
+		return false
+	instance.set_cloud_speed(0.0)
+	instance._process(1.0)
+	var frozen: Vector2 = mat.get_shader_parameter(&"cloud_offset")
+	if instance.is_processing() or not frozen.is_equal_approx(after):
+		_fail("%s clouds still drift at cloud_speed 0" % path)
+		return false
 	return true
+
+
+## Scenes the time test does not instance (the hub and the mesh lab spin up gameplay on
+## `_ready`): only check that their sky is the western shader.
+func _sky_scene_ok(path: String) -> bool:
+	var instance := (load(path) as PackedScene).instantiate()
+	var ok := _sky_shader(instance) != null
+	instance.free()
+	if not ok:
+		_fail("%s sky is not sky_western.gdshader" % path)
+	return ok
+
+
+func _sky_shader(root: Node) -> ShaderMaterial:
+	var world := root.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if world == null or world.environment == null or world.environment.sky == null:
+		return null
+	var mat := world.environment.sky.sky_material as ShaderMaterial
+	if mat == null or mat.shader == null \
+			or not mat.shader.resource_path.ends_with("sky_western.gdshader"):
+		return null
+	return mat
 
 
 func _saloon_time_ok() -> bool:
@@ -5542,7 +6061,8 @@ func _saloon_time_ok() -> bool:
 			and is_equal_approx(lamp.light_energy, energy) \
 			and lamp.light_color.is_equal_approx(color) \
 			and env.background_color.is_equal_approx(background) \
-			and is_equal_approx(env.ambient_light_energy, ambient)
+			and is_equal_approx(env.ambient_light_energy, ambient) \
+			and not instance.is_processing()
 	instance.queue_free()
 	if not unchanged:
 		_fail("saloon lighting changed with time of day")
@@ -5552,7 +6072,7 @@ func _saloon_time_ok() -> bool:
 
 func _horizon_snapshot(root: Node) -> Dictionary:
 	var env := (root.get_node("WorldEnvironment") as WorldEnvironment).environment
-	var mat := env.sky.sky_material as ProceduralSkyMaterial
+	var mat := _sky_shader(root)
 	var sun := root.get_node("Sun") as DirectionalLight3D
 	var toward_sun := sun.global_transform.basis.z
 	return {
@@ -5563,8 +6083,8 @@ func _horizon_snapshot(root: Node) -> Dictionary:
 		"fog_depth_curve": env.fog_depth_curve,
 		"fog_aerial_perspective": env.fog_aerial_perspective,
 		"fog_sky_affect": env.fog_sky_affect,
-		"sky_curve": mat.sky_curve,
-		"ground_curve": mat.ground_curve,
+		"sky_curve": mat.get_shader_parameter(&"sky_curve"),
+		"ground_curve": mat.get_shader_parameter(&"ground_curve"),
 		"shadow_max": sun.directional_shadow_max_distance,
 		"shadow_fade": sun.directional_shadow_fade_start,
 		"split1": sun.directional_shadow_split_1,

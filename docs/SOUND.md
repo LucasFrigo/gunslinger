@@ -70,6 +70,13 @@ Flesh vs world is the only material split today. Head/torso/arm/leg share `impac
 | [ ] | `slot_stop` | `slot_stop.ogg` | Each reel lands, −4 dB (`slot_machine.gd`) |
 | [ ] | `slot_win` | `slot_win.ogg` | Three of a kind, with the coin burst (`ImpactFeedback.slot_win`) |
 
+### Ambience
+
+| Done | Cue | File | Plays when |
+|---|---|---|---|
+| [ ] | Wind bed | `wind_bed.ogg` (seamless loop) | Procedural placeholder plays today (`scenario_base.gd`, 2D). Per-arena level is `ScenarioResource.wind_volume_db`; `ambience` overrides it. Saloon silent |
+| [ ] | Wind gust | `wind_gust.ogg` | Procedural placeholder plays today, 3D one-shot, only when a visual gust spawns (`VfxCatalog` `wind_gust`). Not a second loop |
+
 ## Silent (code, no cue)
 
 These already happen in gameplay with haptics or VFX but no `AudioCatalog` key. Add a cue + call site when designing them; then move the row into Catalog.
@@ -95,8 +102,6 @@ Do not produce files until the feature exists. Tracked in [`FEATURES.md`](FEATUR
 
 | Cue | Depends on |
 |---|---|
-| Scenario wind bed (loop) | Roadmap **Wind bed + gusts**. Slot is `ScenarioResource.ambience` (`scenario_base.gd`); no `.tres` assigns a stream. Mix per outdoor arena: still Main Street, drier Canyon, more air on Train Rooftop. Saloon is interior — do not use the outdoor bed |
-| `wind_gust` | Same item. One-shot that plays **only** when a visual gust spawns (`VfxCatalog`). Not a second loop |
 | Menu / standoff music | No music player |
 | Extra props | Radial has cigarette, coin, ace, and bottle; bottle reuses `glass_break`, no new cue |
 

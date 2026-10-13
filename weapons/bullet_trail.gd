@@ -4,25 +4,30 @@ extends MeshInstance3D
 ## follows the bullet and lingers/fades after the bullet dies.
 
 const GROUP := "bullet_trails"
-const WIDTH := 0.02
 const FADE_TIME := 1.6
+const SHADER := preload("res://weapons/bullet_trail.gdshader")
+const DEFAULT_SOLID := 0.3
+
+## Additive-to-alpha mix (0..1); `TimeOfDay.apply` sets it per sample so noon stays visible.
+static var solid := DEFAULT_SOLID
 
 var points := PackedVector3Array()
 var _immediate := ImmediateMesh.new()
-var _material: StandardMaterial3D
+var _material: ShaderMaterial
 var _finished := false
 var _fade_left := FADE_TIME
 var _base_color := Color(1.0, 0.85, 0.35)
 var _side_ref := Vector3.ZERO
 
 
-## Same flags as live trails so boot warmup compiles the ribbon shader.
-static func make_material(color: Color) -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.albedo_color = color
+## Same material as live trails so boot warmup compiles the ribbon shader.
+static func make_material(color: Color) -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.shader = SHADER
+	mat.set_shader_parameter(&"tint", color)
+	mat.set_shader_parameter(&"fade", 1.0)
+	mat.set_shader_parameter(&"tail_share", float(GameManager.tuning["trail_tail_share"]))
+	mat.set_shader_parameter(&"solid", solid)
 	return mat
 
 
@@ -66,7 +71,7 @@ func _process(delta: float) -> void:
 		if _fade_left <= 0.0:
 			queue_free()
 			return
-		_material.albedo_color = Color(_base_color, clampf(_fade_left / FADE_TIME, 0.0, 1.0))
+		_material.set_shader_parameter(&"fade", clampf(_fade_left / FADE_TIME, 0.0, 1.0))
 	_rebuild_ribbon()
 
 
@@ -103,11 +108,14 @@ func _rebuild_ribbon() -> void:
 		side = -side
 	_side_ref = side
 
-	var half := side * (WIDTH * 0.5)
+	var half := side * (float(GameManager.tuning["trail_width"]) * 0.5)
 	_immediate.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 	for i in count:
 		var point := points[i]
+		var v := float(i) / float(count - 1)
+		_immediate.surface_set_uv(Vector2(0.0, v))
 		_immediate.surface_add_vertex(point - half)
+		_immediate.surface_set_uv(Vector2(1.0, v))
 		_immediate.surface_add_vertex(point + half)
 	_immediate.surface_end()
 

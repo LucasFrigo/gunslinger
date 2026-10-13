@@ -10,6 +10,10 @@ signal tuning_changed(key: String, value: Variant)
 enum GameMode { BOOT, MENU, FREE_DUEL, GAUNTLET, MULTIPLAYER, PRACTICE, MESH_LAB, HORDE }
 
 const TUNING_PATH := "user://tuning.cfg"
+## Tuning keys that are also `[shader_globals]` in project.godot: skin, cavity, and world
+## surfaces read them, so one F3 value covers every banded shader.
+const WORLD_GLOBALS: Array[StringName] = [
+	&"band_low", &"band_soft", &"grain_strength_mult", &"grain_scale_mult"]
 
 ## Scenario registry -- add new scenarios here and they appear in every menu.
 const SCENARIOS: Array[String] = [
@@ -82,6 +86,17 @@ var tuning := {
 	"leg_slow_duration": 2.5,
 	## Move-speed multiplier while limping (1 = no penalty).
 	"leg_speed_mult": 0.45,
+	## Barrel smoke wisp length multiplier (1 = ~2.4 s). 0 turns the wisp off.
+	"barrel_smoke_lifetime": 1.0,
+	## Bullet trail ribbon width (m) and the share of its length the tail takes to thin out.
+	"trail_width": 0.035,
+	"trail_tail_share": 0.35,
+	## Hurt vignette peak (0..1) on the local player: arm or leg hit, torso hit, kill.
+	"hurt_limb": 0.3,
+	"hurt_torso": 0.6,
+	"hurt_kill": 0.9,
+	## Seconds the kill-cam iris takes to close, and to open on the next view.
+	"iris_time": 0.3,
 	## Flat jam: shots slower than this add no heat (seconds).
 	"jam_safe_interval": 0.35,
 	"jam_heat_per_shot": 0.45,
@@ -196,6 +211,21 @@ var tuning := {
 	"gib_speed": 3.5,
 	## Gibs alive at once. The oldest is freed past this.
 	"gib_cap": 16.0,
+	## Banded body light: share the first band passes, and the step softness.
+	"band_low": 0.65,
+	"band_soft": 0.03,
+	## World surface shader: grain strength and tile scale multipliers, and the share of the
+	## wind that moves plants, hay, signs, and awnings (0 holds them still).
+	"grain_strength_mult": 1.0,
+	"grain_scale_mult": 1.0,
+	"sway_scale": 1.0,
+	## Skin silhouette rim: strength and falloff exponent (hands get none).
+	"edge_strength": 0.35,
+	"edge_power": 3.0,
+	## Ink outline around every duelist: 1 on, 0 off. Width is metres of line per metre of
+	## view distance (held between 1 m and 14 m).
+	"outline_enabled": 1.0,
+	"outline_width": 0.004,
 }
 
 var mode: int = GameMode.BOOT
@@ -243,6 +273,8 @@ func _ready() -> void:
 	horde.name = "HordeController"
 	add_child(horde)
 	_load_tuning()
+	for key in WORLD_GLOBALS:
+		RenderingServer.global_shader_parameter_set(key, float(tuning[key]))
 
 	NetworkManager.session_started.connect(_on_session_started)
 	NetworkManager.session_ended.connect(_on_session_ended)
@@ -1154,6 +1186,8 @@ func show_message(text: String, duration := 2.5) -> void:
 
 func set_tuning(key: String, value: Variant) -> void:
 	tuning[key] = value
+	if WORLD_GLOBALS.has(key):
+		RenderingServer.global_shader_parameter_set(key, float(value))
 	tuning_changed.emit(key, value)
 	_save_tuning()
 

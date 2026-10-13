@@ -21,10 +21,19 @@ func has_warmed_up() -> bool:
 	return _did_warmup
 
 
-func shot_fired(muzzle_global: Transform3D, shooting_hand: StringName = &"right_hand") -> void:
+## `muzzle_node` anchors the lingering barrel wisp so it follows the gun.
+func shot_fired(
+		muzzle_global: Transform3D,
+		shooting_hand: StringName = &"right_hand",
+		muzzle_node: Node3D = null
+	) -> void:
 	var parent := _scene_root()
 	if parent != null:
 		VfxCatalog.spawn(&"muzzle_smoke", parent, muzzle_global.origin, -muzzle_global.basis.z)
+	var wisp_scale := float(GameManager.tuning["barrel_smoke_lifetime"])
+	if muzzle_node != null and wisp_scale > 0.0:
+		VfxCatalog.spawn(&"barrel_smoke", muzzle_node, muzzle_global.origin,
+				-muzzle_global.basis.z, 1.0, wisp_scale)
 	if shooting_hand != &"":
 		CombatHaptics.fire(shooting_hand)
 
@@ -182,10 +191,11 @@ func _spawn_draw_warmup(camera: Node3D) -> Node3D:
 
 	var ribbon := ImmediateMesh.new()
 	ribbon.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
-	ribbon.surface_add_vertex(Vector3(-0.2, 0.0, 0.0))
-	ribbon.surface_add_vertex(Vector3(-0.2, 0.04, 0.0))
-	ribbon.surface_add_vertex(Vector3(0.2, 0.0, 0.0))
-	ribbon.surface_add_vertex(Vector3(0.2, 0.04, 0.0))
+	for end in 2:
+		ribbon.surface_set_uv(Vector2(0.0, float(end)))
+		ribbon.surface_add_vertex(Vector3(-0.2 + 0.4 * end, 0.0, 0.0))
+		ribbon.surface_set_uv(Vector2(1.0, float(end)))
+		ribbon.surface_add_vertex(Vector3(-0.2 + 0.4 * end, 0.04, 0.0))
 	ribbon.surface_end()
 	var trail_draw := MeshInstance3D.new()
 	trail_draw.mesh = ribbon
@@ -198,6 +208,11 @@ func _spawn_draw_warmup(camera: Node3D) -> Node3D:
 	light.light_energy = 3.0
 	light.omni_range = 3.0
 	host.add_child(light)
+	host.add_child(WeaponBase.make_muzzle_flash_quad())
+
+	var overlay := ScreenOverlay.make_quad()
+	(overlay.material_override as ShaderMaterial).set_shader_parameter(&"hurt", 0.001)
+	host.add_child(overlay)
 
 	for cue in [&"gunshot", &"impact_world", &"glass_break"]:
 		var player := AudioStreamPlayer3D.new()

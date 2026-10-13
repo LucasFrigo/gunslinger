@@ -95,6 +95,7 @@ SETTINGS_OUTPUT_DEVICE,Output Device
 SETTINGS_DEVICE_HINT,"Output device applies to all game audio, not just voice."
 SETTINGS_HOLSTER_SIDE,Holster Side
 SETTINGS_GORE,Gore
+SETTINGS_SCREEN_EFFECTS,Screen effects
 SETTINGS_HEIGHT,Height
 SETTINGS_STANDING_HEIGHT,Standing Height
 SETTINGS_UNIT_FT,ft

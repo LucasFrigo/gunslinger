@@ -1,6 +1,6 @@
 # Shaders
 
-Candidate shaders for the polish pass, ranked by how much they change the picture for the work they cost. Nothing here is in the game yet. The only custom shaders in code today are `characters/body_skin.gdshader` and `characters/body_cavity.gdshader` (hit holes); every other surface is a `StandardMaterial3D`.
+Candidate shaders for the polish pass, ranked by how much they change the picture for the work they cost. Section 5 (sky) is in the game as `scenarios/sky_western.gdshader`, section 4 (bullet trail) as `weapons/bullet_trail.gdshader`, section 6 (dithered puff) as `assets/vfx/puff.gdshader`, section 7 (outline) as `characters/body_outline.gdshader`, section 8 (world surface) as `assets/shaders/world_surface.gdshader`, and section 10 (screen overlay) as `ui/screen_overlay.gdshader`; for the rest, [`FEATURES.md`](FEATURES.md) says what has landed. `characters/body_skin.gdshader` and `characters/body_cavity.gdshader` (hit holes) predate this list; every other surface is a `StandardMaterial3D` unless a row says otherwise.
 
 All ten shaders below compile and draw on Godot 4.7 Compatibility (desktop OpenGL 3.3). None has run inside the game, in a headset, or on a Quest.
 
@@ -36,13 +36,13 @@ Ordered by return. "Wiring" is the code outside the shader.
 | 1 | [Muzzle flash](#1-muzzle-flash) | A shot shows a star at the muzzle. Today it is only a light | One quad and a tween in `weapons/weapon_base.gd` | Tiny |
 | 2 | [Banded light](#2-banded-light) | Faceted two-tone shading on everything that includes it | None. It is an include | None |
 | 3 | [Skin edge light and hit flash](#3-skin-edge-light-and-hit-flash) | Duelists separate from the fog; a hit blinks white | A few lines in `characters/body_skin.gdshader`, one tween | Tiny |
-| 4 | [Bullet trail](#4-bullet-trail) | White-hot core, soft edge, thinning tail | UVs on the ribbon, material swap in `weapons/bullet_trail.gd` | Tiny |
+| 4 | [Bullet trail](#4-bullet-trail) | White-hot core, soft edge, thinning tail | UVs on the ribbon, material swap in `weapons/bullet_trail.gd` (shipped) | Tiny |
 | 5 | [Sky](#5-sky) | A poster sun, cel clouds, optional flat bands | `scenarios/time_of_day.gd` and two autotest checks | Small |
 | 6 | [Dithered puff](#6-dithered-puff) | Smoke and dust become lumpy puffs that erode, not shrinking spheres | Swap the draw pass in the smoke and dust scenes | Small. Check in a headset |
-| 7 | [Outline](#7-outline) | An ink line around each duelist | `material_overlay` in `characters/dummy_body.gd` | Draws each body twice |
+| 7 | [Outline](#7-outline) | An ink line around each duelist | A welded `Outline` child per part in `characters/dummy_body.gd` (shipped) | Draws each body twice |
 | 8 | [World surface](#8-world-surface) | Banded light, grain on flat-color ground and walls, wind sway | Material swap over every scenario GLB | Small per pixel, large in reach |
 | 9 | [Matcap metal](#9-matcap-metal) | The revolver gets a sheen | Material swap on the revolver mesh, one gradient texture | Tiny |
-| 10 | [Screen overlay](#10-screen-overlay) | Iris wipe, and a vignette on a hit | One quad on each camera | One blended full-screen pass while visible |
+| 10 | [Screen overlay](#10-screen-overlay) | Iris wipe, and a vignette on a hit | One quad on the current camera (shipped) | One blended full-screen pass while visible |
 
 Start with 1 to 4. They touch four files, need no art, and none of them changes how a scene is built. 5 and 8 change the whole frame; the choices made for them are under [Decided](#decided).
 
@@ -61,6 +61,8 @@ Start with 1 to 4. They touch four files, need no art, and none of them changes 
 ## The shaders
 
 ### 1. Muzzle flash
+
+**Shipped.** Owner: `weapons/muzzle_flash.gdshader`, wired in `WeaponBase._muzzle_flash()` / `make_muzzle_flash_quad()` and `ImpactFeedback._spawn_draw_warmup`.
 
 `WeaponBase._muzzle_flash()` (`weapons/weapon_base.gd`) spawns an `OmniLight3D` for 0.08 s and nothing else, so the shot has no visible flash. This adds a billboarded quad with a procedural star.
 
@@ -109,6 +111,8 @@ void fragment() {
 
 ### 2. Banded light
 
+**Shipped.** Owner: `characters/body_skin.gdshader`, `characters/body_cavity.gdshader`, and `assets/shaders/world_surface.gdshader` include it. `band_low` / `band_soft` are shader globals (`project.godot` `[shader_globals]`, pushed by `GameManager`; F3 **Ragdoll / gore**), so skin, hands, bowl, and the world share one value. Gibs and the gun stay smooth.
+
 A custom `light()` that turns the smooth diffuse falloff into two steps. A flat-shaded low-poly face lands wholly in one band, so the shadow edge follows the facets. Every lit shader below includes it, so the whole frame shares one lighting model.
 
 `assets/shaders/toon_light.gdshaderinc`:
@@ -116,9 +120,11 @@ A custom `light()` that turns the smooth diffuse falloff into two steps. A flat-
 ```glsl
 // Two-step diffuse shared by every lit surface. A flat-shaded low-poly face lands wholly
 // in one band, so the terminator follows the facets.
-uniform float band_soft = 0.03;
+// Declared in project.godot [shader_globals]; GameManager pushes F3 `band_low` / `band_soft`,
+// so skin, hands, cavity, and the world share one value.
+global uniform float band_soft;
 // Share of the light the first band lets through.
-uniform float band_low = 0.65;
+global uniform float band_low;
 
 void light() {
 	float ndl = dot(NORMAL, LIGHT);
@@ -128,35 +134,37 @@ void light() {
 }
 ```
 
-- **Watch:** it drops specular, which suits the matte look. A surface that still uses `StandardMaterial3D` keeps smooth light and will look out of place beside one that includes this, so it pays off most once [World surface](#8-world-surface) is in.
+- **Watch:** it drops specular, which suits the matte look. A surface that still uses `StandardMaterial3D` (gibs, the dropped gun) keeps smooth light and sits a little out of place beside the banded world.
 
 ### 3. Skin edge light and hit flash
 
+**Shipped.** Owner: `characters/body_skin.gdshader`, `DummyBody.flash()` / `_apply_edge()` (`characters/dummy_body.gd`), `TimeOfDay.set_edge` (`scenarios/time_of_day.gd`).
+
 Two additions to `characters/body_skin.gdshader`. The edge light brightens the silhouette where the surface turns away from the eye, which keeps a grey mannequin readable against orange fog at 22 m. `flash` blinks the body white on a hit.
 
-Add the include under `render_mode`, the uniforms with the others, and the last two lines at the end of `fragment()`:
-
 ```glsl
-#include "res://assets/shaders/toon_light.gdshaderinc"
-
-// Back-light on the silhouette edge, so a duelist reads against the fog at range.
-uniform vec4 edge_light : source_color = vec4(1.0, 0.75, 0.5, 1.0);
+// Declared in project.godot [shader_globals]; TimeOfDay.set_edge writes it.
+global uniform vec4 edge_light : source_color;
 uniform float edge_power = 3.0;
 uniform float edge_strength = 0.35;
 // 1 on the hit frame, tweened to 0.
 uniform float flash = 0.0;
 
 	// ...end of fragment(), after ROUGHNESS:
-	float edge = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), edge_power);
-	EMISSION = edge_light.rgb * edge * edge_strength + vec3(flash);
+	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), edge_power);
+	EMISSION = edge_light.rgb * rim * edge_strength + vec3(flash);
 ```
 
-- **Wire:** `DummyBody` owns `_skin_material`. A `flash()` method there tweens the uniform from 1 to 0 over about 0.1 s; call it where the body takes a hit.
-- **Better:** set `edge_light` from the scenario's sun color so the rim matches the time of day. `TimeOfDay.apply` already has that color.
-- **Watch:** `rim_color` is taken; it is the hole stain. Hands use `DummyBody.solid_material`, not this shader, so they get neither effect until they move to it. Give `body_cavity.gdshader` the same include or the wound will be lit differently from the skin around it.
-- **Test:** `chunks`, `ragdoll`.
+- **Wire:** `DummyBody.flash(clip_t)` sets the skin's `flash` to 1 and tweens it to 0 over `FLASH_TIME` (0.1 s, real time). It runs on every accepted hit, kills included, whether or not the hit cut a hole: `DuelistAI` and `Player.take_bullet_hit` in a solo duel, `DuelManager._mp_chunk` on every peer in a lobby (the RPC goes out with bone -1 for an empty cut).
+- **Replay:** `flash` logs `clip_t`; `chunks_replay_begin` / `chunks_replay_at` re-fire each logged hit inside the clip. `reset_chunks` clears the log.
+- **Sun color:** `edge_light` is one global. `ScenarioBase._ready` sets it to the authored Sun's color (the warm default `TimeOfDay.EDGE_DEFAULT` where there is no Sun, as in the Saloon); `TimeOfDay.apply` follows the time-of-day sun.
+- **Tuning:** F3 `edge_strength` and `edge_power` (`GameManager.tuning`); no Settings row.
+- **Hands:** they use a copy of the skin material with `edge_strength` 0 and are never flashed. The hit-hole bowl (`body_cavity.gdshader`) keeps no rim and does not flash, so a hole reads dark for the 0.1 s blink.
+- **Test:** `chunks`, `ragdoll`. Headless does not compile shaders, so these cover the wiring; the look needs a flat run and a headset.
 
 ### 4. Bullet trail
+
+**Shipped.** Owner: `weapons/bullet_trail.gdshader`, `BulletTrail` (`weapons/bullet_trail.gd`). The game's shader differs from the sketch below: `blend_premul_alpha` with a `solid` uniform (0 additive, 1 alpha mix) that `TimeOfDay` sets per sample (`trail_solid`), width 0.035 m from F3 `trail_width`, F3 `trail_tail_share`.
 
 `BulletTrail` (`weapons/bullet_trail.gd`) draws a 2 cm unshaded ribbon in one flat color and fades its alpha. This gives it a hot core, a soft edge, and a tail that thins out.
 
@@ -245,6 +253,7 @@ void sky() {
 - **Clouds:** `cloud_tex` is a seamless `NoiseTexture2D`, made in the inspector. `cloud_offset` can be random per load so each duel has its own sky. Tie `cloud_color` to the sun color.
 - **Watch:** clouds and sun are left out of the cubemap pass, so ambient light stays as it is now. The bench screenshot uses `bands = 6`, `sun_radius = 0.07`, and `cloud_cover = 0.45`; the game keeps the smooth gradient and the small sun. Saloon has no sky and is unaffected.
 - **Test:** `load`, then F3 to scrub the time of day.
+- **Shipped:** the shader is the one above, used as written. Decisions: cover is rolled once per load in 0.25–0.5; the tint is the keyframe `light_color` 40% toward white; the clouds drift at `cloud_speed` 0.01 deck units/s in a random direction per load (local only), which makes the engine re-render the radiance cubemap each frame, so measure it on the Quest. Fallback ladder if it costs too much: lower `Sky.radiance_size` and use realtime processing, then `cloud_speed = 0` on Quest only. `scenarios/sky_clouds.tres` is an external resource on purpose, so `ScenarioBase._detach_environment`'s `duplicate(true)` shares it instead of regenerating the noise. F3 **Sky** has `cloud_cover`, `cloud_speed`, `sun_radius`.
 
 ### 6. Dithered puff
 
@@ -297,28 +306,37 @@ void fragment() {
 }
 ```
 
-- **Wire:** in `muzzle_smoke.tscn` and `world_dust.tscn`, swap the `SphereMesh` draw pass for a `QuadMesh` with this material. A quad needs to be about twice the sphere's diameter to read the same size. Set an angle range on the process material so `spin` varies. Leave the chip, shard, and coin cues as meshes.
+- **Wire:** `muzzle_smoke.tscn`, `world_dust.tscn`, and `barrel_smoke.tscn` swap the `SphereMesh` draw pass for a `QuadMesh` of size 1 with this material, so the process material's `scale_min`/`scale_max` is the puff diameter in metres. A `scale_curve` takes it from 0.6 to 1.0 of that size over life, and `angle_min`/`angle_max` 0–360 vary `spin`. Leave the chip, shard, and coin cues as meshes.
 - **Warmup:** covered. `VfxCatalog.spawn_for_compile` draws every cue.
+- **Shipped:** the shader is the one above, used as written. Diameters in metres: muzzle smoke 0.06–0.12, world dust 0.04–0.08, barrel wisp 0.06–0.14, each on the 0.6 → 1.0 curve; `lumps` and `lump_depth` keep their defaults. The VR fallback below is not wired; the Quest look is on `RELEASE_TODOS`.
 - **Watch:** the dither is fixed to each eye's pixels, so the two eyes get unrelated patterns. In a headset that can read as sparkle. This is the one shader here most likely to need a VR fallback: if it sparkles, keep the lumpy shape and write `ALPHA = density` in place of the `discard`.
 
 ### 7. Outline
 
-An inverted hull: the body drawn a second time, back faces only, pushed out along the normal, in ink. It is the closest thing to manga line art that needs no screen read.
+**Shipped.** Owner: `characters/body_outline.gdshader`, wired in `DummyBody._make_part` / `_apply_material` / `_apply_outline` and `BodyChunks` (`outline_material_new`, `_refresh`, `spawn_for_compile`).
+
+An inverted hull: each part drawn a second time, back faces only, pushed out along the normal, in ink. It is the closest thing to manga line art that needs no screen read.
 
 `characters/body_outline.gdshader`:
 
 ```glsl
 shader_type spatial;
 render_mode unshaded, cull_front, shadows_disabled;
-// `material_overlay` on the body and head meshes: the back faces pushed out along the
-// normal, in ink. `width` is metres of line per metre of view distance, so the line holds
-// its screen size out to `far`, then thins.
+// The ink line of a DummyBody part: its welded outline mesh (back faces only) pushed out
+// along the averaged normal. `width` is metres of line per metre of view distance, so the
+// line holds its screen size from `near` to `far`, then thins. Takes the skin's hit holes so
+// the hull is cut where the skin is; `clip_radius` > 0 drops the first-person neck cavity.
+
+const int HOLE_CAP = 8;
 
 uniform vec4 ink : source_color = vec4(0.07, 0.05, 0.04, 1.0);
 uniform float width = 0.004;
 uniform float near = 1.0;
 uniform float far = 14.0;
 uniform float clip_radius = 0.0;
+// xyz world center, w radius.
+uniform vec4 holes[HOLE_CAP];
+uniform int hole_count = 0;
 
 void vertex() {
 	float dist = -(MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).z;
@@ -329,61 +347,69 @@ void fragment() {
 	if (clip_radius > 0.0 && length(VERTEX) < clip_radius) {
 		discard;
 	}
+	if (hole_count > 0) {
+		vec3 world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+		for (int i = 0; i < HOLE_CAP; i++) {
+			if (i >= hole_count) {
+				break;
+			}
+			if (distance(world, holes[i].xyz) < holes[i].w) {
+				discard;
+			}
+		}
+	}
 	ALBEDO = ink.rgb;
 }
 ```
 
-- **Wire:** set it as `material_overlay` on the body, head, and hand meshes in `DummyBody._apply_material`. The skin's `next_pass` is taken by the cavity, so the overlay slot is the free one, and it works over the hands' solid material too. Pass the same `clip_radius` as the skin on the local first-person body.
-- **Warmup:** add it to the probe in `BodyChunks.spawn_for_compile`.
-- **Watch:** it needs smooth normals. Where a mesh has split normals at a hard edge the hull cracks open. A hit hole shows the hull's inside through the cut wherever the cavity pass does not cover it; check a holed body from several angles before keeping it. Gibs and the dropped gun get no line unless they are given one.
-- **Test:** `chunks`, `ragdoll`.
+- **Wire:** not `material_overlay`. `dummy.glb` is flat-shaded: 824 of its 983 distinct positions carry differing normals, so a hull pushed along `NORMAL` cracks open at almost every edge. `DummyBody._weld_normals` builds a copy of each part mesh (body, head, hands) with the normals summed across coincident positions (quantized to 0.1 mm) and normalized, once per process beside the `intact` parts. `_make_part` adds it as an `Outline` child of the part, on the same skin and skeleton, shadows off, same layers; the child follows its part's visibility (shelved body, hidden head) and `set_body_render_layers` sets its layer. The skin's `next_pass` stays the cavity.
+- **Materials:** body and head share one ink material (`clip_radius` is the skin's, `FP_CLIP_RADIUS` on the local first-person body); the hands wear their own with `hole_count` 0 and no clip. `BodyChunks._refresh` pushes `holes` / `hole_count` to the body ink next to the skin, so the hull is discarded inside each hit hole. No `flash` (the ink stays dark on a hit) and no `fog_disabled` (the hull is fogged like the skin).
+- **Tuning:** F3 **Ragdoll / gore** `outline_enabled` (0 hides every outline child) and `outline_width` (default 0.004, up to 0.02). Always on otherwise: no Settings row.
+- **Warmup:** the probe in `BodyChunks.spawn_for_compile` carries an `Outline` child with the hole set, so the hull compiles with the hole branch.
+- **Watch:** a hole's rim shows a line beyond the discard sphere only as far as the hull has been pushed out (about 5 cm at 14 m); grazing angles and the hands at arm's length are the places to check. Gibs and the dropped gun get no line.
+- **Test:** `chunks` (outline children, weld, holes on the ink, knobs, clip, warmup probe), `ragdoll` (children ride the corpse). Headless does not compile the shader: the look is on `RELEASE_TODOS`.
 
 ### 8. World surface
 
-One shader for every static scenario surface. It keeps the flat color or the nearest-sampled atlas, lights it with the bands, and adds one grain lookup projected along the face's dominant axis, so a flat-color wall or a sand plain gets texture without UVs or painted art. `sway_amount` bends a mesh in the wind.
+**Shipped.** Owner: `assets/shaders/world_surface.gdshader`, `assets/shaders/world_surface_import.gd`, `assets/shaders/world_grain.tres`, `ScenarioBase._push_wind` / `_pulse_wind`. One shader for every static scenario surface (23 scenario GLBs). It keeps each material's flat color, lights it with the bands, and adds one grain lookup projected along the face's dominant axis, so a flat-color wall or a sand plain gets texture without UVs or painted art. Wind bends plants and hay and swings signs and awnings.
 
 `assets/shaders/world_surface.gdshader`:
 
 ```glsl
 shader_type spatial;
-render_mode cull_back;
+render_mode cull_disabled;
 #include "res://assets/shaders/toon_light.gdshaderinc"
-// Every static scenario surface: flat color or a nearest-sampled atlas, banded light,
-// and one grain lookup projected along the face's dominant axis, so no mesh needs UVs
-// for it. `sway_amount` > 0 bends the mesh in the wind, pinned at its origin.
+
+global uniform float grain_strength_mult;
+global uniform float grain_scale_mult;
+global uniform float wind_ambient;
+global uniform float wind_gust;
 
 uniform vec4 albedo : source_color = vec4(1.0);
-uniform sampler2D albedo_tex : source_color, filter_nearest, repeat_enable, hint_default_white;
-uniform sampler2D grain_tex : filter_nearest, repeat_enable, hint_default_white;
-// Tiles per metre.
-uniform float grain_scale = 0.35;
-uniform float grain_strength = 0.0;
-// Model space, for pieces that move (the train rooftop belt).
-uniform bool grain_local = false;
 uniform float roughness_amount = 1.0;
-uniform float sway_amount = 0.0;
+uniform sampler2D grain_tex : filter_nearest, repeat_enable, hint_default_white;
+uniform float grain_scale = 0.35;        // tiles per metre
+uniform float grain_strength = 0.0;
+uniform float grain_fade_near = 15.0;    // grain fades to 0 between these view distances
+uniform float grain_fade_far = 45.0;
+uniform bool grain_local = true;         // model space, so a moving piece carries its grain
+uniform float sway_amount = 0.0;         // bend in metres at full wind (plants, hay)
 uniform float sway_speed = 1.3;
-// Model-space height at which the sway reaches full strength.
 uniform float sway_height = 1.0;
+uniform float hinge_amount = 0.0;        // radians at full wind (signs, awnings)
+uniform vec3 hinge_origin = vec3(0.0);
+uniform vec3 hinge_axis = vec3(1.0, 0.0, 0.0);
 
 varying vec3 grain_pos;
 varying vec3 grain_normal;
+varying float view_dist;
 
 void vertex() {
-	if (sway_amount > 0.0) {
-		vec3 origin = MODEL_MATRIX[3].xyz;
-		float phase = origin.x * 0.7 + origin.z * 1.3;
-		float bend = clamp(VERTEX.y / sway_height, 0.0, 1.0);
-		float gust = sin(TIME * sway_speed + phase) + 0.5 * sin(TIME * sway_speed * 2.3 + phase * 1.7);
-		VERTEX.x += gust * sway_amount * bend * bend;
-	}
-	if (grain_local) {
-		grain_pos = VERTEX;
-		grain_normal = NORMAL;
-	} else {
-		grain_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-		grain_normal = mat3(MODEL_MATRIX) * NORMAL;
-	}
+	// grain_pos / grain_normal from VERTEX / NORMAL (grain_local) or the world transform.
+	// wind = wind_ambient + wind_gust; swing = two sines keyed off MODEL_MATRIX[3] * wind.
+	// sway_amount: VERTEX.x += swing * sway_amount * bend^2, bend = clamp(VERTEX.y / sway_height).
+	// hinge_amount: rotate VERTEX and NORMAL about hinge_axis through hinge_origin by swing * hinge_amount.
+	// view_dist = -(MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).z
 }
 
 void fragment() {
@@ -392,17 +418,22 @@ void fragment() {
 	if (facing.y < max(facing.x, facing.z)) {
 		grain_uv = facing.x > facing.z ? grain_pos.zy : grain_pos.xy;
 	}
-	float grain = texture(grain_tex, grain_uv * grain_scale).r - 0.5;
-	ALBEDO = albedo.rgb * texture(albedo_tex, UV).rgb * (1.0 + grain * 2.0 * grain_strength);
+	float fade = 1.0 - smoothstep(grain_fade_near, grain_fade_far, view_dist);
+	float grain = texture(grain_tex, grain_uv * grain_scale * grain_scale_mult).r - 0.5;
+	ALBEDO = albedo.rgb * (1.0 + grain * 2.0 * grain_strength * grain_strength_mult * fade);
 	ROUGHNESS = roughness_amount;
 }
 ```
 
-- **Wire:** this is the expensive one. Scenario art arrives as GLBs with their own `StandardMaterial3D`s. An import script on each scenario GLB copies every material's `albedo_color` and `albedo_texture` into a `ShaderMaterial` once, at import.
-- **Grain:** `grain_tex` is a seamless `NoiseTexture2D`. Keep `grain_strength` at 0 until one is assigned. About 0.15 to 0.25 reads as sand or weathered board.
-- **Sway:** set `sway_amount` (about 0.03) only on plants, signs, and cloth. It keys its phase off the object's position, so a piece on the Train Rooftop belt would change phase as it scrolls; leave the belt's cacti at 0. The belt also needs `grain_local`, or the grain slides across the moving pieces.
-- **Watch:** it ignores vertex colors, normal maps, and transparency. Check what the GLB materials use before swapping, and skip any material that uses one of those.
-- **Test:** `load`, then walk each scenario.
+The `vertex()` body is abbreviated above; the file is the source of truth.
+
+- **Deviations from the sketch:** `cull_disabled`, not `cull_back` (every GLB material is `doubleSided`, and thin plants, awnings, and signs are single slabs that would vanish). `grain_local` defaults to true on every imported material, so the belt needs no code. No `albedo_tex` and no `UV`: the GLBs carry no UVs or images (every material is `baseColorFactor` plus roughness), so there is nothing to look up. No metal and no specular, so iron, brass, boiler, and mirror render as lit albedo, lighter and matte. Grain strength and scale take the globals `grain_strength_mult` / `grain_scale_mult` (F3 **World**) and fade to 0 between 15 m and 45 m (`grain_fade_near` / `grain_fade_far`) so far ground does not shimmer under nearest sampling. `band_low` / `band_soft` are globals. Wind comes from the globals `wind_ambient` (0.3 x the arena's `gust_strength` x `sway_scale`, 0 where the arena has no wind) and `wind_gust` (a 1.8 s pulse per gust, the length of the dust sweep); bend amplitude is `sway_amount * (wind_ambient + wind_gust)`.
+- **Hinge path:** a sign or awning is a rigid slab in building space, where bending by `VERTEX.y` does nothing useful. The import script gives the four nodes `Sign`, `PorchSign` (about the top edge, along the board's long axis), `Canopy`, and `ShedAwning` (about the wall-side edge, along the wall) their own material with `hinge_origin` / `hinge_axis` from the mesh box and `hinge_amount` 0.035 rad (about 2 degrees; up to 3 degrees at the sine peaks). The wall side is a per-node table in the script, not a centroid test: the awning post's beam runs from the post to the wall, so the nearest box edge to the module's centroid is the wrong one.
+- **Import:** `world_surface_import.gd` is `import_script/path` in each scenario `.glb.import`. Godot 4.7 runs it on a scene that already holds `MeshInstance3D`s, so it swaps materials on the `ArrayMesh` (`ImporterMeshInstance3D` is gone by then). The color and roughness come from each GLB's own material, because `M_Wood` and the other names repeat across GLBs with different colors. Grain by name: sand, dirt, rock, and cap 0.2; wood, plank, roof, car, floor, bar, trim, masonry, and whitewash 0.12; everything else (metals, glass, cloth, hide, cacti, scrub, hay) 0. Sway: `M_Yucca`, `M_Scrub`, `M_ScrubDry`, `M_Hay` at 0.03 m, `sway_height` the mesh height in 10 cm steps; cacti stay rigid. A material with a texture, vertex color, normal map, emission, or transparency is skipped with `push_warning`; none exist today. Surfaces with the same color, roughness, grain, and sway share one material. After changing the script or a `.import`, reimport: `godot --headless --path . --import` (the editor does it on focus; a stale `.godot/` shows as a `StandardMaterial3D` failure in `load`).
+- **Grain texture:** `assets/shaders/world_grain.tres`, a 128 px seamless value-noise `NoiseTexture2D` (frequency 0.15). External on purpose, like `sky_clouds.tres`, so `ScenarioBase._detach_environment`'s `duplicate(true)` shares it.
+- **Train Rooftop belt:** `grain_local` is on everywhere, and the belt takes only cactus plants (rigid), so nothing slides or sways.
+- **Tuning:** F3 **World** `grain_strength_mult`, `grain_scale_mult`, `sway_scale`; `band_low` / `band_soft` stay in **Ragdoll / gore** and now move the whole frame. Persisted with the rest of `GameManager.tuning`.
+- **Test:** `load` asserts every scenario surface wears the shader (the five scenes, belt pieces included), `grain_local`, sway only on plants and hay, hinge only on the four slabs, bare collision proxies, and the wind globals (0 in the Saloon, following `gust_strength` and `sway_scale` elsewhere). Headless does not compile shaders; a flat run of Canyon, Main Street, the practice hub, Train Rooftop, and the Saloon compiled and drew with no errors. Not yet seen in a headset or on a Quest (`RELEASE_TODOS`).
 
 ### 9. Matcap metal
 
@@ -438,6 +469,8 @@ void fragment() {
 - **Watch:** the metal mask is a guess from saturation. It works if the atlas paints metal grey and wood brown; look at the atlas first, and if it fails, replace the three `metal` lines with a mask texture. Add the banded include if the gun should match the world.
 
 ### 10. Screen overlay
+
+**Shipped.** Owner: `ScreenOverlay` (`autoload/screen_overlay.gd`), `ui/screen_overlay.gdshader` (the shader below, verbatim). One quad follows the current camera instead of one per camera, `render_priority` 100. The iris is wired to `KillCam`; the vignette to `Player._apply_nonfatal` and `play_death_feedback`; both are gated by Settings **Screen effects** and tuned by F3 `hurt_limb` / `hurt_torso` / `hurt_kill` / `iris_time`. The iris radius is tweened with a quadratic ease (`TRANS_QUAD`) so it spends its 0.3 s inside the visible field rather than out at 4. Not yet drawn in a headset (`RELEASE_TODOS`).
 
 A quad on the camera that draws over each eye without reading the frame. It does two jobs: an iris wipe (the circle that closes on the last frame of a cartoon western) and a vignette that pulls in from the edge on a hit. It could stand in for the black fade (`XRToolsFade`) and the red flash (`Hud.flash_red`).
 
@@ -498,5 +531,5 @@ Settled on 2026-10-12. Items 1 to 8 and 10 are on [`Roadmap.md`](../Roadmap.md);
 4. **Outline:** every body and the local hands.
 5. **Smoke and dust:** dithered in flat and VR.
 6. **Screen overlay:** the iris replaces the black fade and the vignette replaces the red flash.
-7. **World surface swap:** at import.
+7. **World surface swap:** at import. Shipped.
 8. **Flat mode:** same look as VR. No flat-only pass.

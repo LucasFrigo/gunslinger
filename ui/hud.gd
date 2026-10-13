@@ -14,7 +14,6 @@ signal message_shown(text: String)
 @onready var version_tag: Label = $VersionTag
 @onready var replay_tag: Label = $ReplayTag
 @onready var spectate_tag: Label = $SpectateTag
-@onready var red_flash: ColorRect = $RedFlash
 @onready var prop_radial: PropRadialOverlay = $PropRadial
 @onready var menu_holder: Control = $MenuHolder
 @onready var pause_holder: Control = $PauseHolder
@@ -37,7 +36,6 @@ func _ready() -> void:
 	health_status.visible = false
 	practice_status.visible = false
 	horde_status.visible = false
-	red_flash.modulate.a = 0.0
 	prop_radial.visible = false
 	menu_holder.visible = false
 	pause_holder.visible = false
@@ -191,12 +189,6 @@ func set_prop_radial_highlight(index: int) -> void:
 
 func hide_prop_radial() -> void:
 	prop_radial.hide_wheel()
-
-
-func flash_red() -> void:
-	red_flash.modulate.a = 0.55
-	var tween := create_tween()
-	tween.tween_property(red_flash, "modulate:a", 0.0, 0.6)
 
 
 func _unhandled_input(event: InputEvent) -> void:

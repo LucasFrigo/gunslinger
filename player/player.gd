@@ -568,6 +568,7 @@ func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 	health = result["health"]
 	_refresh_health_hud()
 	if _dummy != null:
+		_dummy.flash(ReplayBuffer.clip_time())
 		_dummy.knock_chunk(cut, DummyBody.shot_dir(trail_points), ReplayBuffer.clip_time(), result["died"])
 	if result["died"]:
 		killed_by_self = self_inflicted
@@ -598,7 +599,7 @@ func play_death_feedback() -> void:
 	move_speed_mult = 1.0
 	_leg_remaining = 0.0
 	ImpactFeedback.player_hurt(true)
-	GameManager.hud.flash_red()
+	ScreenOverlay.hurt(float(GameManager.tuning["hurt_kill"]), ScreenOverlay.KILL_FADE)
 	_refresh_health_hud()
 
 
@@ -859,6 +860,8 @@ func _hit_is_revolver(collider: Object) -> bool:
 
 func _apply_nonfatal(region: StringName) -> void:
 	ImpactFeedback.player_hurt(false)
+	var hurt_key := "hurt_torso" if region == CombatRules.REGION_TORSO else "hurt_limb"
+	ScreenOverlay.hurt(float(GameManager.tuning[hurt_key]), ScreenOverlay.WOUND_FADE)
 	if region == CombatRules.REGION_ARM:
 		if revolver.held:
 			_pain_toss_gun()

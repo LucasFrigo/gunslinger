@@ -2,6 +2,7 @@ extends Node
 ## Autoload. Kill-cam consumer for DuelManager.kill_cam_requested.
 ## Flat: temporary Camera3D flies along the killing bullet trail.
 ## VR: spectator XROrigin3D ride (player rig stays put); TimeManager slow-mo.
+## Both: `ScreenOverlay` iris wipes the cut in and out (kill cam only, not the replay).
 ## Plays locally in SP and 1v1 MP from synced trail points.
 
 signal finished
@@ -9,8 +10,6 @@ signal finished
 const SIDE_OFFSET := 0.55
 const HEIGHT_BIAS := 0.35
 const LOOK_AHEAD := 0.08
-const FADE_TIME := 0.15
-const FADE_SCENE := preload("res://addons/godot-xr-tools/effects/fade.tscn")
 
 var is_playing := false
 
@@ -25,6 +24,7 @@ var _restore_origin: XROrigin3D
 var _restore_xr_camera: XRCamera3D
 var _hmd_ref := Transform3D.IDENTITY
 var _hmd_ref_valid := false
+var _iris_closing := false
 
 
 func _ready() -> void:
@@ -49,6 +49,7 @@ func _on_kill_cam_requested(trail_points: PackedVector3Array) -> void:
 	_trail = trail_points.duplicate()
 	_elapsed = 0.0
 	_duration = maxf(TimeManager.kill_cam_duration, 0.5)
+	_iris_closing = false
 
 	TimeManager.notify_kill_cam()
 	BulletTrail.extend_all_fades(_duration + 0.4)
@@ -58,6 +59,9 @@ func _on_kill_cam_requested(trail_points: PackedVector3Array) -> void:
 	else:
 		_start_flat_camera()
 
+	# Shut in the frame the camera swaps, so the cut never shows.
+	ScreenOverlay.iris_shut()
+	ScreenOverlay.iris_open(_iris_time())
 	set_process(true)
 
 
@@ -72,7 +76,11 @@ func _process(delta: float) -> void:
 		_update_flat_camera(t)
 	if is_instance_valid(_spectator):
 		_place_vr_origin(t)
-		_update_vr_fade(t)
+
+	var iris_time := _iris_time()
+	if not _iris_closing and t >= 1.0 - iris_time / _duration:
+		_iris_closing = true
+		ScreenOverlay.iris_close(iris_time)
 
 	if t >= 1.0:
 		_end()
@@ -102,7 +110,6 @@ func _start_vr_camera() -> void:
 	_spectator_cam = XRCamera3D.new()
 	_spectator_cam.name = "XRCamera3D"
 	_spectator.add_child(_spectator_cam)
-	_spectator_cam.add_child(FADE_SCENE.instantiate())
 	_scene_parent().add_child(_spectator)
 	_place_vr_origin(0.0)
 
@@ -110,7 +117,6 @@ func _start_vr_camera() -> void:
 	rig.camera.current = false
 	_spectator.current = true
 	_spectator_cam.current = true
-	_set_kill_cam_fade(1.0)
 
 
 func _update_flat_camera(t: float) -> void:
@@ -148,18 +154,9 @@ func _cinematic_eye(t: float) -> Transform3D:
 	return xform
 
 
-func _update_vr_fade(t: float) -> void:
-	var fade_span := FADE_TIME / maxf(_duration, 0.001)
-	var alpha := 0.0
-	if t < fade_span:
-		alpha = 1.0 - t / fade_span
-	elif t > 1.0 - fade_span:
-		alpha = (t - (1.0 - fade_span)) / fade_span
-	_set_kill_cam_fade(alpha)
-
-
-func _set_kill_cam_fade(alpha: float) -> void:
-	XRToolsFade.set_fade("kill_cam", Color(0.0, 0.0, 0.0, clampf(alpha, 0.0, 1.0)))
+## Kept to half the clip, so a long wipe cannot close before it has opened.
+func _iris_time() -> float:
+	return minf(float(GameManager.tuning["iris_time"]), _duration * 0.5)
 
 
 func _sample_trail(t: float) -> Vector3:
@@ -196,11 +193,12 @@ func _end() -> void:
 		_restore_xr_camera = null
 		_hmd_ref_valid = false
 		set_process(false)
-		_set_kill_cam_fade(0.0)
 		_trail = PackedVector3Array()
 		is_playing = false
 	else:
 		_teardown()
+	# The overlay is on whichever camera is current now, so this opens on the next view.
+	ScreenOverlay.iris_open(_iris_time())
 	finished.emit()
 
 
@@ -209,13 +207,13 @@ func cancel() -> void:
 	if not is_playing:
 		return
 	_teardown()
+	ScreenOverlay.reset()
 	for connection in finished.get_connections():
 		finished.disconnect(connection["callable"])
 
 
 func _teardown() -> void:
 	set_process(false)
-	_set_kill_cam_fade(0.0)
 	if is_instance_valid(_camera):
 		_camera.current = false
 		_camera.queue_free()

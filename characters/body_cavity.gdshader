@@ -7,6 +7,7 @@ render_mode cull_front;
 // the air, seen at a grazing angle or from a light), or a sphere that reaches past the
 // back face (a thin limb), shades the back face as flesh at its own depth instead:
 // never daylight through the body, and never a bowl in front of the skin.
+#include "res://assets/shaders/toon_light.gdshaderinc"
 
 const int HOLE_CAP = 8;
 

@@ -65,6 +65,61 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 **Notes:** The cause is not established. One lead, not checked: `reset_for_duel` puts the Player root on the marker and `VRRig.reset_locomotion` zeroes the origin and yaws it around the HMD, but nothing moves the origin so the headset lands on the marker. A player standing away from the centre of their playspace would then start that far from the spawn, and a spawn-time placement is not a walk into the wall. Flat has no playspace offset (`rig.position = Vector3.ZERO`). Other arenas would shift the same way; only the narrow roof would show it.
 
+### BUG-025 — Shot in the non-gun arm still disarms the player
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `major` |
+| Filed | 2026-10-12 |
+| Platforms | Not recorded (mode, arena and VR / flat not given). |
+| Areas | `combat/combat_rules.gd` (`resolve`), `player/hitbox.gd` |
+
+**What:** A hit on the arm that is not holding the gun still disarms the player, as if the gun arm had been hit.
+
+**Repro:**
+1. Start a duel and let the opponent shoot your arm on the side that is not holding the gun.
+2. You are disarmed.
+
+**Notes:** The cause is not established. One lead, not checked: `CombatRules.resolve` sets `disarm` from `region == REGION_ARM` alone, with no notion of which arm, so any arm hit would disarm. Whether the hitbox regions distinguish left from right arm was not looked at.
+
+### BUG-026 — Flat draw: the hand animates slower than the gun
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `minor` |
+| Filed | 2026-10-12 |
+| Platforms | Flat. Arena and game mode not recorded. VR not reported. |
+| Areas | Not looked at. |
+
+**What:** In flat mode the draw animation of the hand runs slower than the gun's, so the two are out of sync during the draw. They should move together.
+
+**Repro:**
+1. Start a duel in flat mode.
+2. Draw and watch the hand and the gun.
+
+**Notes:** The cause is not established and no code was checked.
+
+### BUG-027 — Main Street: a killed NPC jumps into the air the moment it ragdolls
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `major` |
+| Filed | 2026-10-13 |
+| Platforms | Main Street. Mode and VR / flat not recorded. Other arenas not reported. |
+| Areas | `characters/body_ragdoll.gd` (`collapse`, `_build`), `scenarios/main_street/` (terrain collision, NPC spawn marker) |
+
+**What:** On the Main Street map, when an NPC is killed it launches upward at the instant it switches to ragdoll, instead of dropping.
+
+**Repro:**
+1. Start a duel against an NPC on Main Street.
+2. Kill the NPC.
+3. At the moment the body ragdolls it jumps into the air.
+
+**Notes:** The cause is not established. One lead from the reporter, not checked: the NPC spawns with its feet below the terrain surface, so the ragdoll bodies start inside the terrain collision and the physics solver pushes them out, which would read as a jump. Things to check: the NPC spawn marker height against the `env_terrain` collision, and where `BodyRagdoll._build` places its rigid bodies relative to the skeleton at `collapse`.
+
 ---
 
 ## Fixed

@@ -42,6 +42,20 @@ const RAGDOLL_SLIDERS := {
 	"cut_limb_max": [0.01, 0.2, 0.005],
 	"gib_speed": [0.0, 12.0, 0.1],
 	"gib_cap": [0.0, 48.0, 1.0],
+	"band_low": [0.0, 1.0, 0.01],
+	"band_soft": [0.0, 0.3, 0.005],
+	"edge_strength": [0.0, 1.0, 0.01],
+	"edge_power": [0.5, 8.0, 0.1],
+	"outline_enabled": [0.0, 1.0, 1.0],
+	"outline_width": [0.0, 0.02, 0.0005],
+}
+
+## World surface shader (`GameManager.tuning`): grain strength and tile multipliers, and the
+## share of the wind that moves plants, hay, signs, and awnings.
+const WORLD_SLIDERS := {
+	"grain_strength_mult": [0.0, 3.0, 0.05],
+	"grain_scale_mult": [0.25, 4.0, 0.05],
+	"sway_scale": [0.0, 3.0, 0.05],
 }
 
 ## Meters. Panel faces the headset (+Z), so -Z is away from the head.
@@ -94,6 +108,9 @@ var _preset_option: OptionButton
 var _preset_name_edit: LineEdit
 var _mesh_lab_button: Button
 var _time_slider_widgets: Dictionary = {}
+var _sky_sliders: Dictionary = {}
+var _world_sliders: Dictionary = {}
+var _wind_sliders: Dictionary = {}
 var _reload_volume_toggle: CheckButton
 var _hitbox_toggle: CheckButton
 ## Session-only: translucent meshes on belt / chamber / bump / hand probe.
@@ -356,6 +373,13 @@ func _build_gunplay_section(root: Control) -> void:
 		"gun_flat_grab_radius": [0.05, 0.8, 0.01],
 		"leg_slow_duration": [0.2, 6.0, 0.1],
 		"leg_speed_mult": [0.1, 1.0, 0.05],
+		"barrel_smoke_lifetime": [0.0, 3.0, 0.1],
+		"trail_width": [0.01, 0.08, 0.005],
+		"trail_tail_share": [0.05, 0.9, 0.05],
+		"hurt_limb": [0.0, 1.0, 0.05],
+		"hurt_torso": [0.0, 1.0, 0.05],
+		"hurt_kill": [0.0, 1.0, 0.05],
+		"iris_time": [0.1, 1.0, 0.05],
 	}
 	for combat_key in COMBAT_SLIDERS:
 		var combat_range: Array = COMBAT_SLIDERS[combat_key]
@@ -600,6 +624,30 @@ func _build_movement_section(root: Control) -> void:
 		_movement_sliders[key] = widgets2
 
 
+func _set_sky_value(key: String, value: float) -> void:
+	var scenario := GameManager.current_scenario
+	if scenario == null:
+		return
+	match key:
+		"cloud_cover":
+			scenario.set_cloud_cover(value)
+		"cloud_speed":
+			scenario.set_cloud_speed(value)
+		"sun_radius":
+			scenario.set_sun_radius(value)
+
+
+func _set_wind_value(key: String, value: float) -> void:
+	var scenario := GameManager.current_scenario
+	if scenario == null:
+		return
+	match key:
+		"wind_volume_db":
+			scenario.set_wind_volume(value)
+		"gust_interval_scale":
+			scenario.set_gust_interval(value)
+
+
 func _build_session_section(root: Control) -> void:
 	_add_header(root, "Time of day")
 	_time_slider_widgets = _add_slider(root, "time_of_day", 0.0, 1.0, 0.01, 0.0,
@@ -610,6 +658,53 @@ func _build_session_section(root: Control) -> void:
 				if scenario == null:
 					return
 				scenario.apply_time(value))
+
+	_add_header(root, "Sky")
+	const SKY_SLIDERS := {
+		"cloud_cover": [0.0, 1.0, 0.01, 0.35],
+		"cloud_speed": [0.0, 0.05, 0.0005, ScenarioBase.DEFAULT_CLOUD_SPEED],
+		"sun_radius": [0.005, 0.12, 0.0005, 0.015],
+	}
+	for sky_key in SKY_SLIDERS:
+		var sky_range: Array = SKY_SLIDERS[sky_key]
+		var sky_widgets := _add_slider(root, sky_key, sky_range[0], sky_range[1],
+				sky_range[2], sky_range[3],
+				func(value: float) -> void:
+					if not _refreshing:
+						_set_sky_value(sky_key, value))
+		_sky_sliders[sky_key] = sky_widgets
+
+	_add_header(root, "World")
+	for world_key in WORLD_SLIDERS:
+		var world_range: Array = WORLD_SLIDERS[world_key]
+		var key := String(world_key)
+		var world_widgets := _add_slider(root, key, world_range[0], world_range[1],
+				world_range[2], float(GameManager.tuning[key]), _replay_slider_changed(key))
+		_world_sliders[world_key] = world_widgets
+
+	_add_header(root, "Wind")
+	const WIND_SLIDERS := {
+		"wind_volume_db": [-60.0, 0.0, 0.5, -20.0],
+		"gust_interval_scale": [0.25, 4.0, 0.05, 1.0],
+	}
+	for wind_key in WIND_SLIDERS:
+		var wind_range: Array = WIND_SLIDERS[wind_key]
+		var wind_widgets := _add_slider(root, wind_key, wind_range[0], wind_range[1],
+				wind_range[2], wind_range[3],
+				func(value: float) -> void:
+					if not _refreshing:
+						_set_wind_value(wind_key, value))
+		_wind_sliders[wind_key] = wind_widgets
+	var gusts_check := CheckBox.new()
+	gusts_check.text = "gusts"
+	gusts_check.button_pressed = true
+	gusts_check.toggled.connect(func(on: bool) -> void:
+		if _refreshing:
+			return
+		var scenario := GameManager.current_scenario
+		if scenario != null:
+			scenario.set_gusts_enabled(on))
+	root.add_child(gusts_check)
 
 	_add_header(root, "Session")
 	var reset_duel := Button.new()
@@ -707,6 +802,11 @@ func _refresh_from_systems() -> void:
 		var ragdoll_value: float = float(GameManager.tuning[property])
 		ragdoll_widgets["slider"].value = ragdoll_value
 		ragdoll_widgets["label"].text = "%.2f" % ragdoll_value
+	for property in _world_sliders:
+		var world_widgets: Dictionary = _world_sliders[property]
+		var world_value: float = float(GameManager.tuning[property])
+		world_widgets["slider"].value = world_value
+		world_widgets["label"].text = "%.2f" % world_value
 	if _bullet_slider != null:
 		_bullet_slider.value = GameManager.tuning["bullet_speed"]
 		_bullet_value.text = "%.2f" % GameManager.tuning["bullet_speed"]
@@ -786,6 +886,24 @@ func _refresh_from_systems() -> void:
 			time_value = scenario.time_of_day
 		_time_slider_widgets["slider"].value = time_value
 		_time_slider_widgets["label"].text = "%.2f" % time_value
+	var live := GameManager.current_scenario
+	if live != null:
+		for sky_key in _sky_sliders:
+			var sky_widgets: Dictionary = _sky_sliders[sky_key]
+			var sky_slider: HSlider = sky_widgets["slider"]
+			var sky_value := sky_slider.value
+			if sky_key == "cloud_speed":
+				sky_value = live.cloud_speed
+			else:
+				sky_value = live.get_sky_float(sky_key, sky_slider.value)
+			sky_slider.value = sky_value
+			sky_widgets["label"].text = \
+					("%.4f" if sky_slider.step < 0.001 else "%.2f") % sky_value
+		if live.has_wind() and _wind_sliders.has("wind_volume_db"):
+			var wind_widgets: Dictionary = _wind_sliders["wind_volume_db"]
+			var wind_slider: HSlider = wind_widgets["slider"]
+			wind_slider.value = live.get_wind_volume()
+			wind_widgets["label"].text = "%.2f" % wind_slider.value
 	_refresh_preset_list()
 	if _mesh_lab_button != null:
 		_mesh_lab_button.text = "Leave mesh lab" if GameManager.in_mesh_lab() else "Mesh lab"

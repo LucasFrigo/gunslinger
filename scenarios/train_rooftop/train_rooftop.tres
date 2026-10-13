@@ -9,3 +9,7 @@ display_name = "Train Rooftop"
 description = "Six coupled train cars with the engine at the front. The desert and the canyon horizon slide past."
 scene = ExtResource("2")
 duel_distance = 20.0
+wind_volume_db = -14.0
+gust_interval_min = 6.0
+gust_interval_max = 16.0
+gust_strength = 1.4

@@ -14,6 +14,7 @@ signal voice_changed
 signal audio_devices_changed
 signal eye_height_changed
 signal gore_changed
+signal screen_effects_changed
 
 ## Name AudioServer uses for "follow the OS default".
 const DEFAULT_DEVICE := "Default"
@@ -116,6 +117,8 @@ var window_width := 1280
 var window_height := 720
 ## Hit chunks: craters, gibs, and the chunk sound. Local to this viewer.
 var gore_enabled := true
+## Iris wipe on the kill cam and the red hurt vignette (`ScreenOverlay`). Off is a hard cut.
+var screen_effects_enabled := true
 
 ## Headset height above the player root, in centimeters. Not stature.
 ## `eye_height_set` stays false until Calibrate or an edit, so a fresh install
@@ -345,6 +348,14 @@ func set_gore_enabled(value: bool) -> void:
 	gore_enabled = value
 	_save_config()
 	gore_changed.emit()
+
+
+func set_screen_effects_enabled(value: bool) -> void:
+	if screen_effects_enabled == value:
+		return
+	screen_effects_enabled = value
+	_save_config()
+	screen_effects_changed.emit()
 
 
 func set_voice_gate_cutoff(value: float) -> void:
@@ -795,6 +806,7 @@ func _save_config(path := CONFIG_PATH) -> void:
 	if not language.is_empty():
 		cfg.set_value("general", "language", language)
 	cfg.set_value("general", "gore", gore_enabled)
+	cfg.set_value("general", "screen_effects", screen_effects_enabled)
 	cfg.set_value("audio", "master_volume", master_volume)
 	cfg.set_value("audio", "voice_volume", voice_volume)
 	cfg.set_value("audio", "voice_muted", voice_muted)
@@ -841,6 +853,7 @@ func _load_config(path := CONFIG_PATH) -> void:
 	if not language.is_empty():
 		TranslationServer.set_locale(language)
 	gore_enabled = bool(cfg.get_value("general", "gore", gore_enabled))
+	screen_effects_enabled = bool(cfg.get_value("general", "screen_effects", screen_effects_enabled))
 	master_volume = clampf(float(cfg.get_value("audio", "master_volume", master_volume)), 0.0, 1.0)
 	voice_volume = clampf(float(cfg.get_value("audio", "voice_volume", voice_volume)), 0.0, 1.0)
 	voice_muted = bool(cfg.get_value("audio", "voice_muted", voice_muted))

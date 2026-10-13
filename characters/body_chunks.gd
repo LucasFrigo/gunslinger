@@ -17,6 +17,7 @@ const CRATER_RIM := Color(0.62, 0.16, 0.13)
 const CRATER_CORE := Color(0.24, 0.02, 0.02)
 const SKIN_SHADER := preload("res://characters/body_skin.gdshader")
 const CAVITY_SHADER := preload("res://characters/body_cavity.gdshader")
+const OUTLINE_SHADER := preload("res://characters/body_outline.gdshader")
 ## After the hit volumes (`DummyBody.HITBOX_PRIORITY`): the bones are final for the frame.
 const PRIORITY := 45
 ## Thinnest side of a gib's collision box.
@@ -45,6 +46,7 @@ static var _gib_meshes: Array[ArrayMesh] = []
 var _body: DummyBody
 var _skin: ShaderMaterial
 var _cavity: ShaderMaterial
+var _outline: ShaderMaterial
 var _events: Array[Dictionary] = []
 var _replaying := false
 
@@ -82,6 +84,13 @@ static func cavity_material_new() -> ShaderMaterial:
 	return material
 
 
+## The ink line of a body part (`body_outline.gdshader`): worn by the welded outline mesh.
+static func outline_material_new() -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = OUTLINE_SHADER
+	return material
+
+
 ## The shared lump variants, built once per process.
 static func gib_meshes() -> Array[ArrayMesh]:
 	if _gib_meshes.is_empty():
@@ -90,15 +99,16 @@ static func gib_meshes() -> Array[ArrayMesh]:
 	return _gib_meshes
 
 
-## Boot warmup under `host`: a probe with both hole passes and one frozen gib (not counted
-## toward `gib_cap`).
+## Boot warmup under `host`: a probe with both hole passes and an ink hull child, and one
+## frozen gib (not counted toward `gib_cap`).
 static func spawn_for_compile(host: Node3D) -> void:
 	var skin := skin_material_new()
 	var cavity := cavity_material_new()
+	var outline := outline_material_new()
 	var holes := PackedVector4Array()
 	holes.resize(HOLE_CAP)
 	holes[0] = COMPILE_HOLE
-	for material: ShaderMaterial in [skin, cavity]:
+	for material: ShaderMaterial in [skin, cavity, outline]:
 		material.set_shader_parameter("holes", holes)
 		material.set_shader_parameter("hole_count", 1)
 	cavity.set_shader_parameter("hole_lifts", holes)
@@ -111,6 +121,11 @@ static func spawn_for_compile(host: Node3D) -> void:
 	probe.mesh = sphere
 	probe.material_override = skin
 	skin.next_pass = cavity
+	var hull := MeshInstance3D.new()
+	hull.name = "Outline"
+	hull.mesh = sphere
+	hull.material_override = outline
+	probe.add_child(hull)
 	host.add_child(probe)
 	var gib := BodyGib.make(gib_meshes()[0], DummyBody.solid_material(COMPILE_ALBEDO), BoxShape3D.new(),
 			Vector3.ZERO)
@@ -201,11 +216,13 @@ static func _up_basis(axis: Vector3) -> Basis:
 	return Basis(x, y, x.cross(y))
 
 
-## `skin` is the body's shared skin material, `cavity` its bowl pass.
-func setup(body: DummyBody, skin: ShaderMaterial, cavity: ShaderMaterial) -> void:
+## `skin` is the body's shared skin material, `cavity` its bowl pass, `outline` the ink
+## line of the body and head (cut by the same holes).
+func setup(body: DummyBody, skin: ShaderMaterial, cavity: ShaderMaterial, outline: ShaderMaterial) -> void:
 	_body = body
 	_skin = skin
 	_cavity = cavity
+	_outline = outline
 	process_priority = PRIORITY
 	set_process(false)
 	PlayerSettings.gore_changed.connect(_on_gore_changed)
@@ -309,8 +326,8 @@ func _active() -> Array[Dictionary]:
 	return out
 
 
-## Push the showing holes onto the pose: world centers and lifts into both passes. The
-## cavity pass rides the skin only while there is a hole.
+## Push the showing holes onto the pose: world centers and lifts into both passes and the
+## ink hull. The cavity pass rides the skin only while there is a hole.
 func _refresh() -> void:
 	var active := _active()
 	var holes := PackedVector4Array()
@@ -328,6 +345,8 @@ func _refresh() -> void:
 			lifts[i] = Vector4(lift.x, lift.y, lift.z, 1.0)
 	_skin.set_shader_parameter("holes", holes)
 	_skin.set_shader_parameter("hole_count", active.size())
+	_outline.set_shader_parameter("holes", holes)
+	_outline.set_shader_parameter("hole_count", active.size())
 	_cavity.set_shader_parameter("holes", holes)
 	_cavity.set_shader_parameter("hole_lifts", lifts)
 	_cavity.set_shader_parameter("hole_count", active.size())

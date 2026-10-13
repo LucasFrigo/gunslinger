@@ -193,12 +193,13 @@ func mp_report_npc_cut(slot: int, cut: Dictionary, trail_points: PackedVector3Ar
 
 ## Host: every peer cuts the same hole at the host's clip time. Reliable channel 0, so
 ## it lands before the `_mp_wound` / `_mp_down` / `_mp_finish` sent after it. `cut` is
-## empty for no hole.
+## empty for no hole: it still goes out (bone -1) so every peer flashes the body.
 func _send_chunk(victim_slot: int, cut: Dictionary, trail_points: PackedVector3Array,
 		lethal: bool) -> void:
-	if cut.is_empty():
-		return
-	_mp_chunk.rpc(victim_slot, int(cut["bone"]), cut["local"] as Vector3, float(cut["radius"]),
+	var bone := int(cut["bone"]) if not cut.is_empty() else -1
+	var local: Vector3 = cut["local"] if bone >= 0 else Vector3.ZERO
+	var radius := float(cut["radius"]) if bone >= 0 else 0.0
+	_mp_chunk.rpc(victim_slot, bone, local, radius,
 			DummyBody.shot_dir(trail_points), ReplayBuffer.clip_time(), lethal)
 
 
@@ -560,8 +561,9 @@ func _mp_wound(victim_slot: int, region_str: String, new_health: float) -> void:
 		GameManager.local_player.apply_wound(StringName(region_str), new_health)
 
 
-## Every peer cuts the victim's body: `bone` / `local` / `radius` rebuild the cut
-## (`DummyBody.cut_on_bone`), `dir` is the shot, `clip_t` the host's clip time.
+## Every peer flashes the victim's body and cuts it: `bone` / `local` / `radius` rebuild the
+## cut (`DummyBody.cut_on_bone`; bone -1 is no hole), `dir` is the shot, `clip_t` the host's
+## clip time.
 @rpc("authority", "call_local", "reliable")
 func _mp_chunk(victim_slot: int, bone: int, local: Vector3, radius: float, dir: Vector3,
 		clip_t: float, lethal: bool) -> void:
@@ -571,6 +573,7 @@ func _mp_chunk(victim_slot: int, bone: int, local: Vector3, radius: float, dir: 
 	if is_instance_valid(victim) and victim.has_method("corpse_body"):
 		var body: DummyBody = victim.corpse_body()
 		if body != null:
+			body.flash(clip_t)
 			body.knock_chunk({"bone": bone, "local": local, "radius": radius}, dir, clip_t, lethal)
 
 

@@ -366,9 +366,10 @@ func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 	health = result["health"]
 	# Before `_die`: the gib leaves from the live pose, not the one `collapse` rescales.
 	if NetworkManager.is_active():
-		# Lobby host: `_mp_chunk` cuts the hole here and on every client's proxy.
+		# Lobby host: `_mp_chunk` flashes and cuts the hole here and on every client's proxy.
 		GameManager.duel.mp_report_npc_cut(actor_id, cut, trail_points, result["died"])
 	else:
+		_dummy.flash(ReplayBuffer.clip_time())
 		_dummy.knock_chunk(cut, DummyBody.shot_dir(trail_points), ReplayBuffer.clip_time(), result["died"])
 	if result["died"]:
 		killed_by = shooter if shooter >= 0 else ReplayBuffer.ACTOR_HOST
