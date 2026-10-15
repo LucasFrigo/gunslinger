@@ -359,10 +359,11 @@ func clear_replay_pose() -> void:
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 		region: StringName = CombatRules.REGION_TORSO, _self_inflicted := false,
-		_shooter_is_local := false, shooter := -1, cut := {}) -> void:
+		_shooter_is_local := false, shooter := -1, cut := {}, side := &"") -> void:
 	if state == AIState.DEAD:
 		return
-	var result := CombatRules.resolve(region, health, damage_mult)
+	# The NPC draws and holds with the right arm, so only that arm disarms or stops a draw.
+	var result := CombatRules.resolve(region, health, damage_mult, CombatRules.is_gun_arm(side, &"R"))
 	health = result["health"]
 	# Before `_die`: the gib leaves from the live pose, not the one `collapse` rescales.
 	if NetworkManager.is_active():

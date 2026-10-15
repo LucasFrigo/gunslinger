@@ -252,7 +252,7 @@ func _test_gauntlet() -> void:
 			local._holster_gun()
 			if not player_ok:
 				return
-			if not (_assert_pain_jerk() and _assert_spin_throw()):
+			if not (_assert_flat_draw_snap() and _assert_pain_jerk() and _assert_spin_throw()):
 				return
 		# Arm the listener before the kill: duel_finished fires synchronously.
 		var result := _arm_duel_listener()
@@ -299,6 +299,10 @@ const MULTI_CAPSULE_HEIGHT := 1.6
 const MULTI_MIN_SPACING := 3.0
 const MULTI_FLOOR_TOLERANCE := 0.3
 const MULTI_WORLD_MASK := 1
+## BUG-027: a spawn marker's floor may not rise above the sole (a sunk ragdoll is thrown
+## out of the ground); a short hover is a harmless drop.
+const SPAWN_FLOOR_ABOVE := 0.01
+const SPAWN_FLOOR_BELOW := 0.05
 
 
 func _test_multi() -> void:
@@ -476,6 +480,8 @@ func _fail_rooftop(message: String, saved_disarm: float) -> void:
 ## Part A: every arena and count places its NPCs clear of geometry, on the floor, facing
 ## the lane, spaced out, with a readable lineup and distinct shades for duplicates.
 func _multi_markers_ok() -> bool:
+	if not await _spawn_floors_ok():
+		return false
 	for arena in GameManager.SCENARIOS.size():
 		for count in [2, 3]:
 			GameManager.start_free_duel(arena, 0, count)
@@ -702,6 +708,36 @@ func _hitbox_center(hitbox: Hitbox) -> Vector3:
 	return hitbox.global_position
 
 
+## Every spawn marker on every arena (PlayerSpawn, EnemySpawn, EnemySpawns*) stands flush
+## on the world floor.
+func _spawn_floors_ok() -> bool:
+	for arena in GameManager.SCENARIOS.size():
+		GameManager.start_free_duel(arena, 0)
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		var scenario := GameManager.current_scenario
+		var markers: Array[Marker3D] = [scenario.get_node("PlayerSpawn"), scenario.get_node("EnemySpawn")]
+		for group in scenario.get_children():
+			if String(group.name).begins_with("EnemySpawns"):
+				for marker in group.get_children():
+					markers.append(marker as Marker3D)
+		var space := scenario.get_world_3d().direct_space_state
+		for marker in markers:
+			var pos := marker.global_position
+			var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(pos + Vector3.UP * 0.5,
+					pos + Vector3.DOWN * 1.0, MULTI_WORLD_MASK))
+			if hit.is_empty():
+				_fail("spawn floor: arena %d %s has no floor under it" % [arena, scenario.get_path_to(marker)])
+				return false
+			var floor_y: float = hit["position"].y
+			if floor_y > pos.y + SPAWN_FLOOR_ABOVE or floor_y < pos.y - SPAWN_FLOOR_BELOW:
+				_fail("spawn floor: arena %d %s at y %.3f, floor at y %.3f" % [arena,
+						scenario.get_path_to(marker), pos.y, floor_y])
+				return false
+	print("AUTOTEST: spawn markers flush on the floor on every arena")
+	return true
+
+
 func _multi_arena_ok(arena: int, count: int) -> bool:
 	var tag := "arena %d x%d" % [arena, count]
 	var ais := GameManager.current_ais
@@ -856,7 +892,41 @@ func _outward(point: Vector3, center: Vector3) -> Vector3:
 	return flat.normalized() if flat.length_squared() > 0.0001 else Vector3.RIGHT
 
 
+## BUG-026: a flat draw puts the wrist on the grip the same frame the gun lands, and a
+## holster puts it back at the hang. Slow-mo stretches the old ease, so it would show there.
+func _assert_flat_draw_snap() -> bool:
+	var player := GameManager.local_player
+	if player == null or player.use_vr:
+		return true
+	const STEP := 0.016
+	player._holster_gun()
+	for i in 20:
+		player.drive_wrists_late(STEP)
+	player._draw_gun()
+	var hand := player.draw_hand_name()
+	player.drive_wrists_late(STEP)
+	var grip := player._grip_anchor(player.revolver)
+	var wrist := player._wrist_marker(hand)
+	if grip == null or wrist.global_position.distance_to(grip.global_position) > 0.01:
+		_fail("flat draw snap: the wrist trails the gun by %.3f m" % wrist.global_position.distance_to(grip.global_position))
+		return false
+	player._holster_gun()
+	player.drive_wrists_late(STEP)
+	var head: Transform3D = player.rig.get_head_transform()
+	var yaw := Basis(Vector3.UP, head.basis.get_euler().y)
+	var local_hang := Player.ARM_FLAT_HAND_LOCAL
+	if hand == Player.HAND_LEFT:
+		local_hang.x = -local_hang.x
+	var hang := Vector3(head.origin.x, player.global_position.y + 1.1, head.origin.z) + yaw * local_hang
+	if wrist.global_position.distance_to(hang) > 0.01:
+		_fail("flat draw snap: the wrist trails the holster by %.3f m" % wrist.global_position.distance_to(hang))
+		return false
+	print("AUTOTEST: flat draw / holster snap the wrist with the gun")
+	return true
+
+
 ## Arm hit flings a held gun and does not block an immediate catch. AI gun leaves the arm.
+## An off-arm hit (BUG-025) keeps the gun and drops the off-hand prop instead.
 func _assert_pain_jerk() -> bool:
 	var player := GameManager.local_player
 	if player == null or player.revolver == null:
@@ -866,7 +936,19 @@ func _assert_pain_jerk() -> bool:
 	if not player.revolver.held:
 		_fail("pain-jerk: gun was not in hand")
 		return false
-	player.apply_wound(CombatRules.REGION_ARM, player.health)
+	var gun_side := player._body_side(player.draw_hand_name())
+	var off_side := &"L" if gun_side == &"R" else &"R"
+	player.props.equip_item(PropController.ITEM_COIN)
+	var coin: Node3D = player.props.current_prop()
+	player.apply_wound(CombatRules.REGION_ARM, player.health, off_side)
+	if not player.revolver.held:
+		_fail("pain-jerk: an off-arm hit disarmed the player")
+		return false
+	if coin == null or not coin.is_loose():
+		_fail("pain-jerk: an off-arm hit did not drop the coin")
+		return false
+	player.props.equip_item(PropController.ITEM_NONE)
+	player.apply_wound(CombatRules.REGION_ARM, player.health, gun_side)
 	if not player.revolver.drawn or player.revolver.held:
 		_fail("pain-jerk: arm hit did not toss the player gun")
 		return false
@@ -881,7 +963,12 @@ func _assert_pain_jerk() -> bool:
 	if ai == null or ai.revolver == null:
 		_fail("pain-jerk: no AI duelist")
 		return false
-	ai.take_bullet_hit(0.0, PackedVector3Array(), CombatRules.REGION_ARM)
+	var ai_state := ai.state
+	ai.take_bullet_hit(0.0, PackedVector3Array(), CombatRules.REGION_ARM, false, false, -1, {}, &"L")
+	if ai.state != ai_state or ai.state == DuelistAI.AIState.DISARMED:
+		_fail("pain-jerk: an AI off-arm hit disarmed it")
+		return false
+	ai.take_bullet_hit(0.0, PackedVector3Array(), CombatRules.REGION_ARM, false, false, -1, {}, &"R")
 	if ai.revolver.get_parent() == ai.arm:
 		_fail("pain-jerk: AI arm hit did not toss the gun")
 		return false
@@ -916,6 +1003,10 @@ func _assert_spin_throw() -> bool:
 		return false
 	print("AUTOTEST: spin throw and catch ok")
 	return true
+
+
+## BUG-027: how far the hips may rise above the standing pose in a gravity-only collapse.
+const RAGDOLL_MAX_RISE := 0.03
 
 
 func _test_ragdoll() -> void:
@@ -1030,6 +1121,8 @@ func _test_ragdoll() -> void:
 	print("AUTOTEST: ragdoll core ok")
 	if not await _ragdoll_player_ok():
 		return
+	if not await _ragdoll_npc_floor_ok():
+		return
 	_pass()
 
 
@@ -1075,6 +1168,31 @@ func _ragdoll_player_ok() -> bool:
 		_fail("ragdoll: reset_for_duel left the player's corpse locked")
 		return false
 	print("AUTOTEST: player collapsed (chest dropped %.2f m), reset stands it up" % drop)
+	return true
+
+
+## BUG-027: an NPC on Main Street (arena 0) falls under gravity alone without the hips
+## first rising out of the ground.
+func _ragdoll_npc_floor_ok() -> bool:
+	GameManager.start_free_duel(0, 0)
+	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
+		_fail("ragdoll: NPC duel never reached DRAW")
+		return false
+	var dummy := GameManager.current_ais[0].corpse_body()
+	var start := dummy.bone_global(&"Hips").origin.y
+	var peak := 0.0
+	dummy.collapse(PackedVector3Array())
+	if not dummy.has_corpse():
+		_fail("ragdoll: the NPC collapse made no corpse")
+		return false
+	var deadline := Time.get_ticks_msec() + int((float(GameManager.tuning["ragdoll_max_time"]) + 1.0) * 1000.0)
+	while dummy.corpse_state() == BodyRagdoll.State.SIMULATING and Time.get_ticks_msec() < deadline:
+		await get_tree().physics_frame
+		peak = maxf(peak, dummy.bone_global(&"Hips").origin.y - start)
+	print("AUTOTEST: NPC ragdoll on Main Street, hips peak rise %.3f m" % peak)
+	if peak > RAGDOLL_MAX_RISE:
+		_fail("ragdoll: the NPC's hips rose %.3f m when it ragdolled" % peak)
+		return false
 	return true
 
 
@@ -5712,6 +5830,8 @@ func _test_load_all() -> void:
 		return
 	if not await _wind_ok():
 		return
+	if not await _vr_rig_ok():
+		return
 	if not ImpactFeedback.has_warmed_up():
 		return _fail("boot warmup did not run")
 	if Bullet.ensure_mesh() == null or AudioCatalog.get_stream(&"gunshot") == null:
@@ -5915,6 +6035,77 @@ func _wind_ok() -> bool:
 				return false
 		instance.queue_free()
 	print("AUTOTEST: wind bed and gusts follow the scenario resource")
+	return true
+
+
+## BUG-024: the VR head lands on the spawn whatever the playspace offset, waits for
+## tracking, and stick walking slides along Train Rooftop's side guard wall. Headless
+## has no XR interface, so the camera keeps the pose the test writes.
+func _vr_rig_ok() -> bool:
+	var arena := (load("res://scenarios/train_rooftop/train_rooftop.tscn") as PackedScene) \
+			.instantiate() as ScenarioBase
+	add_child(arena)
+	var body := Node3D.new()
+	add_child(body)
+	var rig := (load("res://player/vr_rig.tscn") as PackedScene).instantiate() as VRRig
+	body.add_child(rig)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var ok := await _vr_rig_checks(arena, body, rig)
+	body.queue_free()
+	arena.queue_free()
+	return ok
+
+
+func _vr_rig_checks(arena: ScenarioBase, body: Node3D, rig: VRRig) -> bool:
+	# EnemySpawn is yawed 180°: the joiner's facing must survive the recentre too.
+	for spawn: Transform3D in [arena.get_enemy_spawn(), arena.get_player_spawn()]:
+		body.global_transform = spawn
+		rig.camera.position = Vector3(1.8, 1.6, 0.9)
+		rig.camera.rotation = Vector3(0.0, 0.7, 0.0)
+		rig.reset_locomotion()
+		if not _vr_head_on_spawn(rig, spawn, "offset playspace"):
+			return false
+	var spawn := arena.get_player_spawn()
+	rig.camera.position = Vector3(1.2, 0.0, -0.6)
+	rig.reset_locomotion()
+	if not rig._spawn_align_pending:
+		_fail("vr rig: an untracked head did not defer the spawn alignment")
+		return false
+	rig.camera.position.y = 1.6
+	# process_frame fires before nodes process: the second one follows the rig's _process.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if rig._spawn_align_pending:
+		_fail("vr rig: the deferred spawn alignment never ran once tracked")
+		return false
+	if not _vr_head_on_spawn(rig, spawn, "deferred"):
+		return false
+	# GuardSideR's inner face is x = 1.64; the 0.28 m capsule must stop by 1.36.
+	var start_z := rig.camera.global_position.z
+	for i in 40:
+		rig.global_position += rig.collide_stick_motion(Vector3(0.1, 0.0, -0.05))
+	var head := rig.camera.global_position
+	if head.x > 1.4:
+		_fail("vr rig: stick walked through GuardSideR (head x %.2f)" % head.x)
+		return false
+	if start_z - head.z < 1.0:
+		_fail("vr rig: stick stuck on GuardSideR instead of sliding (z moved %.2f)" % (start_z - head.z))
+		return false
+	print("AUTOTEST: vr rig recentres on spawn, stick slides on the guard wall (x %.2f, z -%.2f)"
+			% [head.x, start_z - head.z])
+	return true
+
+
+func _vr_head_on_spawn(rig: VRRig, spawn: Transform3D, label: String) -> bool:
+	var head := rig.camera.global_position
+	var off := Vector2(head.x - spawn.origin.x, head.z - spawn.origin.z).length()
+	var look := -rig.camera.global_basis.z
+	var want := -spawn.basis.z
+	var facing := Vector2(look.x, look.z).normalized().dot(Vector2(want.x, want.z).normalized())
+	if off > 0.01 or facing < 0.999:
+		_fail("vr rig (%s): head %.2f m off the spawn, facing dot %.3f" % [label, off, facing])
+		return false
 	return true
 
 

@@ -168,10 +168,11 @@ func local_down() -> bool:
 ## Host-side bullets report authoritative hits here during MP duels. `victim_slot` and
 ## `shooter_slot` are lobby slots (-1: shooter unknown); a self-kill is the same slot in
 ## both and still that duelist's death. `cut` is the hole the hit makes
-## (`Hitbox.receive_hit`), sent ahead of the wound, the down, or the finish.
+## (`Hitbox.receive_hit`), sent ahead of the wound, the down, or the finish. `side` is the
+## arm hit (`Hitbox.side`); the victim's peer decides gun arm or off arm.
 func mp_report_hit(victim_slot: int, trail_points: PackedVector3Array,
 		region: StringName = CombatRules.REGION_TORSO, damage: float = 1.0,
-		shooter_slot := -1, cut := {}) -> void:
+		shooter_slot := -1, cut := {}, side := &"") -> void:
 	if not is_mp or not accepts_hits() or not NetworkManager.is_host() or not slot_alive(victim_slot):
 		return
 	var result := CombatRules.resolve(region, _health[victim_slot], damage)
@@ -180,7 +181,7 @@ func mp_report_hit(victim_slot: int, trail_points: PackedVector3Array,
 	if result["died"]:
 		_host_eliminate(victim_slot, shooter_slot, trail_points, Cause.KILLED)
 	else:
-		_mp_wound.rpc(victim_slot, String(region), _health[victim_slot])
+		_mp_wound.rpc(victim_slot, String(region), _health[victim_slot], String(side))
 
 
 ## Host: the hole a hit made on the NPC in `slot`. The NPC resolves its own HP
@@ -554,11 +555,11 @@ func _on_local_holster_changed(holstered: bool) -> void:
 
 
 @rpc("authority", "call_local", "reliable")
-func _mp_wound(victim_slot: int, region_str: String, new_health: float) -> void:
+func _mp_wound(victim_slot: int, region_str: String, new_health: float, side_str: String) -> void:
 	if not _in_mp_duel() or state == State.RESOLUTION:
 		return
 	if victim_slot == snapshot.local_slot() and is_instance_valid(GameManager.local_player):
-		GameManager.local_player.apply_wound(StringName(region_str), new_health)
+		GameManager.local_player.apply_wound(StringName(region_str), new_health, StringName(side_str))
 
 
 ## Every peer flashes the victim's body and cuts it: `bone` / `local` / `radius` rebuild the

@@ -2,8 +2,9 @@ class_name Hitbox
 extends Area3D
 ## Damage-receiving zone (head/torso/limb). Bullets raycast against these.
 ## The entity that owns this hitbox must implement
-## take_bullet_hit(damage, trail_points, region, self_inflicted, shooter_is_local, shooter, cut).
+## take_bullet_hit(damage, trail_points, region, self_inflicted, shooter_is_local, shooter, cut, side).
 ## `region` drives AV feedback and CombatRules (head kill, arm disarm, leg slow).
+## `side` (`&"L"` / `&"R"` on the arms) lets the owner tell the gun arm from the off arm.
 ## Damage is ignored unless `DuelManager.accepts_hit()` (DRAW, or NPCs fighting after a loss).
 ## `cut` is the hole the hit makes where the bullet landed (`DummyBody.cut_at`, rolled on
 ## `chunk_chance` here, on the authority), or `{}`. The owner applies it after its own gates.
@@ -17,6 +18,8 @@ const VIZ_NAME := "_HitboxViz"
 
 @export_range(0.1, 4.0, 0.05) var damage_mult := 1.0
 @export var region: StringName = &"torso"
+## Body side for the arms (`BodyHitboxes` L / R). Empty elsewhere.
+@export var side: StringName = &""
 
 var owner_entity: Node
 ## Skip the F3 view. The local head volume surrounds the camera.
@@ -63,7 +66,7 @@ func receive_hit(trail_points: PackedVector3Array, self_inflicted := false,
 			cut = body.cut_at(shape_owner_get_owner(shape_find_owner(shape_index)),
 					trail_points[trail_points.size() - 1], DummyBody.shot_dir(trail_points), region)
 	owner_entity.take_bullet_hit(damage_mult, trail_points, region, self_inflicted, shooter_is_local,
-			shooter, cut)
+			shooter, cut, side)
 
 
 # -- F3 "Show hitboxes" ---------------------------------------------------------

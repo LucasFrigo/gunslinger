@@ -46,10 +46,12 @@ region = &"torso"
 [node name="ArmHitboxL" type="Area3D" parent="."]
 script = ExtResource("2")
 region = &"arm"
+side = &"L"
 
 [node name="ArmHitboxR" type="Area3D" parent="."]
 script = ExtResource("2")
 region = &"arm"
+side = &"R"
 
 [node name="LegHitboxL" type="Area3D" parent="."]
 script = ExtResource("2")

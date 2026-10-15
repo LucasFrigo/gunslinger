@@ -45,6 +45,10 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Fixed
 
+- Main Street: a killed duelist (an NPC, your own body, or another player's) no longer jumps into the air when it falls. Every spawn there stood 12 cm inside the ground, which threw the ragdoll out of it. ([BUG-027](docs/BUGS.md))
+- Flat: when you draw or holster, your hand now moves with the revolver in the same frame, also in slow motion, where it used to trail behind. Other players see your draw the same way. ([BUG-026](docs/BUGS.md))
+- A hit on the arm that is not holding the gun no longer disarms you. NPCs work the same way: only a hit on their gun arm makes them drop the gun or stops their draw. ([BUG-025](docs/BUGS.md))
+- VR: you now start on your spawn mark wherever you stand in your playspace. Before, standing off the centre of your play area could start you off the Train Rooftop, outside its invisible walls. Stick walking now also stops at walls and buildings and slides along them, as in flat. Walking in your room is unchanged. ([BUG-024](docs/BUGS.md))
 - Multiplayer: the `Holster your weapon` message no longer shows the enemy lineup of a single-player duel played earlier in the same session.
 - Multiplayer: a rare crash when another player's avatar was removed (a rematch, a player leaving, or quitting). The voice stream was freed while the audio thread was still reading it ([BUG-021](docs/BUGS.md)).
 - Quitting no longer sometimes crashes on the way out (a Godot 4.7 script-shutdown bug, worked around by a new `ScriptKeepalive` autoload). Headless autotests that passed no longer report a crash exit code ([BUG-020](docs/BUGS.md)).
@@ -75,6 +79,7 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 
 ### Changed
 
+- A hit on your off arm now knocks loose what that hand holds: a coin, ace, or bottle falls and can be picked up again, and in VR a belt round drops. A cigarette stays put.
 - Banded light is now one global value: F3 `band_low` and `band_soft` move the duelists and the arenas together.
 - Metal in the arenas (iron, brass, the boiler, mirrors) draws matte, with no specular, to match the banded light. Reimport the scenario GLBs after pulling (`godot --headless --path . --import`).
 - The red flash on death is gone: the hurt vignette replaces it, and now shows in the headset too, which the flash never did.

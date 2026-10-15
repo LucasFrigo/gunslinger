@@ -20,6 +20,12 @@ const HAND_RIGHT := &"right_hand"
 const POINTER_LENGTH := 6.0
 ## Below this, camera Y is still the identity pose and must not shift the origin.
 const MIN_TRACKED_HEAD_Y := 0.05
+## Stick-walk body: flat's capsule radius, raised off the floor so lips and seams don't snag.
+const STICK_BODY_RADIUS := 0.28
+const STICK_STEP_CLEARANCE := 0.35
+const STICK_BODY_TOP := 1.6
+const STICK_SLIDE_PASSES := 2
+const WORLD_LAYER := 1
 const DIGITAL_SOURCES: Array[String] = [
 	"trigger_click",
 	"grip_click",
@@ -60,6 +66,9 @@ var _stick_trick_active := {HAND_LEFT: false, HAND_RIGHT: false}
 var _prop_radial_hand: StringName = &""
 ## True until a saved eye height has been written onto origin Y.
 var _eye_height_pending := false
+## True until the head has been put on the spawn marker (waits for tracking).
+var _spawn_align_pending := false
+var _stick_query: PhysicsShapeQueryParameters3D
 
 
 func _ready() -> void:
@@ -202,7 +211,7 @@ func get_aim_override() -> Vector3:
 
 
 ## Called when a duel places the player at a spawn; clears stick locomotion and
-## yaws the origin around the HMD so the player looks along the spawn -Z.
+## moves the origin so the HMD stands on the spawn looking along its -Z (BUG-024).
 func reset_locomotion() -> void:
 	position = Vector3.ZERO
 	rotation.y = 0.0
@@ -221,14 +230,34 @@ func reset_locomotion() -> void:
 	_stick_trick_active[HAND_LEFT] = false
 	_stick_trick_active[HAND_RIGHT] = false
 	_prop_radial_hand = &""
-	var desired_yaw := global_transform.basis.get_euler().y
-	var head_yaw := camera.global_transform.basis.get_euler().y
-	_rotate_around_head(wrapf(desired_yaw - head_yaw, -PI, PI))
+	_spawn_align_pending = true
+	_align_to_spawn()
 	# position = 0 above cleared any standing-height correction.
 	apply_saved_eye_height()
 
 
+## Yaw around the head, then shift XZ so the head is on the Player root (the spawn).
+## The playspace offset would otherwise carry into the arena. Waits for tracking:
+## the identity pose would align the wrong point.
+func _align_to_spawn() -> bool:
+	if not headset_height_ready():
+		return false
+	var body := get_parent() as Node3D
+	if body == null:
+		_spawn_align_pending = false
+		return false
+	var desired_yaw := body.global_basis.get_euler().y
+	var head_yaw := camera.global_transform.basis.get_euler().y
+	_rotate_around_head(wrapf(desired_yaw - head_yaw, -PI, PI))
+	var head := camera.global_position
+	global_position += Vector3(body.global_position.x - head.x, 0.0, body.global_position.z - head.z)
+	_spawn_align_pending = false
+	return true
+
+
 func _process(delta: float) -> void:
+	if _spawn_align_pending:
+		_align_to_spawn()
 	if _eye_height_pending:
 		apply_saved_eye_height()
 	_update_pointer()
@@ -270,6 +299,7 @@ func _apply_locomotion(delta: float) -> float:
 	# local `position` under EnemySpawn's 180° Player yaw inverted strafe (BUG-006).
 	var motion := (basis * Vector3(move_input.x, 0.0, -move_input.y)) \
 			* MovementConfig.vr_move_speed * _move_speed_mult() * delta
+	motion = collide_stick_motion(motion)
 	global_position += motion
 
 	var turn_input := right_hand.get_vector2("primary")
@@ -316,6 +346,67 @@ func _rotate_around_head(yaw_delta: float) -> void:
 	global_position = head_pos + offset
 	rotation.y += yaw_delta
 	_yaw_offset += yaw_delta
+
+
+## Stick step against world geometry: a capsule at the head's XZ slides along what
+## it hits, like flat's move_and_slide. Room-scale walking is not checked, so a
+## head already inside a wall keeps only the part of the step that leads out.
+func collide_stick_motion(motion: Vector3) -> Vector3:
+	var step := Vector3(motion.x, 0.0, motion.z)
+	if step.is_zero_approx() or not is_inside_tree():
+		return step
+	var space := get_world_3d().direct_space_state
+	var query := _stick_shape_query()
+	var body := get_parent() as Node3D
+	var floor_y := body.global_position.y if body != null else global_position.y
+	var head := camera.global_position
+	var start := Vector3(head.x, floor_y + (STICK_STEP_CLEARANCE + STICK_BODY_TOP) * 0.5, head.z)
+	query.transform = Transform3D(Basis.IDENTITY, start)
+	query.motion = Vector3.ZERO
+	var overlap := space.get_rest_info(query)
+	if not overlap.is_empty():
+		return _strip_into(step, overlap.normal)
+	var pos := start
+	for i in STICK_SLIDE_PASSES:
+		if step.is_zero_approx():
+			break
+		query.transform = Transform3D(Basis.IDENTITY, pos)
+		query.motion = step
+		var fractions := space.cast_motion(query)
+		if fractions[1] >= 1.0:
+			pos += step
+			break
+		var contact := pos + step * fractions[1]
+		pos += step * fractions[0]
+		var remaining := step * (1.0 - fractions[0])
+		query.transform = Transform3D(Basis.IDENTITY, contact)
+		query.motion = Vector3.ZERO
+		var hit := space.get_rest_info(query)
+		if hit.is_empty():
+			break
+		step = _strip_into(remaining, hit.normal)
+	return pos - start
+
+
+## Drop the part of `v` that pushes into a surface with normal `n` (XZ only).
+## A floor or ceiling normal has no XZ part and leaves `v` alone.
+func _strip_into(v: Vector3, n: Vector3) -> Vector3:
+	var flat := Vector3(n.x, 0.0, n.z)
+	if flat.is_zero_approx():
+		return v
+	flat = flat.normalized()
+	return v - flat * minf(v.dot(flat), 0.0)
+
+
+func _stick_shape_query() -> PhysicsShapeQueryParameters3D:
+	if _stick_query == null:
+		var capsule := CapsuleShape3D.new()
+		capsule.radius = STICK_BODY_RADIUS
+		capsule.height = STICK_BODY_TOP - STICK_STEP_CLEARANCE
+		_stick_query = PhysicsShapeQueryParameters3D.new()
+		_stick_query.shape = capsule
+		_stick_query.collision_mask = WORLD_LAYER
+	return _stick_query
 
 
 func _deadzone(v: Vector2, zone: float) -> Vector2:

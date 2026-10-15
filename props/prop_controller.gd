@@ -127,6 +127,18 @@ func drop_on_death(world: Node, velocity: Vector3) -> void:
 	_prop_hidden = not _prop.visible
 
 
+## Off-arm wound: a coin / ace / bottle in the hand falls loose and can be picked up
+## again. The cigarette has no loose state and a prop parked at the mouth is not in the
+## hand, so both stay.
+func drop_from_hand(world: Node, velocity: Vector3) -> bool:
+	if not is_prop_in_hand() or _stowed() or not (_prop is RigidBody3D):
+		return false
+	_fire_held = false
+	_prop.cancel_charge()
+	_prop.drop_loose(world, velocity)
+	return true
+
+
 ## True once the prop was hidden on death. The replay does not show it either.
 func is_prop_hidden() -> bool:
 	return _prop_hidden

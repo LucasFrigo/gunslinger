@@ -49,6 +49,8 @@ var _snap_r: Marker3D
 var _snap_lock: Dictionary = {}
 var _snap_from_local: Dictionary = {}
 var _snap_blend: Dictionary = {}
+## A draw or holster teleports the gun, so the wrists jump with it next frame (BUG-026).
+var _snap_hands := false
 var replay_locked := false
 ## Lobby slot this avatar stands for (= ReplayBuffer actor id). Set before add_child.
 var slot := -1
@@ -326,6 +328,8 @@ func _apply_gun_parent(drawn: bool) -> void:
 	if gun.get_parent() != attach:
 		gun.reparent(attach)
 	gun.transform = Transform3D.IDENTITY
+	if drawn != _gun_drawn:
+		_snap_hands = true
 	_gun_drawn = drawn
 
 
@@ -375,8 +379,9 @@ func _drive_remote_hands(delta: float) -> void:
 		return
 	var gun_left := _gun_drawn and not _gun_free and not _gun_spinning and _gun_held_left
 	var gun_right := _gun_drawn and not _gun_free and not _gun_spinning and not _gun_held_left
-	_place_snap(_snap_l, _wrist_goal(left_hand, gun_left), delta, "gun" if gun_left else "hand")
-	_place_snap(_snap_r, _wrist_goal(right_hand, gun_right), delta, "gun" if gun_right else "hand")
+	_place_snap(_snap_l, _wrist_goal(left_hand, gun_left), delta, "gun" if gun_left else "hand", _snap_hands)
+	_place_snap(_snap_r, _wrist_goal(right_hand, gun_right), delta, "gun" if gun_right else "hand", _snap_hands)
+	_snap_hands = false
 	_dummy.set_hand_curl(false, HandFingers.unpack_pose(_hands, false), HandFingers.unpack_trigger(_hands, false))
 	_dummy.set_hand_curl(true, HandFingers.unpack_pose(_hands, true), HandFingers.unpack_trigger(_hands, true))
 
@@ -389,11 +394,11 @@ func _wrist_goal(hand_node: Node3D, on_gun: bool) -> Transform3D:
 	return hand_node.global_transform
 
 
-func _place_snap(marker: Marker3D, goal: Transform3D, delta: float, lock_id: String) -> void:
+func _place_snap(marker: Marker3D, goal: Transform3D, delta: float, lock_id: String, snap := false) -> void:
 	var prev := str(_snap_lock.get(marker.name, ""))
 	if prev != lock_id:
 		_snap_from_local[marker.name] = global_transform.affine_inverse() * marker.global_transform
-		_snap_blend[marker.name] = 0.0
+		_snap_blend[marker.name] = 1.0 if snap else 0.0
 		_snap_lock[marker.name] = lock_id
 	var t := float(_snap_blend.get(marker.name, 1.0))
 	if t >= 1.0:
@@ -421,9 +426,9 @@ func _place_limb(node: Node3D, from: Vector3, to: Vector3) -> void:
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 		region: StringName = CombatRules.REGION_TORSO, _self_inflicted := false,
-		_shooter_is_local := false, shooter := -1, cut := {}) -> void:
+		_shooter_is_local := false, shooter := -1, cut := {}, side := &"") -> void:
 	if NetworkManager.is_host():
-		GameManager.duel.mp_report_hit(slot, trail_points, region, damage_mult, shooter, cut)
+		GameManager.duel.mp_report_hit(slot, trail_points, region, damage_mult, shooter, cut, side)
 
 
 func hitbox_rids() -> Array[RID]:

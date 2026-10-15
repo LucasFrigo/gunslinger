@@ -47,13 +47,109 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 **Notes:** The cause is not established. The NPC runs on the host in a lobby (`GameManager.setup_mp_duel`), and the DRAWING branch also runs in single player, so it is not known whether the mixed-lobbies work caused it.
 
-### BUG-024 — VR player spawns off the Train Rooftop, past the invisible wall
+### BUG-028 — Holstered gun has the wrong rotation (barrel not pointing down)
 
 | | |
 |---|---|
 | Status | `open` |
+| Severity | `minor` |
+| Filed | 2026-10-14 |
+| Platforms | Arena, mode and VR / flat not recorded. |
+| Areas | `player/player.gd` (holster placement after `# Holster rides the chosen hip`), `player/remote_avatar.gd` (holster placement, `_apply_gun_parent`), `weapons/weapon_base.gd` (`holster_to`) |
+
+**What:** While the gun is in the holster, it does not hang with the tip of the barrel pointing down, as a holstered revolver should.
+
+**Repro:**
+1. Start any mode with the gun holstered.
+2. Look at the gun on the hip.
+
+**Notes:** The cause is not established, but the code shows no downward tilt anywhere on this path. `Player` sets the holster's basis to the head yaw alone, and `WeaponBase.holster_to` puts the gun at `Transform3D.IDENTITY` under it, so the gun keeps the yaw-only basis. `RemoteAvatar` does the same (`yaw` basis, identity gun transform). Not checked in play: whether the remote avatar and NPCs show the same rotation, and whether the draw or holster-snap logic depends on the current holster basis.
+
+---
+
+## Fixed
+
+### BUG-027 — Main Street: a killed NPC jumps into the air the moment it ragdolls
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `major` |
+| Filed | 2026-10-13 |
+| Fixed | 2026-10-14 |
+| Platforms | Main Street, every mode, VR and flat. NPCs, the player's own body, and remote avatars all stood on the same markers. Other arenas were already flush. |
+| Areas | `scenarios/main_street/main_street.tscn` (spawn markers), `dev/autotest.gd` (`_spawn_floors_ok`, `_ragdoll_npc_floor_ok`) |
+
+**What:** On the Main Street map, when an NPC is killed it launches upward at the instant it switches to ragdoll, instead of dropping.
+
+**Repro:**
+1. Start a duel against an NPC on Main Street.
+2. Kill the NPC.
+3. At the moment the body ragdolls it jumps into the air.
+
+**Fix:** The reporter's lead was right. The `env_terrain` collider's top is at y=+0.12 (`dev/build_main_street_blender.py`, so building feet sink into the dirt), but all 7 Main Street spawn markers sat at y=0. The shin capsules that `BodyRagdoll._build` makes reach down to the sole, so they started 12 cm inside the ground, and the solver threw the body out (the hips rose 0.163 m in a gravity-only collapse).
+- The markers (`PlayerSpawn`, `EnemySpawn`, `EnemySpawns2/*`, `EnemySpawns3/*`) are now at y=0.12. Lobby rings, horde spawns, and gusts read the markers, so they follow.
+- `--autotest=multi` (`_spawn_floors_ok`) now fails if any marker on any arena has its floor above it, or more than 5 cm below it.
+- `--autotest=ragdoll` (`_ragdoll_npc_floor_ok`) collapses an NPC on Main Street and fails if its hips rise more than 3 cm.
+
+### BUG-026 — Flat draw: the hand animates slower than the gun
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-12 |
+| Fixed | 2026-10-14 |
+| Platforms | Flat (local player), and how other players see a draw in multiplayer. VR keeps its catch ease. |
+| Areas | `player/player.gd` (`_place_wrist`, `_snap_wrist`, `_attach_gun_to_hand`, `_holster_gun`), `player/remote_avatar.gd` (`_apply_gun_parent`, `_place_snap`) |
+
+**What:** In flat mode the draw animation of the hand runs slower than the gun's, so the two are out of sync during the draw. They should move together.
+
+**Repro:**
+1. Start a duel in flat mode.
+2. Draw and watch the hand and the gun.
+
+**Fix:** The revolver teleports between the hip and `GunAttach` in one frame, but the mannequin wrist eased onto the grip over `DummyBody.WRIST_BLEND_SEC` (0.1 s) on scaled time. Under the on-draw slow-mo (×0.25) the hand trailed the gun by about 0.4 s.
+- A flat draw, a flat pickup of a loose gun, and a flat holster now call `Player._snap_wrist`, so the wrist lands on the grip (or back at the hang) in the same frame as the gun. Tosses still ease, because the gun leaves from the hand.
+- `RemoteAvatar` snaps both wrists on the frame its gun-drawn flag flips between the hip and the hand. A catch of a loose gun still eases.
+- The finger curl keeps its 0.1 s blend.
+
+Covered by `--autotest=gauntlet` (`_assert_flat_draw_snap`).
+
+### BUG-025 — Shot in the non-gun arm still disarms the player
+
+| | |
+|---|---|
+| Status | `fixed` |
 | Severity | `major` |
 | Filed | 2026-10-12 |
+| Fixed | 2026-10-14 |
+| Platforms | All: VR, flat, NPCs, multiplayer. |
+| Areas | `combat/combat_rules.gd` (`resolve`, `is_gun_arm`), `player/hitbox.gd` (`side`), `player/player.gd` (`_apply_nonfatal`), `ai/duelist_ai.gd`, `gauntlet/duel_manager.gd` (`mp_report_hit`, `_mp_wound`) |
+
+**What:** A hit on the arm that is not holding the gun still disarms the player, as if the gun arm had been hit.
+
+**Repro:**
+1. Start a duel and let the opponent shoot your arm on the side that is not holding the gun.
+2. You are disarmed.
+
+**Fix:** Both arm hitboxes had only `region = &"arm"`, so `CombatRules.resolve` and `Player._apply_nonfatal` disarmed on either arm.
+- `Hitbox.side` (`&"L"` / `&"R"`, set on `ArmHitboxL` / `ArmHitboxR` in `player.tscn`, `duelist.tscn` and `remote_avatar.tscn`) now rides `take_bullet_hit(..., side)`. In MP it also rides `mp_report_hit` and `_mp_wound`, so the victim's own peer decides.
+- `CombatRules.is_gun_arm` compares the side with the victim's gun side:
+  - Player: `draw_hand_name()`, the holding hand, or the holster side when no gun is held.
+  - NPC: the right arm. A left-arm hit no longer stops its draw either.
+- A player's off-arm hit instead drops the off-hand coin / ace / longneck loose (`PropController.drop_from_hand`), then the VR belt round. The cigarette stays.
+
+Covered by `--autotest=gauntlet` (`_assert_pain_jerk`).
+
+### BUG-024 — VR player spawns off the Train Rooftop, past the invisible wall
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `major` |
+| Filed | 2026-10-12 |
+| Fixed | 2026-10-14 |
 | Platforms | VR. Train Rooftop. Flat appears correct. Headset / runtime and game mode not recorded. |
 | Areas | `player/player.gd` `reset_for_duel`, `player/vr_rig.gd` `reset_locomotion`, `scenarios/scenario_base.gd` (`Guard*` walls, `get_player_spawn`), `scenarios/train_rooftop/train_rooftop.tscn` |
 
@@ -63,66 +159,14 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 1. Start a duel on Train Rooftop in VR.
 2. At spawn the player is off the rooftop, outside the invisible wall.
 
-**Notes:** The cause is not established. One lead, not checked: `reset_for_duel` puts the Player root on the marker and `VRRig.reset_locomotion` zeroes the origin and yaws it around the HMD, but nothing moves the origin so the headset lands on the marker. A player standing away from the centre of their playspace would then start that far from the spawn, and a spawn-time placement is not a walk into the wall. Flat has no playspace offset (`rig.position = Vector3.ZERO`). Other arenas would shift the same way; only the narrow roof would show it.
+**Fix:** `reset_for_duel` put the Player root on the marker, and `VRRig.reset_locomotion` zeroed the origin and yawed it around the HMD. Nothing removed the HMD's offset from the playspace centre. A player standing about 1.75 m off centre therefore started outside the roof's 3.5 m guard walls, and other arenas shifted the same way.
+- `reset_locomotion` now also shifts the origin in XZ so the head stands on the spawn. Height is kept, and every arena gets this.
+- If the headset is still on the identity pose (not tracking yet), the alignment waits in `_process` until `headset_height_ready()`, the same way the saved eye height waits.
+- Second gap found while fixing this: VR stick walking had no collision and passed through every `Guard*` wall and building. `VRRig.collide_stick_motion` now shape-casts a capsule against world layer 1 and slides along whatever it hits, like flat's `move_and_slide`.
+  - The capsule has flat's 0.28 m radius and sits at the head's XZ. It spans floor + 0.35 m to floor + 1.6 m, so ground lips don't snag it.
+  - Walking in your room is not checked. If your head is already inside a wall, only the part of the step leading out is kept.
 
-### BUG-025 — Shot in the non-gun arm still disarms the player
-
-| | |
-|---|---|
-| Status | `open` |
-| Severity | `major` |
-| Filed | 2026-10-12 |
-| Platforms | Not recorded (mode, arena and VR / flat not given). |
-| Areas | `combat/combat_rules.gd` (`resolve`), `player/hitbox.gd` |
-
-**What:** A hit on the arm that is not holding the gun still disarms the player, as if the gun arm had been hit.
-
-**Repro:**
-1. Start a duel and let the opponent shoot your arm on the side that is not holding the gun.
-2. You are disarmed.
-
-**Notes:** The cause is not established. One lead, not checked: `CombatRules.resolve` sets `disarm` from `region == REGION_ARM` alone, with no notion of which arm, so any arm hit would disarm. Whether the hitbox regions distinguish left from right arm was not looked at.
-
-### BUG-026 — Flat draw: the hand animates slower than the gun
-
-| | |
-|---|---|
-| Status | `open` |
-| Severity | `minor` |
-| Filed | 2026-10-12 |
-| Platforms | Flat. Arena and game mode not recorded. VR not reported. |
-| Areas | Not looked at. |
-
-**What:** In flat mode the draw animation of the hand runs slower than the gun's, so the two are out of sync during the draw. They should move together.
-
-**Repro:**
-1. Start a duel in flat mode.
-2. Draw and watch the hand and the gun.
-
-**Notes:** The cause is not established and no code was checked.
-
-### BUG-027 — Main Street: a killed NPC jumps into the air the moment it ragdolls
-
-| | |
-|---|---|
-| Status | `open` |
-| Severity | `major` |
-| Filed | 2026-10-13 |
-| Platforms | Main Street. Mode and VR / flat not recorded. Other arenas not reported. |
-| Areas | `characters/body_ragdoll.gd` (`collapse`, `_build`), `scenarios/main_street/` (terrain collision, NPC spawn marker) |
-
-**What:** On the Main Street map, when an NPC is killed it launches upward at the instant it switches to ragdoll, instead of dropping.
-
-**Repro:**
-1. Start a duel against an NPC on Main Street.
-2. Kill the NPC.
-3. At the moment the body ragdolls it jumps into the air.
-
-**Notes:** The cause is not established. One lead from the reporter, not checked: the NPC spawns with its feet below the terrain surface, so the ragdoll bodies start inside the terrain collision and the physics solver pushes them out, which would read as a jump. Things to check: the NPC spawn marker height against the `env_terrain` collision, and where `BodyRagdoll._build` places its rigid bodies relative to the skeleton at `collapse`.
-
----
-
-## Fixed
+Covered by `--autotest=load` (`_vr_rig_ok`).
 
 ### BUG-021 — Multiplayer process crashes when a remote avatar is freed (seen as `join` / `lobbyjoin` exiting with an access violation after AUTOTEST PASS)
 

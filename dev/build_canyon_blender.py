@@ -28,6 +28,7 @@ import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import scenery_uv  # noqa: E402
 from blender_kit import (  # noqa: E402
     assign,
     box,
@@ -538,27 +539,8 @@ def build_canyon(mats):
     return root
 
 
-def select_hierarchy(root):
-    bpy.ops.object.select_all(action="DESELECT")
-
-    def _sel(obj):
-        obj.select_set(True)
-        for child in obj.children:
-            _sel(child)
-
-    _sel(root)
-    bpy.context.view_layer.objects.active = root
-
-
 def export_glb(root, path):
-    select_hierarchy(root)
-    bpy.ops.export_scene.gltf(
-        filepath=path,
-        export_format="GLB",
-        export_yup=True,
-        use_selection=True,
-        export_apply=True,
-    )
+    scenery_uv.export_glb(root, path)
 
 
 def setup_world():
@@ -592,6 +574,7 @@ def main():
     root = build_canyon(mats)
     _assert_names(root)
     purge_unused()
+    scenery_uv.process_scene()
     bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
     print(f"saved {OUT_BLEND}")
 
