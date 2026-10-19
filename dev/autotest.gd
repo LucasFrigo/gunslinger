@@ -78,6 +78,7 @@ func _ready() -> void:
 	# shut unless a test is about it (`_lobby_page_ok`).
 	GameManager.hud.pause_menu.auto_open_lobby = false
 	_saved_lobby_setup = _lobby_setup_snapshot()
+	_saved_offhand_item = PlayerSettings.offhand_item
 	match mode:
 		"duel":
 			_test_duel()
@@ -123,6 +124,8 @@ func _test_duel() -> void:
 	await _sleep(1.0)
 	if not await _screen_overlay_ok():
 		return
+	if not await _npc_replay_hand_ok():
+		return
 	GameManager.start_free_duel(0, 0)
 	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
 		return _fail("duel never reached DRAW")
@@ -132,6 +135,44 @@ func _test_duel() -> void:
 		return _fail("duel did not resolve (no bullet hit landed)")
 	print("AUTOTEST: duel finished, local won=%s (%s)" % [result[0], result[1]])
 	_pass()
+
+
+## BUG-029: an NPC killed mid-draw keeps its gun hand on the revolver in the replay. The
+## death flings the gun out of the NPC's subtree, which used to break the arm IK's target.
+func _npc_replay_hand_ok() -> bool:
+	var saved_speed: float = GameManager.tuning["ai_speed_mult"]
+	GameManager.tuning["ai_speed_mult"] = MULTI_AI_SPEED
+	GameManager.start_free_duel(0, 0)
+	var ok := await _npc_replay_hand_steps()
+	GameManager.tuning["ai_speed_mult"] = saved_speed
+	return ok
+
+
+func _npc_replay_hand_steps() -> bool:
+	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
+		_fail("replay hand: the duel never reached DRAW")
+		return false
+	var ai: DuelistAI = GameManager.current_ais[0]
+	if not await _wait_for(func() -> bool: return ai.state == DuelistAI.AIState.DRAWING and ai._draw_progress > 0.5, 30.0):
+		_fail("replay hand: the NPC never got mid-draw (state %d)" % ai.state)
+		return false
+	var dummy := ai.corpse_body()
+	ai.take_bullet_hit(99.0, PackedVector3Array(), CombatRules.REGION_HEAD, false, true, 0)
+	if not await _wait_for(func() -> bool: return DeathCam.phase == DeathCam.Phase.PLAYBACK, 40.0):
+		_fail("replay hand: playback never started")
+		return false
+	if not await _wait_for(func() -> bool: return DeathCam._play_t >= ReplayBuffer.death_time - 0.3, 40.0):
+		_fail("replay hand: playback never neared the death")
+		return false
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var anchor := ai.revolver.get_node("GripAnchor") as Node3D
+	var gap := dummy.bone_global(&"Hand.R").origin.distance_to(anchor.global_position)
+	if gap > 0.2:
+		_fail("replay hand: the NPC's hand is %.2f m from its gun in the replay" % gap)
+		return false
+	print("AUTOTEST: replay hand: a mid-draw NPC's hand stays on its gun (%.2f m)" % gap)
+	return true
 
 
 ## `ScreenOverlay` is checked as state; headless draws no shader. The NPC is slowed so its
@@ -253,6 +294,8 @@ func _test_gauntlet() -> void:
 			if not player_ok:
 				return
 			if not (_assert_flat_draw_snap() and _assert_pain_jerk() and _assert_spin_throw()):
+				return
+			if not await _assert_twirl_layer() or not await _assert_twirl_gate():
 				return
 		# Arm the listener before the kill: duel_finished fires synchronously.
 		var result := _arm_duel_listener()
@@ -1005,6 +1048,147 @@ func _assert_spin_throw() -> bool:
 	return true
 
 
+## Flat twirl gate: allowed after the bell (and in practice), refused pre-bell, idle,
+## holstered, gate open, or jammed. The bind drives it.
+func _assert_twirl_gate() -> bool:
+	var player := GameManager.local_player
+	var gun: WeaponBase = player.revolver
+	var duel := GameManager.duel
+	var saved_state := duel.state
+	player._draw_gun()
+	if saved_state != DuelManager.State.DRAW or not player.twirl_allowed():
+		_fail("twirl gate: refused a drawn gun in DRAW (state=%d)" % saved_state)
+		return false
+	for pre in [DuelManager.State.STANDOFF, DuelManager.State.WAIT_SIGNAL, DuelManager.State.IDLE]:
+		duel.state = pre
+		if player.twirl_allowed():
+			duel.state = saved_state
+			_fail("twirl gate: allowed outside DRAW (state=%d)" % pre)
+			return false
+	duel.state = saved_state
+	gun.gate_open = true
+	var open_refused := not player.twirl_allowed()
+	gun.gate_open = false
+	gun.jammed = true
+	var jam_refused := not player.twirl_allowed()
+	gun.jammed = false
+	if not open_refused or not jam_refused:
+		_fail("twirl gate: allowed with the gate open or jammed")
+		return false
+	Input.action_press("flat_twirl")
+	for i in 6:
+		await get_tree().process_frame
+	var twirled := gun.is_twirling()
+	Input.action_release("flat_twirl")
+	await get_tree().create_timer(0.6).timeout
+	if not twirled or gun.is_twirling():
+		_fail("twirl gate: the bind did not twirl and ease out (twirled=%s)" % twirled)
+		return false
+	Input.action_press("flat_twirl")
+	await get_tree().process_frame
+	player._holster_gun()
+	Input.action_release("flat_twirl")
+	if player.twirl_allowed() or gun.is_twirling():
+		_fail("twirl gate: holstering did not stop the twirl")
+		return false
+	print("AUTOTEST: flat twirl gated to DRAW and practice, driven by the bind")
+	return true
+
+
+## Cosmetic twirl: only the blaster mesh turns. Muzzle, chamber, and fire stay at rest;
+## a VR hinge spin turns it `spin_visual_mult` times as fast and lands on a whole turn.
+func _assert_twirl_layer() -> bool:
+	var hand := Node3D.new()
+	add_child(hand)
+	var gun := load("res://weapons/revolver/revolver.tscn").instantiate() as Revolver
+	hand.add_child(gun)
+	gun.attach_to(hand)
+	gun.rounds = gun.max_rounds
+	var muzzle := gun.get_muzzle()
+	var blaster := gun.get_node("Model/WPN_PSX_Blaster") as Node3D
+	var rest_blaster := blaster.transform
+	var rest_muzzle := muzzle.global_transform
+	var rest_chamber := gun.get_chamber_point()
+	var shots: Array[Vector3] = []
+	gun.fired.connect(func(origin: Vector3, _dir: Vector3) -> void: shots.append(origin))
+	gun.begin_twirl()
+	for i in 8:
+		await get_tree().process_frame
+	var ok := true
+	if not gun.is_twirling() or absf(gun.twirl_speed) < 1.0 or blaster.transform.is_equal_approx(rest_blaster):
+		_fail("twirl: begin_twirl did not turn the blaster")
+		ok = false
+	elif not muzzle.global_transform.is_equal_approx(rest_muzzle) \
+			or not gun.get_chamber_point().is_equal_approx(rest_chamber) or gun.spinning:
+		_fail("twirl: the cosmetic layer moved the muzzle, chamber, or hinge state")
+		ok = false
+	elif not gun.try_fire(true) or shots.size() != 1 \
+			or not shots[0].is_equal_approx(rest_muzzle.origin):
+		_fail("twirl: mid-twirl fire did not leave the rest muzzle (%s)" % [shots])
+		ok = false
+	if ok:
+		var fx := gun.get_node("SpinFx") as SpinFx
+		var saved_mode := int(GameManager.tuning["spin_fx_mode"])
+		GameManager.tuning["spin_fx_mode"] = 1
+		fx._process(0.0)
+		var shown := fx.visible
+		GameManager.tuning["spin_fx_mode"] = 0
+		fx._process(0.0)
+		var off_hidden := not fx.visible
+		GameManager.tuning["spin_fx_mode"] = saved_mode
+		if not shown or not off_hidden:
+			_fail("twirl: spin fx should show mid-twirl and hide at mode 0 (shown=%s, off hidden=%s)" % [
+					shown, off_hidden])
+			ok = false
+	if ok:
+		gun.end_twirl()
+		await get_tree().create_timer(0.6).timeout
+		if gun.is_twirling() or not blaster.transform.is_equal_approx(rest_blaster):
+			_fail("twirl: release did not ease back to the rest pose")
+			ok = false
+	if ok:
+		gun.begin_twirl()
+		await get_tree().process_frame
+		gun.holster_to(hand)
+		if gun.is_twirling() or not blaster.transform.is_equal_approx(rest_blaster):
+			_fail("twirl: holstering did not cancel the twirl")
+			ok = false
+	if ok:
+		gun.attach_to(hand)
+		gun.begin_twirl()
+		await get_tree().process_frame
+		gun.pain_jerk_into_world(self)
+		if gun.is_twirling() or not blaster.transform.is_equal_approx(rest_blaster):
+			_fail("twirl: a pain-jerk did not cancel the twirl")
+			ok = false
+	if ok:
+		gun.attach_to(hand)
+		gun.begin_spin()
+		gun.spin_omega = 10.0
+		var mult := float(GameManager.tuning["spin_visual_mult"])
+		for i in 4:
+			await get_tree().physics_frame
+		await get_tree().process_frame
+		if absf(gun.spin_omega) < 1.0 \
+				or absf(gun.twirl_speed / gun.spin_omega - mult) > 0.15 * mult:
+			_fail("twirl: hinge visual speed %.2f is not %.1fx spin_omega %.2f" % [
+					gun.twirl_speed, mult, gun.spin_omega])
+			ok = false
+		gun.end_spin(false)
+		await get_tree().create_timer(0.6).timeout
+		var turns := gun.twirl_angle / TAU
+		if gun.is_twirling() or absf(turns - roundf(turns)) > 0.001 \
+				or not blaster.transform.is_equal_approx(rest_blaster):
+			_fail("twirl: the hinge relock did not land on a whole turn (angle=%.3f twirling=%s spinning=%s carry=%s)" % [
+					gun.twirl_angle, gun.is_twirling(), gun.spinning, gun.carrying_spin])
+			ok = false
+	gun.queue_free()
+	hand.queue_free()
+	if ok:
+		print("AUTOTEST: twirl layer rotates only the blaster, fires from the rest muzzle, and relocks")
+	return ok
+
+
 ## BUG-027: how far the hips may rise above the standing pose in a gravity-only collapse.
 const RAGDOLL_MAX_RISE := 0.03
 
@@ -1516,7 +1700,7 @@ func _chunks_outline_ok(dummy: DummyBody) -> bool:
 		var first_was := {}
 		var first_now := {}
 		for i in verts.size():
-			var cell := Vector3i((verts[i] / DummyBody.WELD_EPSILON).round())
+			var cell := Vector3i((verts[i] / OutlineHull.WELD_EPSILON).round())
 			if not first_now.has(cell):
 				first_now[cell] = now[i]
 				first_was[cell] = was[i]
@@ -1537,16 +1721,28 @@ func _chunks_outline_ok(dummy: DummyBody) -> bool:
 	GameManager.tuning_changed.emit("outline_width", 0.01)
 	var width_ok := is_equal_approx(float(dummy._outline_material.get_shader_parameter("width")), 0.01) \
 			and is_equal_approx(float(dummy._hand_outline_material.get_shader_parameter("width")), 0.01)
+	# The gun's lines (the duelists' revolvers) follow `object_outline_width` and `outline_enabled`.
+	var saved_object: Variant = GameManager.tuning.get("object_outline_width", OutlineHull.OBJECT_WIDTH)
+	GameManager.tuning["object_outline_width"] = 0.006
+	GameManager.tuning_changed.emit("object_outline_width", 0.006)
+	var object_ok := is_equal_approx(float(OutlineHull.gun_material().get_shader_parameter("width")), 0.006) \
+			and is_equal_approx(float(OutlineHull.ammo_material().get_shader_parameter("width")), 0.006)
+	GameManager.tuning["object_outline_width"] = saved_object
+	GameManager.tuning_changed.emit("object_outline_width", saved_object)
+	var gun_lines := get_tree().get_nodes_in_group(OutlineHull.GROUP)
 	GameManager.tuning["outline_enabled"] = 0.0
 	GameManager.tuning_changed.emit("outline_enabled", 0.0)
 	var hidden := dummy._outline_parts.all(func(line: MeshInstance3D) -> bool: return not line.visible)
+	var gun_hidden := not gun_lines.is_empty() and gun_lines.all(func(line: MeshInstance3D) -> bool: return not line.visible)
 	GameManager.tuning["outline_enabled"] = saved_on
 	GameManager.tuning["outline_width"] = saved_width
 	GameManager.tuning_changed.emit("outline_enabled", saved_on)
 	GameManager.tuning_changed.emit("outline_width", saved_width)
 	var shown := dummy._outline_parts.all(func(line: MeshInstance3D) -> bool: return line.visible)
-	if not width_ok or not hidden or not shown:
-		_fail("chunks: outline knobs: width %s, hidden at 0 %s, shown again %s" % [width_ok, hidden, shown])
+	var gun_shown := gun_lines.all(func(line: MeshInstance3D) -> bool: return line.visible)
+	if not width_ok or not hidden or not shown or not object_ok or not gun_hidden or not gun_shown:
+		_fail("chunks: outline knobs: width %s, hidden at 0 %s, shown again %s; gun width %s, hidden %s (%d lines), shown %s" % [
+				width_ok, hidden, shown, object_ok, gun_hidden, gun_lines.size(), gun_shown])
 		return false
 	var before := dummy._fp_clip
 	dummy.set_first_person_clip(true)
@@ -1563,7 +1759,7 @@ func _chunks_outline_ok(dummy: DummyBody) -> bool:
 
 
 ## 2. Boot warmup (skipped headless): a probe with both hole passes and an ink hull child,
-## plus one frozen gib the cap does not count.
+## a plain probe with the held-object hull, plus one frozen gib the cap does not count.
 func _chunks_warmup_ok() -> bool:
 	var warm := Node3D.new()
 	add_child(warm)
@@ -1571,6 +1767,9 @@ func _chunks_warmup_ok() -> bool:
 	var warm_gibs := warm.get_children().filter(func(node: Node) -> bool: return node is BodyGib)
 	var probes := warm.get_children().filter(func(node: Node) -> bool: return node is MeshInstance3D)
 	var warm_count := warm.get_child_count()
+	var object_hull := (probes[1] as Node).get_node_or_null("Outline") as MeshInstance3D if probes.size() > 1 else null
+	var object_inked := object_hull != null and object_hull.material_override == OutlineHull.gun_material() \
+			and object_hull.skin == null
 	var warm_frozen := not warm_gibs.is_empty() and (warm_gibs[0] as BodyGib).freeze
 	var skin := (probes[0] as MeshInstance3D).material_override as ShaderMaterial if not probes.is_empty() else null
 	var passes := skin != null and skin.shader == BodyChunks.SKIN_SHADER and skin.next_pass != null \
@@ -1584,10 +1783,10 @@ func _chunks_warmup_ok() -> bool:
 	if not probes.is_empty():
 		(probes[0] as Node).free()
 	warm.free()
-	if warm_count != 2 or warm_gibs.size() != 1 or not warm_frozen or not passes or not inked \
-			or BodyGib.alive_count() != 0:
-		_fail("chunks: warmup drew %d nodes, %d gibs (frozen %s), both passes %s, ink hull %s, %d counted" % [
-				warm_count, warm_gibs.size(), warm_frozen, passes, inked, BodyGib.alive_count()])
+	if warm_count != 3 or warm_gibs.size() != 1 or not warm_frozen or not passes or not inked \
+			or not object_inked or BodyGib.alive_count() != 0:
+		_fail("chunks: warmup drew %d nodes, %d gibs (frozen %s), both passes %s, ink hull %s, object hull %s, %d counted" % [
+				warm_count, warm_gibs.size(), warm_frozen, passes, inked, object_inked, BodyGib.alive_count()])
 		return false
 	return true
 
@@ -1908,6 +2107,9 @@ func _test_host() -> void:
 		return
 	if not await _assert_hitboxes_follow(avatar, avatar._dummy, "remote avatar"):
 		return
+	# The joiner's avatar of the host should draw the coin (checked in `_test_join`).
+	GameManager.local_player.props.equip_item(PropController.ITEM_COIN, false)
+	await _sleep(1.0)
 	print("AUTOTEST: MP DRAW reached, host shoots the avatar")
 	var result := _arm_duel_listener()
 	var head := avatar._dummy.bone_global(&"Head").origin
@@ -1955,7 +2157,16 @@ func _test_join() -> void:
 	if NetworkManager.host_start():
 		return _fail("client: START must be host only")
 	print("AUTOTEST: client in the waiting room on slot 1, host is '%s'" % roster.slots[0]["name"])
-	var result := await _wait_duel_finished(60.0)
+	var result := _arm_duel_listener()
+	# The host holds a coin from DRAW on: its avatar here draws it from the pose stream.
+	var coin_seen := await _wait_for(func() -> bool:
+			var host_avatar := GameManager.actor_node(0) as RemoteAvatar  # rebuilt when the duel starts
+			return host_avatar != null and host_avatar._replay_objects != null \
+					and is_instance_valid(host_avatar._replay_objects._prop), 30.0)
+	if not coin_seen:
+		return _fail("client: the host's avatar never drew the coin the host carries")
+	print("AUTOTEST: client sees the host's carried coin")
+	await _await_result(result, 60.0)
 	if result.is_empty():
 		return _fail("client never saw the duel resolve")
 	if result[0] != false:
@@ -4753,6 +4964,16 @@ func _lobby_vr_spectate_tag_ok() -> bool:
 
 ## What the saved host setup was when this process began, so a run leaves it as found.
 var _saved_lobby_setup := {}
+## Same for the saved off-hand pick, which the props suite changes through the radial.
+var _saved_offhand_item := "none"
+
+
+## Puts the real off-hand pick back, in memory and on disk, if a test changed it.
+func _restore_offhand_item() -> void:
+	if PlayerSettings.offhand_item == _saved_offhand_item:
+		return
+	PlayerSettings.offhand_item = _saved_offhand_item
+	PlayerSettings._save_config()
 
 
 func _lobby_setup_snapshot() -> Dictionary:
@@ -5518,11 +5739,19 @@ func _test_practice() -> void:
 		return _fail("flat menu backdrop is not frozen")
 	if GameManager.in_practice():
 		return _fail("flat menu loaded the hub instead of a duel arena")
+	# A saved off-hand pick stays out of the menu backdrop and comes back in the hub.
+	var local := GameManager.local_player
+	PlayerSettings.offhand_item = "coin"
+	local.reset_for_duel(local.global_transform)
+	if local.props.has_prop():
+		return _fail("the menu backdrop should not auto-equip the saved off-hand item")
 	GameManager.start_practice()
 	await _sleep(0.5)
 	var hub := GameManager.practice_hub()
 	if hub == null or GameManager.mode != GameManager.GameMode.PRACTICE:
 		return _fail("start_practice did not load the hub")
+	if local.props.equipped_item() != PropController.ITEM_COIN or not local.props.has_prop():
+		return _fail("practice should put the saved off-hand item in hand")
 	if hub.bottles().size() != 12:
 		return _fail("hub spawned %d bottles, expected 12" % hub.bottles().size())
 	if hub.slot_machine == null:
@@ -5564,6 +5793,17 @@ func _test_practice() -> void:
 		return _fail("porch deck is not at plank height (hit=%s)" % porch_hit)
 
 	var player := GameManager.local_player
+	player._holster_gun()
+	var holstered_refused := not player.twirl_allowed()
+	player._draw_gun()
+	var practice_allowed := player.twirl_allowed()
+	player.revolver.gate_open = true
+	var open_refused := not player.twirl_allowed()
+	player.revolver.gate_open = false
+	player._holster_gun()
+	if not (holstered_refused and practice_allowed and open_refused):
+		return _fail("practice: twirl gate wrong (holstered refused=%s, hub allowed=%s, gate open refused=%s)" % [
+				holstered_refused, practice_allowed, open_refused])
 	# Dropped revolver must rest on the planks, not the lot under them (BUG-011).
 	var gun := player.revolver
 	gun.axis_lock_angular_x = true
@@ -5671,6 +5911,8 @@ func _test_practice() -> void:
 ## cigarette, and catch it back onto the hand attach.
 func _test_props() -> void:
 	await _sleep(1.0)
+	# In memory only: a saved pick would put an item in the hand at the duel start.
+	PlayerSettings.offhand_item = "none"
 	GameManager.start_free_duel(0, 0)
 	await _sleep(1.0)
 	var player := GameManager.local_player
@@ -5749,7 +5991,147 @@ func _test_props() -> void:
 		return _fail("empty-hand wedge did not clear the prop")
 	if not await _bottle_ok():
 		return
+	if not await _offhand_persist_ok(player) or not await _remote_prop_ok():
+		return
 	_pass()
+
+
+## The wheel pick on `[props]`: saved by a radial pick only, put back silently by every duel,
+## wave, and restart reset, kept raw when unknown, and held back outside the play modes.
+## The real settings file is restored by `_restore_offhand_item` on pass or fail.
+func _offhand_persist_ok(player: Player) -> bool:
+	var props := player.props
+	var hand := player.off_hand_name()
+	var coin_wedge := PropController.ITEMS.find_custom(func(item: Dictionary) -> bool: return item["id"] == PropController.ITEM_COIN)
+	if PlayerSettings.offhand_item != "none":
+		_fail("offhand: equip_item alone must not change the saved pick (%s)" % PlayerSettings.offhand_item)
+		return false
+	var toasts := [0]
+	GameManager.hud.message_shown.connect(func(_text: String) -> void: toasts[0] += 1)
+	# 1-2: a radial pick saves, and the next duel starts with it, silently.
+	if not _pick_wheel(props, hand, coin_wedge) or PlayerSettings.offhand_item != "coin":
+		_fail("offhand: the coin pick was not saved (%s)" % PlayerSettings.offhand_item)
+		return false
+	toasts[0] = 0
+	player.reset_for_duel(player.global_transform)
+	if props.equipped_item() != PropController.ITEM_COIN or not props.has_prop() or toasts[0] != 0:
+		_fail("offhand: a new duel should put the saved coin in hand with no toast (%s, %d toasts)" % [
+				props.equipped_item(), toasts[0]])
+		return false
+	if PlayerSettings.offhand_item != "coin":
+		_fail("offhand: the auto-equip must not rewrite the saved pick")
+		return false
+	# 3: Empty Hand is a pick too.
+	if not _pick_wheel(props, hand, 0) or PlayerSettings.offhand_item != "none":
+		_fail("offhand: Empty Hand was not saved")
+		return false
+	player.reset_for_duel(player.global_transform)
+	if props.equipped_item() != PropController.ITEM_NONE or props.has_prop():
+		_fail("offhand: a saved Empty Hand should start the duel empty")
+		return false
+	# 4: a shattered bottle is replaced by a fresh one, and the saved pick is untouched.
+	if not _pick_wheel(props, hand, PropController.ITEMS.size() - 1) or PlayerSettings.offhand_item != "bottle":
+		_fail("offhand: the bottle pick was not saved")
+		return false
+	var bottle := props.current_prop() as Longneck
+	var shot: WeakRef = weakref(bottle)
+	bottle.take_bullet(bottle.center(), Vector3.FORWARD)
+	if not await _wait_freed(shot, 1.0):
+		_fail("offhand: the shot bottle did not shatter")
+		return false
+	player.reset_for_duel(player.global_transform)
+	if not (props.current_prop() is Longneck) or not props.is_prop_in_hand() or PlayerSettings.offhand_item != "bottle":
+		_fail("offhand: a new duel should hand over a fresh bottle after one shattered")
+		return false
+	# 5: the horde wave reset puts a lost item back.
+	_pick_wheel(props, hand, PropController.ITEMS.find_custom(func(item: Dictionary) -> bool: return item["id"] == PropController.ITEM_CIGARETTE))
+	props.equip_item(PropController.ITEM_NONE, false)
+	player.reset_for_wave()
+	if props.equipped_item() != PropController.ITEM_CIGARETTE or not props.has_prop():
+		_fail("offhand: reset_for_wave should put the saved cigarette back")
+		return false
+	# 6: an unknown id loads without error, equips nothing, and survives the next save raw.
+	var path := "user://autotest_offhand.cfg"
+	PlayerSettings.offhand_item = "revolver_cannon"
+	PlayerSettings._save_config(path)
+	PlayerSettings.offhand_item = "none"
+	PlayerSettings._load_config(path)
+	player.reset_for_duel(player.global_transform)
+	var resaved := "user://autotest_offhand_resaved.cfg"
+	PlayerSettings._save_config(resaved)
+	var cfg := ConfigFile.new()
+	var kept: bool = cfg.load(resaved) == OK and cfg.get_value("props", "item", "") == "revolver_cannon"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(resaved))
+	if PlayerSettings.offhand_item != "revolver_cannon" or props.equipped_item() != PropController.ITEM_NONE \
+			or props.has_prop() or not kept:
+		_fail("offhand: an unknown saved id should load raw, equip nothing, and survive a save")
+		return false
+	# 7: outside the play modes the saved pick stays in the file but the hand stays empty.
+	PlayerSettings.offhand_item = "coin"
+	var mode_was := GameManager.mode
+	for blocked in [GameManager.GameMode.MENU, GameManager.GameMode.MESH_LAB, GameManager.GameMode.BOOT,
+			GameManager.GameMode.MULTIPLAYER]:  # MP with no running duel is the waiting room
+		GameManager.mode = blocked
+		player.reset_for_duel(player.global_transform)
+		props.restore_saved_item()
+		if props.has_prop() or props.equipped_item() != PropController.ITEM_NONE:
+			GameManager.mode = mode_was
+			_fail("offhand: mode %d must not auto-equip the saved item" % blocked)
+			return false
+	GameManager.mode = mode_was
+	player.reset_for_duel(player.global_transform)
+	if props.equipped_item() != PropController.ITEM_COIN:
+		_fail("offhand: the saved coin should return once the mode allows it")
+		return false
+	print("AUTOTEST: offhand pick saved, restored silently, gated by mode")
+	return true
+
+
+## One wheel pick through the real radial path (open, aim at `index`, release).
+func _pick_wheel(props: PropController, hand: StringName, index: int) -> bool:
+	props.on_radial_changed(hand, true)
+	if not props.is_radial_open() or index < 0:
+		return false
+	props._radial_index = index
+	props.on_radial_changed(hand, false)
+	return props.equipped_item() == PropController.ITEMS[index]["id"]
+
+
+## A peer's avatar draws the streamed off-hand prop (held or loose) and never the reload round.
+func _remote_prop_ok() -> bool:
+	var prop_bits := ReplayBuffer.PROP_COIN | (ReplayBuffer.PROP_PLACE_HAND << ReplayBuffer.PROP_PLACE_SHIFT)
+	if RemoteAvatar.PROP_WORD_MASK & ReplayBuffer.ROUND_HELD != 0 \
+			or (prop_bits | ReplayBuffer.ROUND_HELD) & RemoteAvatar.PROP_WORD_MASK != prop_bits:
+		_fail("remote prop: the objects mask should keep the prop id and place and drop the round")
+		return false
+	var avatar := (load("res://player/remote_avatar.tscn") as PackedScene).instantiate() as RemoteAvatar
+	add_child(avatar)
+	await get_tree().process_frame
+	var id := Transform3D.IDENTITY
+	var at := Transform3D(Basis.IDENTITY, Vector3(0.4, 1.2, -0.3))
+	avatar.apply_pose(id, id, id, 0, id, 0, prop_bits | ReplayBuffer.ROUND_HELD, at, at)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var ghost := avatar._replay_objects
+	var problem := ""
+	if ghost == null or not is_instance_valid(ghost._prop) or not ghost._prop.global_transform.origin.is_equal_approx(at.origin):
+		problem = "a streamed coin was not drawn where the peer holds it"
+	elif ghost._round != null:
+		problem = "the held reload round must not be drawn"
+	elif ghost._prop.find_child(OutlineHull.OUTLINE_NAME, true, false) == null:
+		problem = "the streamed coin has no ink line"
+	avatar.apply_pose(id, id, id, 0, id, 0, 0)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if problem.is_empty() and ghost._prop != null:
+		problem = "an empty objects word should clear the drawn prop"
+	avatar.queue_free()
+	if not problem.is_empty():
+		_fail("remote prop: " + problem)
+		return false
+	print("AUTOTEST: remote avatar draws the carried prop")
+	return true
 
 
 ## Instantiate every scene and load every resource the flat tests don't cover.
@@ -5766,6 +6148,7 @@ func _test_load_all() -> void:
 		"res://props/cigarette.tscn",
 		"res://props/coin.tscn",
 		"res://props/ace.tscn",
+		"res://props/bottle.tscn",
 		"res://scenarios/main_street/main_street.tscn",
 		"res://scenarios/saloon/saloon.tscn",
 		"res://scenarios/train_rooftop/train_rooftop.tscn",
@@ -5788,7 +6171,9 @@ func _test_load_all() -> void:
 				return _fail("train rooftop scenery belt built %d pieces" % count)
 		instance.queue_free()
 		print("AUTOTEST: loaded %s" % path)
-	if not _bullet_trail_ok():
+	if not _spin_fx_ok() or not await _twirl_remote_ok() or not _bullet_trail_ok():
+		return
+	if not _object_outline_ok() or not await _ammo_outline_ok():
 		return
 	if not _puff_cues_ok():
 		return
@@ -5839,6 +6224,201 @@ func _test_load_all() -> void:
 	_pass()
 
 
+## The revolver and the four offhand props wear the ink line: every model mesh has an
+## "Outline" child on the shared gun material, a welded unskinned copy with the host's vertex
+## count, no shadow, the host's layers. The drum's line sits under `CylinderPivot`; the
+## greybox meshes the model hides get none. Headless skips the compile: wiring only.
+func _object_outline_ok() -> bool:
+	var shapes := {
+		"res://weapons/revolver/revolver.tscn": 2,
+		"res://props/coin.tscn": 1,
+		"res://props/ace.tscn": 1,
+		"res://props/bottle.tscn": 1,
+		"res://props/cigarette.tscn": 1,
+	}
+	var lines := 0
+	for path: String in shapes:
+		var root: Node = (load(path) as PackedScene).instantiate()
+		add_child(root)
+		var model := root.get_node("Model")
+		var hosts: Array[MeshInstance3D] = []
+		if model is MeshInstance3D:
+			hosts.append(model as MeshInstance3D)
+		for node in model.find_children("*", "MeshInstance3D", true, false):
+			if node.name != OutlineHull.OUTLINE_NAME:
+				hosts.append(node as MeshInstance3D)
+		var problem := _outline_child_problem(hosts, OutlineHull.gun_material(), true)
+		if problem.is_empty() and hosts.size() != shapes[path]:
+			problem = "%d model meshes, expected %d" % [hosts.size(), shapes[path]]
+		if problem.is_empty() and path.ends_with("revolver.tscn"):
+			if root.get_node_or_null("Model/WPN_PSX_Blaster/CylinderPivot/Cylinder/Outline") == null:
+				problem = "the drum's line is not under CylinderPivot"
+			elif root.get_node("Barrel").get_node_or_null(OutlineHull.OUTLINE_NAME) != null:
+				problem = "the hidden greybox barrel wears a line"
+		root.queue_free()
+		if not problem.is_empty():
+			_fail("object outline: %s: %s" % [path, problem])
+			return false
+		lines += hosts.size()
+	print("AUTOTEST: object outline: %d lines on the gun and props" % lines)
+	return true
+
+
+## "" when every host has an "Outline" child on `material`: the cached welded copy with the
+## host's vertex count, unskinned, no shadow, the host's layers, and in the gun group or not.
+func _outline_child_problem(hosts: Array[MeshInstance3D], material: ShaderMaterial, grouped: bool) -> String:
+	if hosts.is_empty():
+		return "no model mesh"
+	for host in hosts:
+		var line := host.get_node_or_null(OutlineHull.OUTLINE_NAME) as MeshInstance3D
+		if line == null:
+			return "%s has no Outline child" % host.name
+		if line.material_override != material or material.shader != BodyChunks.OUTLINE_SHADER:
+			return "%s's line wears %s" % [host.name, line.material_override]
+		if line.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or line.layers != host.layers \
+				or line.skin != null:
+			return "%s's line has shadow %d, layers %d, skin %s" % [host.name, line.cast_shadow, line.layers, line.skin]
+		if line.is_in_group(OutlineHull.GROUP) != grouped:
+			return "%s's line group membership is wrong" % host.name
+		var source := 0
+		for s in host.mesh.get_surface_count():
+			source += (host.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+		var arrays := line.mesh.surface_get_arrays(0)
+		var count := (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+		if line.mesh.get_surface_count() != 1 or count != source \
+				or (arrays[Mesh.ARRAY_BONES] != null and not (arrays[Mesh.ARRAY_BONES] as PackedInt32Array).is_empty()):
+			return "%s's welded copy has %d surfaces, %d vertices for %d" % [host.name,
+					line.mesh.get_surface_count(), count, source]
+		if line.mesh != OutlineHull.weld_cached(host.mesh):
+			return "%s's line is not the cached hull" % host.name
+	return ""
+
+
+## Casings and cartridges wear a line on the brass material. Only the newest `AMMO_LINE_CAP`
+## keep it (the thirteenth hides the oldest), and one past `AMMO_LINE_RANGE` of the camera is
+## hidden on the next refresh.
+func _ammo_outline_ok() -> bool:
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.current = true
+	var casing_scene := load("res://weapons/shell_casing_placeholder.tscn") as PackedScene
+	var round_scene := load("res://weapons/cartridge_physical.tscn") as PackedScene
+	var pieces: Array[Node] = []
+	var problem := ""
+	for scene: PackedScene in [casing_scene, round_scene]:
+		var piece := scene.instantiate()
+		add_child(piece)
+		pieces.append(piece)
+		problem = _outline_child_problem([piece.get_node("Mesh") as MeshInstance3D], OutlineHull.ammo_material(), false)
+		if not problem.is_empty():
+			break
+	for piece in pieces:
+		piece.free()
+	pieces.clear()
+	if problem.is_empty() and not OutlineHull.ammo_lines().is_empty():
+		problem = "%d ammo lines survived freeing their pieces" % OutlineHull.ammo_lines().size()
+	var spawned: Array[MeshInstance3D] = []
+	for i in OutlineHull.AMMO_LINE_CAP + 1:
+		if not problem.is_empty():
+			break
+		var casing := casing_scene.instantiate() as Node3D
+		add_child(casing)
+		pieces.append(casing)
+		spawned.append(casing.get_node("Mesh/Outline") as MeshInstance3D)
+		if OutlineHull.ammo_lines().size() > OutlineHull.AMMO_LINE_CAP:
+			problem = "%d ammo lines after %d pieces" % [OutlineHull.ammo_lines().size(), i + 1]
+	if problem.is_empty():
+		var live := OutlineHull.ammo_lines()
+		if spawned[0].visible or live.has(spawned[0]) or live.size() != OutlineHull.AMMO_LINE_CAP \
+				or live[0] != spawned[1] or not spawned.back().visible:
+			problem = "the thirteenth piece did not hide the oldest line (%d live, oldest visible %s)" % [
+					live.size(), spawned[0].visible]
+	if problem.is_empty():
+		var newest := pieces.back() as Node3D
+		newest.global_position = Vector3(0.0, 0.0, -2.0)
+		OutlineHull.refresh_ammo()
+		var near_shown: bool = spawned.back().visible
+		var far := OutlineHull.AMMO_LINE_RANGE + 2.0
+		newest.global_position = Vector3(0.0, 0.0, -far)
+		OutlineHull.refresh_ammo()
+		var far_shown: bool = spawned.back().visible
+		if not near_shown or far_shown:
+			problem = "range: line at 2 m shown %s, at %.0f m shown %s" % [near_shown, far, far_shown]
+	for piece in pieces:
+		piece.free()
+	camera.free()
+	if not problem.is_empty():
+		_fail("ammo outline: " + problem)
+		return false
+	print("AUTOTEST: ammo outline: cap %d, range %.0f m" % [OutlineHull.AMMO_LINE_CAP, OutlineHull.AMMO_LINE_RANGE])
+	return true
+
+
+## The spin effect is a ShaderMaterial on the spin shader, the revolver carries the quad, and
+## its F3 mode is a saved tunable. Headless skips shader compiles: wiring only.
+func _spin_fx_ok() -> bool:
+	var mat := SpinFx.make_material()
+	if mat == null or mat.shader != SpinFx.SHADER:
+		_fail("spin fx material is not a ShaderMaterial on spin_fx.gdshader")
+		return false
+	var gun := load("res://weapons/revolver/revolver.tscn").instantiate() as Revolver
+	add_child(gun)
+	var fx := gun.get_node_or_null("SpinFx") as SpinFx
+	var mode := int(GameManager.tuning.get("spin_fx_mode", -1))
+	var quad_ok := fx != null and fx.mesh is QuadMesh and fx.material_override is ShaderMaterial \
+			and not fx.visible
+	gun.queue_free()
+	if not quad_ok or mode < 0:
+		_fail("spin fx: revolver is missing a hidden SpinFx quad or spin_fx_mode is not saved")
+		return false
+	return true
+
+
+## POSE_FLAG_GUN_TWIRL: the local player sets it while twirling, and a peer's avatar turns the
+## blaster on its own. A VR hinge spin with the flag stays in the hand; without it the gun
+## still follows the streamed world pose.
+func _twirl_remote_ok() -> bool:
+	var player := GameManager.local_player
+	if player != null:
+		player.revolver.begin_twirl()
+		var flagged := player.pose_flags() & NetworkManager.POSE_FLAG_GUN_TWIRL != 0
+		player.revolver._reset_twirl()
+		if not flagged or player.pose_flags() & NetworkManager.POSE_FLAG_GUN_TWIRL != 0:
+			_fail("twirl flag: pose_flags did not follow the local twirl")
+			return false
+	var avatar := (load("res://player/remote_avatar.tscn") as PackedScene).instantiate() as RemoteAvatar
+	add_child(avatar)
+	await get_tree().process_frame
+	var gun := avatar.gun as Revolver
+	var id := Transform3D.IDENTITY
+	var drawn := NetworkManager.POSE_FLAG_GUN_DRAWN
+	var twirl := NetworkManager.POSE_FLAG_GUN_TWIRL
+	var spin := NetworkManager.POSE_FLAG_GUN_SPINNING
+	var problem := ""
+	avatar.apply_pose(id, id, id, drawn | twirl)
+	for i in 8:
+		await get_tree().process_frame
+	if not gun.is_twirling() or gun.get_parent() != avatar.right_hand:
+		problem = "a peer's twirl flag did not turn its drawn gun"
+	avatar.apply_pose(id, id, id, drawn | spin | twirl)
+	await get_tree().process_frame
+	if problem.is_empty() and (not gun.follow_parent or not gun.is_twirling()):
+		problem = "a VR spin with the twirl flag should stay hand-parented and twirl"
+	avatar.apply_pose(id, id, id, drawn | spin)
+	await get_tree().process_frame
+	if problem.is_empty() and gun.follow_parent:
+		problem = "a spin without the twirl flag should still follow the streamed pose"
+	avatar.apply_pose(id, id, id, drawn)
+	await get_tree().create_timer(0.6).timeout
+	if problem.is_empty() and gun.is_twirling():
+		problem = "clearing the twirl flag did not ease the peer's gun to rest"
+	avatar.queue_free()
+	if not problem.is_empty():
+		_fail("twirl flag: " + problem)
+		return false
+	return true
+
+
 ## The trail is a ShaderMaterial on the trail shader and its ribbon carries UVs
 ## (UV.y 0 at the tail, 1 at the bullet). Headless skips shader compiles: wiring only.
 func _bullet_trail_ok() -> bool:
@@ -5869,15 +6449,18 @@ func _bullet_trail_ok() -> bool:
 ## reach them (one value for skin, cavity, hands, and the world). The headless renderer keeps
 ## the declared names but returns null on a read, so the value is compared only when it exists.
 func _world_globals_ok() -> bool:
-	var declared := RenderingServer.global_shader_parameter_get_list()
+	# `global_shader_parameter_get_list` is editor-only on GLES3, so read the project setting.
 	for key in ["band_low", "band_soft", "grain_strength_mult", "grain_scale_mult",
-			"wind_ambient", "wind_gust"]:
-		if not declared.has(StringName(key)):
+			"sheet_mix", "wind_ambient", "wind_gust"]:
+		if not ProjectSettings.has_setting("shader_globals/" + key):
 			_fail("shader global %s is not declared in project.godot" % key)
 			return false
 	var saved_low: float = GameManager.tuning["band_low"]
 	GameManager.set_tuning("band_low", 0.4)
-	var pushed: Variant = RenderingServer.global_shader_parameter_get(&"band_low")
+	# The getter is editor-only on GLES3 and logs an error in a windowed run.
+	var pushed: Variant = null
+	if DisplayServer.get_name() == "headless":
+		pushed = RenderingServer.global_shader_parameter_get(&"band_low")
 	GameManager.set_tuning("band_low", saved_low)
 	if pushed != null and not is_equal_approx(float(pushed), 0.4):
 		_fail("band_low tuning did not reach the shader global (%s)" % pushed)
@@ -5889,9 +6472,21 @@ func _world_globals_ok() -> bool:
 ## Every scenario GLB surface (the five scenes, which also hold the Train Rooftop belt's GLB
 ## instances) wears `world_surface.gdshader`: the swap is made at import, so a missing
 ## reimport shows up here as a StandardMaterial3D. Sway sits only on plants and hay, the hinge
-## only on the four named slabs, and collision proxies stay bare. Headless skips the compile.
+## only on the four named slabs, and collision proxies stay bare. The trim sheet is paused
+## (`USE_TRIM_SHEET` in the import script): while it is off no surface uses it, and when it is on a
+## surface takes it exactly when its mesh has UVs and its material is not tiling ground or rock.
+## A surface with a hand-painted GLB image (`use_albedo_tex`) must have UVs, an `albedo_tex`, and
+## no sheet; zero painted surfaces is fine (no PNG exists yet). Headless skips the compile.
 func _world_surface_ok() -> bool:
 	var shader := load("res://assets/shaders/world_surface.gdshader") as Shader
+	var sheet := load("res://assets/textures/trim_sheet.png") as Texture2D
+	var importer := load("res://assets/shaders/world_surface_import.gd") as Script
+	var trim_on: bool = importer != null and importer.get_script_constant_map().get("USE_TRIM_SHEET", false) == true
+	var painted := 0
+	var tiling := ["M_Sand", "M_SandFar", "M_Dirt", "M_DirtFar", "M_Rock", "M_RockDark", "M_Cap",
+			"M_CapDark"]
+	var sheeted := 0
+	const SHEET_SURFACES_MIN := 1500
 	var plants := ["M_Yucca", "M_Scrub", "M_ScrubDry", "M_Hay"]
 	var slabs := [&"Sign", &"PorchSign", &"Canopy", &"ShedAwning"]
 	var hinged := {}
@@ -5925,7 +6520,7 @@ func _world_surface_ok() -> bool:
 					return false
 				var sway: Variant = sm.get_shader_parameter("sway_amount")
 				var swaying: bool = sway != null and float(sway) > 0.0
-				if swaying != plants.has(String(sm.resource_name)):
+				if swaying != plants.has(String(sm.resource_name).get_slice("__", 0)):
 					_fail("%s sway_amount does not follow its material %s" % [label, sm.resource_name])
 					return false
 				if swaying:
@@ -5940,6 +6535,29 @@ func _world_surface_ok() -> bool:
 					return false
 				if hinging:
 					hinged[mi.name] = true
+				var has_uv := (mi.mesh as ArrayMesh).surface_get_format(surface) & Mesh.ARRAY_FORMAT_TEX_UV != 0
+				var base_name := String(sm.resource_name).get_slice("__", 0)
+				var wants_sheet := trim_on and has_uv and not tiling.has(base_name)
+				var on_sheet: bool = sm.get_shader_parameter("use_sheet") == true
+				if sm.get_shader_parameter("use_albedo_tex") == true:
+					painted += 1
+					if not has_uv or on_sheet or not (sm.get_shader_parameter("albedo_tex") is Texture2D):
+						_fail("%s is painted but has_uv %s, use_sheet %s, albedo_tex %s" % [
+								label, has_uv, on_sheet, sm.get_shader_parameter("albedo_tex")])
+						return false
+					if tiling.has(base_name):
+						_fail("%s: tiling material %s is painted" % [label, sm.resource_name])
+						return false
+					continue
+				if on_sheet != wants_sheet:
+					_fail("%s use_sheet is %s but has_uv is %s on %s" % [
+							label, on_sheet, has_uv, sm.resource_name])
+					return false
+				if on_sheet:
+					sheeted += 1
+					if sm.get_shader_parameter("sheet_tex") != sheet:
+						_fail("%s sheet_tex is not trim_sheet.png" % label)
+						return false
 		for body in instance.find_children("*", "StaticBody3D", true, false):
 			if _in_scenario_glb(body) and body.find_children("*", "MeshInstance3D", false, false).size() > 0:
 				_fail("%s collision proxy %s grew a mesh" % [path.get_file(), body.name])
@@ -5948,8 +6566,11 @@ func _world_surface_ok() -> bool:
 	if surfaces < 500 or swayed == 0 or hinged.size() != slabs.size():
 		_fail("world surface: %d surfaces, %d swaying, hinges on %s" % [surfaces, swayed, hinged.keys()])
 		return false
-	print("AUTOTEST: %d scenario surfaces wear world_surface.gdshader (%d sway, hinges %s)" % [
-			surfaces, swayed, hinged.keys()])
+	if trim_on and sheeted < SHEET_SURFACES_MIN:
+		_fail("world surface: only %d surfaces take the trim sheet" % sheeted)
+		return false
+	print("AUTOTEST: %d scenario surfaces wear world_surface.gdshader (%d sway, %d hand-painted, %d on the trim sheet (%s), hinges %s)" % [
+			surfaces, swayed, painted, sheeted, "on" if trim_on else "paused", hinged.keys()])
 	return true
 
 
@@ -7316,6 +7937,12 @@ func _binds_ok() -> bool:
 	if PlayerSettings.flat_event_label(PlayerSettings.get_flat_bind_event(&"prop_fire")) != "G":
 		_fail("default flat prop_fire should be G")
 		return false
+	if PlayerSettings.flat_event_label(PlayerSettings.get_flat_bind_event(&"flat_twirl")) != "T":
+		_fail("default flat flat_twirl should be T")
+		return false
+	if tr("BIND_FLAT_TWIRL") == "BIND_FLAT_TWIRL" or tr("BOARD_FLAT_TWIRL") == "BOARD_FLAT_TWIRL":
+		_fail("flat twirl bind and board strings are not translated")
+		return false
 	var key_f := InputEventKey.new()
 	key_f.physical_keycode = KEY_F
 	PlayerSettings.set_flat_bind(&"cock_hammer", key_f)
@@ -7528,11 +8155,13 @@ func _sleep(seconds: float) -> void:
 func _fail(message: String) -> void:
 	print("AUTOTEST FAIL: %s" % message)
 	_apply_lobby_snapshot(_saved_lobby_setup)
+	_restore_offhand_item()
 	get_tree().quit(1)
 
 
 func _pass() -> void:
 	_apply_lobby_snapshot(_saved_lobby_setup)
+	_restore_offhand_item()
 	print("AUTOTEST PASS")
 	get_tree().quit(0)
 

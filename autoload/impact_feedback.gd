@@ -203,6 +203,14 @@ func _spawn_draw_warmup(camera: Node3D) -> Node3D:
 	trail_draw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	host.add_child(trail_draw)
 
+	var spin_draw := MeshInstance3D.new()
+	spin_draw.mesh = QuadMesh.new()
+	var spin_mat := SpinFx.make_material()
+	spin_mat.set_shader_parameter(&"omega", 20.0)
+	spin_draw.material_override = spin_mat
+	spin_draw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	host.add_child(spin_draw)
+
 	var light := OmniLight3D.new()
 	light.light_color = Color(1.0, 0.8, 0.4)
 	light.light_energy = 3.0

@@ -40,7 +40,7 @@ const VR_ACTIONS: Array[StringName] = [
 ## VR voice stays on the Settings toggles and always-on transmission.
 const FLAT_ACTIONS: Array[StringName] = [
 	&"fire", &"draw_toggle", &"cock_hammer", &"reload", &"prop_radial", &"prop_fire",
-	&"voice_mute", &"voice_ptt",
+	&"voice_mute", &"voice_ptt", &"flat_twirl",
 ]
 
 const VR_SOURCES: Array[String] = [
@@ -85,6 +85,7 @@ const FLAT_ACTION_LABELS := {
 	"prop_fire": "BIND_PROP_FIRE",
 	"voice_mute": "BIND_VOICE_MUTE",
 	"voice_ptt": "BIND_VOICE_PTT",
+	"flat_twirl": "BIND_FLAT_TWIRL",
 }
 
 const VR_ACTION_LABELS := {
@@ -131,6 +132,9 @@ var eye_height_set := false
 var eye_height_imperial := false
 ## 0 is raw wrist tracking. 1 is full slow-hand damping. Same default on Quest and PCVR.
 var aim_steady := 0.5
+## Last off-hand wheel pick (`[props]`), put back in the hand each duel. Kept as the raw
+## string so an id that was removed from `PropController.ITEMS` survives in the file.
+var offhand_item := "none"
 ## Last free-duel pick: arena index, enemy index (ARCHETYPES.size() is Mixed), opponent count.
 var free_duel_scenario := 0
 var free_duel_enemy := 0
@@ -212,6 +216,13 @@ func set_eye_height_imperial(enabled: bool) -> void:
 
 func set_aim_steady(value: float) -> void:
 	aim_steady = clampf(value, 0.0, 1.0)
+	_save_config()
+
+
+func set_offhand_item(id: StringName) -> void:
+	if offhand_item == String(id):
+		return
+	offhand_item = String(id)
 	_save_config()
 
 
@@ -729,6 +740,10 @@ func _default_flat_event(action: StringName) -> InputEvent:
 			var key6 := InputEventKey.new()
 			key6.physical_keycode = KEY_V
 			return key6
+		&"flat_twirl":
+			var key7 := InputEventKey.new()
+			key7.physical_keycode = KEY_T
+			return key7
 	return null
 
 
@@ -821,6 +836,7 @@ func _save_config(path := CONFIG_PATH) -> void:
 	cfg.set_value("vr", "eye_height_set", eye_height_set)
 	cfg.set_value("vr", "eye_height_imperial", eye_height_imperial)
 	cfg.set_value("vr", "aim_steady", aim_steady)
+	cfg.set_value("props", "item", offhand_item)
 	cfg.set_value("free_duel", "scenario", free_duel_scenario)
 	cfg.set_value("free_duel", "enemy", free_duel_enemy)
 	cfg.set_value("free_duel", "count", free_duel_count)
@@ -870,6 +886,7 @@ func _load_config(path := CONFIG_PATH) -> void:
 		eye_height_cm = clampi(int(cfg.get_value("vr", "eye_height_cm", eye_height_cm)),
 				EYE_HEIGHT_CM_MIN, EYE_HEIGHT_CM_MAX)
 	aim_steady = clampf(float(cfg.get_value("vr", "aim_steady", aim_steady)), 0.0, 1.0)
+	offhand_item = str(cfg.get_value("props", "item", offhand_item))
 	free_duel_scenario = _clamp_duel_scenario(int(cfg.get_value("free_duel", "scenario", free_duel_scenario)))
 	free_duel_enemy = _clamp_duel_enemy(int(cfg.get_value("free_duel", "enemy", free_duel_enemy)))
 	free_duel_count = _clamp_duel_count(int(cfg.get_value("free_duel", "count", free_duel_count)))

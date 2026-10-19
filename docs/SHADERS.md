@@ -43,6 +43,7 @@ Ordered by return. "Wiring" is the code outside the shader.
 | 8 | [World surface](#8-world-surface) | Banded light, grain on flat-color ground and walls, wind sway | Material swap over every scenario GLB | Small per pixel, large in reach |
 | 9 | [Matcap metal](#9-matcap-metal) | The revolver gets a sheen | Material swap on the revolver mesh, one gradient texture | Tiny |
 | 10 | [Screen overlay](#10-screen-overlay) | Iris wipe, and a vignette on a hit | One quad on the current camera (shipped) | One blended full-screen pass while visible |
+| 11 | [Spin effect](#11-spin-effect) | A smear wedge under tapering ink arcs behind the twirling barrel | One static quad child of the revolver (built, untuned) | Tiny, one 0.5 m quad while twirling. Measure |
 
 Start with 1 to 4. They touch four files, need no art, and none of them changes how a scene is built. 5 and 8 change the whole frame; the choices made for them are under [Decided](#decided).
 
@@ -313,7 +314,7 @@ void fragment() {
 
 ### 7. Outline
 
-**Shipped.** Owner: `characters/body_outline.gdshader`, wired in `DummyBody._make_part` / `_apply_material` / `_apply_outline` and `BodyChunks` (`outline_material_new`, `_refresh`, `spawn_for_compile`).
+**Shipped.** Owner: `characters/body_outline.gdshader`, wired in `DummyBody._make_part` / `_apply_material` / `_apply_outline` and `BodyChunks` (`outline_material_new`, `_refresh`, `spawn_for_compile`). The weld and the `Outline` child live in `characters/outline_hull.gd`, shared with the held objects below.
 
 An inverted hull: each part drawn a second time, back faces only, pushed out along the normal, in ink. It is the closest thing to manga line art that needs no screen read.
 
@@ -362,16 +363,20 @@ void fragment() {
 }
 ```
 
-- **Wire:** not `material_overlay`. `dummy.glb` is flat-shaded: 824 of its 983 distinct positions carry differing normals, so a hull pushed along `NORMAL` cracks open at almost every edge. `DummyBody._weld_normals` builds a copy of each part mesh (body, head, hands) with the normals summed across coincident positions (quantized to 0.1 mm) and normalized, once per process beside the `intact` parts. `_make_part` adds it as an `Outline` child of the part, on the same skin and skeleton, shadows off, same layers; the child follows its part's visibility (shelved body, hidden head) and `set_body_render_layers` sets its layer. The skin's `next_pass` stays the cavity.
+- **Wire:** not `material_overlay`. `dummy.glb` is flat-shaded: 824 of its 983 distinct positions carry differing normals, so a hull pushed along `NORMAL` cracks open at almost every edge. `OutlineHull.weld` builds a copy of each part mesh (body, head, hands) with the normals summed across coincident positions (quantized to 0.1 mm) and normalized, once per process beside the `intact` parts. `_make_part` adds it as an `Outline` child of the part, on the same skin and skeleton, shadows off, same layers; the child follows its part's visibility (shelved body, hidden head) and `set_body_render_layers` sets its layer. The skin's `next_pass` stays the cavity.
 - **Materials:** body and head share one ink material (`clip_radius` is the skin's, `FP_CLIP_RADIUS` on the local first-person body); the hands wear their own with `hole_count` 0 and no clip. `BodyChunks._refresh` pushes `holes` / `hole_count` to the body ink next to the skin, so the hull is discarded inside each hit hole. No `flash` (the ink stays dark on a hit) and no `fog_disabled` (the hull is fogged like the skin).
 - **Tuning:** F3 **Ragdoll / gore** `outline_enabled` (0 hides every outline child) and `outline_width` (default 0.004, up to 0.02). Always on otherwise: no Settings row.
 - **Warmup:** the probe in `BodyChunks.spawn_for_compile` carries an `Outline` child with the hole set, so the hull compiles with the hole branch.
 - **Watch:** a hole's rim shows a line beyond the discard sphere only as far as the hull has been pushed out (about 5 cm at 14 m); grazing angles and the hands at arm's length are the places to check. Gibs and the dropped gun get no line.
 - **Test:** `chunks` (outline children, weld, holes on the ink, knobs, clip, warmup probe), `ragdoll` (children ride the corpse). Headless does not compile the shader: the look is on `RELEASE_TODOS`.
+- **Held objects (decided 2026-10-18):** the revolver, the four offhand props, the practice bottle, and casings and cartridges wear the same shader and ink through `OutlineHull.attach_model`. Unskinned, so no skeleton; `hole_count` and `clip_radius` stay 0. Two shared materials, one for gun and props, one for brass, each `width` from F3 `object_outline_width` (0.0015, about a third of the body's), `near` 0.3, `far` 6 for hand range. The vertex step is in model space and every one of these GLBs is scale 1 (checked in the glTF nodes), so the width needs no compensation. The weld handles every surface merged (the cigarette has two) and drops UVs and vertex colours (the blaster carries `COLOR_0` / `COLOR_1`). Intact bottle only: `shatter` hides the model and its line goes with it, the `glass_shatter` particles stay plain. Brass: newest 12 pieces within 6 m, bullets skipped. Always on; F3 `outline_enabled` hides these lines too. Perf fallback if Quest 3 shows a cost: trim ammo, then offhand props, then the gun, by constants or F3 only.
+- **Watch (objects):** the hull on a hand-held prop may clip the camera near plane at the close grip; coin and cigarette may read as a solid blob at 0.0015; the PSX blaster's atlas-split faces may show seams. A matcap on the revolver (section 9) would share the blaster mesh with its hull: the hull is a child, so the matcap goes on the host's material and this line stays on the child.
+- **Warmup (objects):** `BodyChunks.spawn_for_compile` adds one unskinned probe with an `Outline` child on the gun material.
+- **Test (objects):** `load` (`_object_outline_ok`, `_ammo_outline_ok`: children, shader, welded vertex counts, the drum under `CylinderPivot`, the 12-line cap and the 6 m range), `props` (the remote avatar's coin has its line), `chunks` (`object_outline_width` and `outline_enabled` push-and-restore, the object warmup probe).
 
 ### 8. World surface
 
-**Shipped.** Owner: `assets/shaders/world_surface.gdshader`, `assets/shaders/world_surface_import.gd`, `assets/shaders/world_grain.tres`, `ScenarioBase._push_wind` / `_pulse_wind`. One shader for every static scenario surface (23 scenario GLBs). It keeps each material's flat color, lights it with the bands, and adds one grain lookup projected along the face's dominant axis, so a flat-color wall or a sand plain gets texture without UVs or painted art. Wind bends plants and hay and swings signs and awnings.
+**Shipped.** Owner: `assets/shaders/world_surface.gdshader`, `assets/shaders/world_surface_import.gd`, `assets/shaders/world_grain.tres`, `ScenarioBase._push_wind` / `_pulse_wind`. One shader for every static scenario surface (23 scenario GLBs). It keeps each material's flat color, lights it with the bands, and adds one grain lookup projected along the face's dominant axis, so a flat-color wall or a sand plain gets texture without painted art. A surface whose GLB carries a hand-painted image (`tex/<glb>.png`, 256×256, one per GLB) shows it in place of the flat color; with no image it keeps the flat color. The shared trim sheet (`assets/textures/trim_sheet.png`) is paused behind `USE_TRIM_SHEET` in the import script. Wind bends plants and hay and swings signs and awnings.
 
 `assets/shaders/world_surface.gdshader`:
 
@@ -382,12 +387,17 @@ render_mode cull_disabled;
 
 global uniform float grain_strength_mult;
 global uniform float grain_scale_mult;
+global uniform float sheet_mix;          // 1: the trim sheet is the albedo, 0: the flat color (sheet paused: no effect)
 global uniform float wind_ambient;
 global uniform float wind_gust;
 
 uniform vec4 albedo : source_color = vec4(1.0);
 uniform float roughness_amount = 1.0;
 uniform sampler2D grain_tex : filter_nearest, repeat_enable, hint_default_white;
+uniform sampler2D sheet_tex : source_color, filter_nearest_mipmap, repeat_enable, hint_default_white;
+uniform bool use_sheet = false;          // paused: the importer's USE_TRIM_SHEET switch is off
+uniform sampler2D albedo_tex : source_color, filter_nearest_mipmap, repeat_disable, hint_default_white;
+uniform bool use_albedo_tex = false;     // set by the importer: the glTF material has a base color image
 uniform float grain_scale = 0.35;        // tiles per metre
 uniform float grain_strength = 0.0;
 uniform float grain_fade_near = 15.0;    // grain fades to 0 between these view distances
@@ -420,20 +430,30 @@ void fragment() {
 	}
 	float fade = 1.0 - smoothstep(grain_fade_near, grain_fade_far, view_dist);
 	float grain = texture(grain_tex, grain_uv * grain_scale * grain_scale_mult).r - 0.5;
-	ALBEDO = albedo.rgb * (1.0 + grain * 2.0 * grain_strength * grain_strength_mult * fade);
+	vec3 base = albedo.rgb;
+	float flat_k = 1.0;
+	if (use_albedo_tex) {
+		base = texture(albedo_tex, UV).rgb;
+		flat_k = 0.0;
+	} else if (use_sheet) {
+		base = mix(albedo.rgb, texture(sheet_tex, UV).rgb, sheet_mix);
+		flat_k = 1.0 - sheet_mix;
+	}
+	ALBEDO = base * (1.0 + grain * 2.0 * grain_strength * grain_strength_mult * fade * flat_k);
 	ROUGHNESS = roughness_amount;
 }
 ```
 
 The `vertex()` body is abbreviated above; the file is the source of truth.
 
-- **Deviations from the sketch:** `cull_disabled`, not `cull_back` (every GLB material is `doubleSided`, and thin plants, awnings, and signs are single slabs that would vanish). `grain_local` defaults to true on every imported material, so the belt needs no code. No `albedo_tex` and no `UV`: the GLBs carry no UVs or images (every material is `baseColorFactor` plus roughness), so there is nothing to look up. No metal and no specular, so iron, brass, boiler, and mirror render as lit albedo, lighter and matte. Grain strength and scale take the globals `grain_strength_mult` / `grain_scale_mult` (F3 **World**) and fade to 0 between 15 m and 45 m (`grain_fade_near` / `grain_fade_far`) so far ground does not shimmer under nearest sampling. `band_low` / `band_soft` are globals. Wind comes from the globals `wind_ambient` (0.3 x the arena's `gust_strength` x `sway_scale`, 0 where the arena has no wind) and `wind_gust` (a 1.8 s pulse per gust, the length of the dust sweep); bend amplitude is `sway_amount * (wind_ambient + wind_gust)`.
+- **Deviations from the sketch:** `cull_disabled`, not `cull_back` (every GLB material is `doubleSided`, and thin plants, awnings, and signs are single slabs that would vanish). `grain_local` defaults to true on every imported material, so the belt needs no code. The painted image is read by `UV` only where `use_albedo_tex` is set. A GLB embeds an image only when its `tex/<glb>.png` exists (otherwise every material is `baseColorFactor` plus roughness); the importer reads it from the glTF material. The shared sheet path (`use_sheet`) is paused. No metal and no specular, so iron, brass, boiler, and mirror render as lit albedo, lighter and matte. Grain strength and scale take the globals `grain_strength_mult` / `grain_scale_mult` (F3 **World**) and fade to 0 between 15 m and 45 m (`grain_fade_near` / `grain_fade_far`) so far ground does not shimmer under nearest sampling. `band_low` / `band_soft` are globals. Wind comes from the globals `wind_ambient` (0.3 x the arena's `gust_strength` x `sway_scale`, 0 where the arena has no wind) and `wind_gust` (a 1.8 s pulse per gust, the length of the dust sweep); bend amplitude is `sway_amount * (wind_ambient + wind_gust)`.
 - **Hinge path:** a sign or awning is a rigid slab in building space, where bending by `VERTEX.y` does nothing useful. The import script gives the four nodes `Sign`, `PorchSign` (about the top edge, along the board's long axis), `Canopy`, and `ShedAwning` (about the wall-side edge, along the wall) their own material with `hinge_origin` / `hinge_axis` from the mesh box and `hinge_amount` 0.035 rad (about 2 degrees; up to 3 degrees at the sine peaks). The wall side is a per-node table in the script, not a centroid test: the awning post's beam runs from the post to the wall, so the nearest box edge to the module's centroid is the wrong one.
-- **Import:** `world_surface_import.gd` is `import_script/path` in each scenario `.glb.import`. Godot 4.7 runs it on a scene that already holds `MeshInstance3D`s, so it swaps materials on the `ArrayMesh` (`ImporterMeshInstance3D` is gone by then). The color and roughness come from each GLB's own material, because `M_Wood` and the other names repeat across GLBs with different colors. Grain by name: sand, dirt, rock, and cap 0.2; wood, plank, roof, car, floor, bar, trim, masonry, and whitewash 0.12; everything else (metals, glass, cloth, hide, cacti, scrub, hay) 0. Sway: `M_Yucca`, `M_Scrub`, `M_ScrubDry`, `M_Hay` at 0.03 m, `sway_height` the mesh height in 10 cm steps; cacti stay rigid. A material with a texture, vertex color, normal map, emission, or transparency is skipped with `push_warning`; none exist today. Surfaces with the same color, roughness, grain, and sway share one material. After changing the script or a `.import`, reimport: `godot --headless --path . --import` (the editor does it on focus; a stale `.godot/` shows as a `StandardMaterial3D` failure in `load`).
+- **Import:** `world_surface_import.gd` is `import_script/path` in each scenario `.glb.import`. Godot 4.7 runs it on a scene that already holds `MeshInstance3D`s, so it swaps materials on the `ArrayMesh` (`ImporterMeshInstance3D` is gone by then). The color and roughness come from each GLB's own material, because `M_Wood` and the other names repeat across GLBs with different colors. Grain by name: sand, dirt, rock, and cap 0.2; wood, plank, roof, car, floor, bar, trim, masonry, and whitewash 0.12; everything else (metals, glass, cloth, hide, cacti, scrub, hay) 0. Sway: `M_Yucca`, `M_Scrub`, `M_ScrubDry`, `M_Hay` at 0.03 m, `sway_height` the mesh height in 10 cm steps; cacti stay rigid. Each GLB owns copies of its materials named `<base>__<glb>` (`M_Wood__bld_bank`); the importer drops the suffix (`get_slice("__", 0)`) before every name lookup (grain, sway, tiling), and ground and rock keep their shared names. A material with a vertex color, normal map, emission, or transparency is skipped with `push_warning`; none exist. A material whose glTF base color has an image (a painted GLB) gets `use_albedo_tex` and `albedo_tex` (the image re-built with a mip chain), with grain off and sway kept. With `USE_TRIM_SHEET` true, a surface whose mesh has UVs and whose material is not tiling (`M_Sand`, `M_SandFar`, `M_Dirt`, `M_DirtFar`, `M_Rock`, `M_RockDark`, `M_Cap`, `M_CapDark`) would get `use_sheet` and `sheet_tex` instead; it is false now because the strip UVs were replaced. Surfaces with the same color, roughness, grain, sway, sheet flag, and image share one material. After changing the script or a `.import`, reimport: `godot --headless --path . --import` (the editor does it on focus; a stale `.godot/` shows as a `StandardMaterial3D` failure in `load`).
 - **Grain texture:** `assets/shaders/world_grain.tres`, a 128 px seamless value-noise `NoiseTexture2D` (frequency 0.15). External on purpose, like `sky_clouds.tres`, so `ScenarioBase._detach_environment`'s `duplicate(true)` shares it.
 - **Train Rooftop belt:** `grain_local` is on everywhere, and the belt takes only cactus plants (rigid), so nothing slides or sways.
-- **Tuning:** F3 **World** `grain_strength_mult`, `grain_scale_mult`, `sway_scale`; `band_low` / `band_soft` stay in **Ragdoll / gore** and now move the whole frame. Persisted with the rest of `GameManager.tuning`.
-- **Test:** `load` asserts every scenario surface wears the shader (the five scenes, belt pieces included), `grain_local`, sway only on plants and hay, hinge only on the four slabs, bare collision proxies, and the wind globals (0 in the Saloon, following `gust_strength` and `sway_scale` elsewhere). Headless does not compile shaders; a flat run of Canyon, Main Street, the practice hub, Train Rooftop, and the Saloon compiled and drew with no errors. Not yet seen in a headset or on a Quest (`RELEASE_TODOS`).
+- **Trim sheet (paused):** nothing in game uses the sheet while `USE_TRIM_SHEET` is false, so `sheet_mix` has no effect. The text below is how it works when switched back on. `sheet_mix` replaces the Base Color with the sheet on sheet surfaces (decision 2 in [`TEXTURING.md`](TEXTURING.md)) and scales grain by `1 - sheet_mix`; 0 is the old look exactly. No distance fade: mipmaps only (`trim_sheet.png.import`: Lossless, mipmaps on, `detect_3d/compress_to=0`), the sheet builder (`dev/build_trim_sheet.py`) repeats each cell's outer 4 px and each strip's top and bottom 4 rows so far mips do not bleed a neighbour. The sheet is 512×1024. One extra texture read per sheet fragment; not timed on a Quest yet.
+- **Tuning:** F3 **World** `grain_strength_mult`, `grain_scale_mult`, `sheet_mix` (no effect while the sheet is paused), `sway_scale`; `band_low` / `band_soft` stay in **Ragdoll / gore** and now move the whole frame. Persisted with the rest of `GameManager.tuning`.
+- **Test:** `load` asserts every scenario surface wears the shader (the five scenes, belt pieces included), `grain_local`, sway only on plants and hay, hinge only on the four slabs, `use_sheet` and `sheet_tex` exactly where the mesh has UVs and the material is not tiling while `USE_TRIM_SHEET` is on (none while it is off), and a `use_albedo_tex` surface has UVs, an `albedo_tex`, no sheet, and a non-tiling material (zero are fine until a PNG exists), bare collision proxies, and the wind globals (0 in the Saloon, following `gust_strength` and `sway_scale` elsewhere). Headless does not compile shaders; a flat run of Canyon, Main Street, the practice hub, Train Rooftop, and the Saloon compiled and drew with no errors. Not yet seen in a headset or on a Quest (`RELEASE_TODOS`).
 
 ### 9. Matcap metal
 
@@ -512,6 +532,18 @@ void fragment() {
 
 - **Wire:** a `MeshInstance3D` with a 2×2 `QuadMesh` under each camera (flat, VR, kill cam, death cam). Give it a large `extra_cull_margin`, because the shader moves the quad and the engine would otherwise cull it by its real position. Hide the node while `iris` is open and `hurt` is 0, so it costs nothing in normal play.
 - **Watch:** the vertex function follows `addons/godot-xr-tools/effects/vignette.gdshader`, which is how that addon handles each eye's off-center projection. It has only been drawn on a flat camera here. It must draw after the world and before any UI that should stay visible; set a render priority.
+
+### 11. Spin effect
+
+**Built; look and Quest cost not yet checked.** Owner: `weapons/spin_fx.gdshader`, `SpinFx` (`weapons/spin_fx.gd`, a child node of `weapons/revolver/revolver.tscn`). Roadmap 2.1 (done). Blur and Lines were built as two candidates and are now drawn together in one pass; F3 `spin_fx_mode` is 0 Off / 1 On (default On).
+
+One static 0.5 m `QuadMesh` in the plane the blaster turns in (normal along the gun's X), centred on `SpinPivot`. It never rebuilds a mesh and has no ribbon side vector to flip. The script hides it unless `spin_fx_mode` is not 0, the gun `is_twirling()`, and the visual turn rate (`twirl_speed`) is at least 4 rad/s; it reaches full strength at 14 rad/s. The shader reads polar coordinates of the quad UV: `head_angle` is the barrel tip (the gun's `twirl_angle` plus the rest angle of `Muzzle` from the pivot), `omega` is the signed visual rate, and the trail sits behind the head for `omega x window` radians (capped under one turn).
+
+- **Smear:** a pale wedge that fades from the head toward its tail, weighted toward the barrel-tip radius and cut off inside the drum and outside the muzzle. `unshaded, blend_premul_alpha, cull_disabled, depth_draw_never, shadows_disabled`, as in `bullet_trail.gdshader`.
+- **Ink arcs:** three concentric unbroken strokes (the outline ink `0.07, 0.05, 0.04`) drawn over the smear. Width and opacity taper to a point at the tail, and the edge is pixel-aware (`fwidth`, never under ~0.75 px). The first version used dashes and a fixed-width edge: the dash gaps sat at the same angles on every ring and read as holes, and sub-pixel strokes shimmered. The loop is a fixed three iterations.
+- **Compatibility:** no screen or depth read, no unbounded loop, one transparent quad.
+- **Warmup:** `ImpactFeedback._spawn_draw_warmup` draws a quad on `SpinFx.make_material()`; headless skips it.
+- **Watch:** the plane is edge-on to a flat first-person camera that sits level with the gun, so the effect may read thin there. Judge it in a flat run in the practice hub, then a headset. Measure Quest 3 frame time with the effect on and off.
 
 ## Not now
 

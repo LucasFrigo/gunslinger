@@ -11,49 +11,102 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
-### BUG-022 — Host logs ENet `Unable to send packet on channel 0` when two clients quit at the same moment
+### BUG-030 — Replay: off-hand props can be misplaced (cigarette floats ahead of the hand)
 
 | | |
 |---|---|
 | Status | `open` |
 | Severity | `minor` |
-| Filed | 2026-10-11 |
-| Platforms | Windows, Godot 4.7. Seen in the headless harness (`lobbyhost` + two `lobbyjoin`); not seen in play. |
-| Areas | `autoload/network_manager.gd` (`_on_peer_disconnected` → `_sync_roster`), `gauntlet/duel_manager.gd` (`host_peer_left`) |
+| Filed | 2026-10-19 |
+| Platforms | Seen in the kill replay; platform not recorded. |
+| Areas | `autoload/replay_buffer.gd` (`prop` pose, `PROP_PLACE_HAND`), `player/replay_objects.gd` |
 
-**What:** In the three-process lobby tests the host prints the engine error `Unable to send packet on channel 0` when both joiners exit together at the end of the run. The suites still print `AUTOTEST PASS`. It was seen during the tests of the mixed-lobbies work; how many runs showed it was not counted.
+**What:** In the replay, off-hand props are sometimes not where the hand is. The cigarette was seen floating ahead of the hand.
+
+**Repro:**
+1. Hold an off-hand prop (cigarette seen; others untested) during a duel.
+2. Finish the duel and watch the replay.
+3. Look at the prop relative to the hand.
+
+**Notes:** Not yet investigated. Check whether the other props (coin, ace, bottle) are also offset, and whether the recorded `prop` transform is hand-relative or world-space when replayed.
+
+---
+
+## Fixed
+
+### BUG-029 — Kill replay: the NPC's hand stays at its side, no draw animation
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-15 |
+| Fixed | 2026-10-15 |
+| Platforms | Single player (flat seen; VR shares the path). |
+| Areas | `ai/duelist_ai.gd` (`apply_replay_pose`, `_aim_replay_hand`) |
+
+**What:** In the replay after an NPC died mid-draw, its arm and gun swung up but the mannequin's hand stayed by its side, so it looked shot without drawing.
+
+**Repro:**
+1. Play a duel and kill the NPC while it is drawing.
+2. Watch the replay and look at the NPC's gun hand.
+
+**Cause:** The pose was recorded and replayed correctly (`arm`, `gun`, flags). The gun-arm IK aims at the revolver's `GripAnchor` through a relative `target_path`. The lethal hit flings the revolver into the scene root (`release_into_world`), so the path resolved to nothing and the IK wrote no hand pose for the whole clip.
+
+**Fix:** `DuelistAI.apply_replay_pose` retargets the IK each frame (`_aim_replay_hand`): the `GripAnchor` while the recorded flags have the gun drawn and held, else the arm's grip target, with the pistol or open hand curl. `--autotest=duel` kills an NPC mid-draw and checks the hand stays within 0.2 m of its gun in the replay.
+
+### BUG-022 — Host logs ENet `Unable to send packet on channel 0` when two clients quit at the same moment
+
+| | |
+|---|---|
+| Status | `fixed` (one engine-side line accepted) |
+| Severity | `minor` |
+| Filed | 2026-10-11 |
+| Fixed | 2026-10-15 |
+| Platforms | Windows, Godot 4.7. Seen in the headless harness (`lobbyhost` + two `lobbyjoin`); not seen in play. |
+| Areas | `autoload/network_manager.gd` (`_queue_peer_disconnected`, `_sync_roster`), `gauntlet/duel_manager.gd` (`host_peer_left`) |
+
+**What:** In the three-process lobby tests the host prints the engine error `Unable to send packet on channel 0, max channels: 0` when both joiners exit together at the end of the run. The suites still print `AUTOTEST PASS`.
 
 **Repro:**
 1. Start `--autotest=lobbyhost`, then two `--autotest=lobbyjoin` processes.
-2. Read the host's output after the joiners quit.
+2. Search the host's `stderr` for `Unable to send packet` (before the fix: 3 errors in 6 of 8 runs).
 
-**Notes:** The cause is not established. It appears around teardown: when a peer disconnects, `NetworkManager._on_peer_disconnected` calls `host_peer_left` and `_sync_roster`, and the host sends reliable RPCs (`_roster_sync`, `_mp_down`) to peers it still lists as verified, one of which may already be gone. That is a guess, not a finding. Nothing was seen to break because of it.
+**Cause:** Two peers that quit together reach the host in one poll. ENet marks both dead before the first `peer_disconnected` fires, so the sends made from that handler, `_mp_down.rpc` in `host_peer_left` and `_roster_sync.rpc_id` in `_sync_roster`, hit the second one.
+
+**Fix:** `NetworkManager` handles the engine's `peer_disconnected` after the poll (`_queue_peer_disconnected` defers `_on_peer_disconnected`), and `_sync_roster` skips ids no longer in `multiplayer.get_peers()`. Both script-side errors are gone.
+
+**Accepted:** one error remains, with no GDScript frame, in 5 of 5 passing runs after the fix, at the end of the host's run. It is raised inside the engine, not from a script call. Probably the engine's relay notification to the other quitting peer, but unconfirmed: turning `multiplayer.server_relay` off ended the runs early at the voice step, so it proved nothing. Nothing breaks because of it, and the owner accepted it on 2026-10-15.
 
 ### BUG-023 — `Basis must be normalized` error from `ai/duelist_ai.gd` in the DRAWING branch
 
 | | |
 |---|---|
-| Status | `open` |
+| Status | `fixed` |
 | Severity | `minor` |
 | Filed | 2026-10-11 |
+| Fixed | 2026-10-15 |
 | Platforms | Windows, Godot 4.7. Seen in the headless harness (the host of `lobbyhost` + two `lobbyjoin`, which runs a Sheriff NPC); not seen in play. |
-| Areas | `ai/duelist_ai.gd` (`AIState.DRAWING` branch of `_process`) |
+| Areas | `ai/duelist_ai.gd` (`_animate_arm`, called from the `AIState.DRAWING` branch of `_process`) |
 
-**What:** The host printed the engine error `Basis must be normalized` from the NPC's DRAWING branch in 2 of 6 trio runs (`lobbyhost` + two `lobbyjoin`). Every run still printed `AUTOTEST PASS` on all three processes. It was not seen in the single-player suites, but it was not looked for there.
+**What:** The host printed the engine error `Basis must be normalized in order to be casted to a Quaternion` from the NPC's DRAWING branch, once per frame for ~50 frames in a run. Every run still printed `AUTOTEST PASS`.
 
 **Repro:**
 1. Start `--autotest=lobbyhost`, then two `--autotest=lobbyjoin` processes.
-2. Search the host's output for `Basis must be normalized` (intermittent; repeat the trio).
+2. Search the host's `stderr` for `must be normalized` (intermittent; 1 of 9 runs showed it, 51 times).
 
-**Notes:** The cause is not established. The NPC runs on the host in a lobby (`GameManager.setup_mp_duel`), and the DRAWING branch also runs in single player, so it is not known whether the mixed-lobbies work caused it.
+**Cause:** `_animate_arm` slerps `global_transform.basis * _rest_arm_basis`. The logged basis was a clean rotation to six digits, but its columns were about 0.999995 long, so the NPC node carries a hair of non-unit scale (a spawn point's rounded basis, set through `global_transform = spawns[slot]`). `Basis.slerp` rejects that once the error passes its 1e-5 tolerance, which happens only for some spawn points and yaws, hence the intermittence. That the scale comes from the spawn marker is inferred from the logged basis, not traced to a marker.
+
+**Fix:** `_animate_arm` orthonormalizes both bases before the slerp. Only the orientation matters there. After the change 0 of 16 trio runs printed it.
 
 ### BUG-028 — Holstered gun has the wrong rotation (barrel not pointing down)
 
 | | |
 |---|---|
-| Status | `open` |
+| Status | `fixed` |
 | Severity | `minor` |
 | Filed | 2026-10-14 |
+| Fixed | 2026-10-15 |
 | Platforms | Arena, mode and VR / flat not recorded. |
 | Areas | `player/player.gd` (holster placement after `# Holster rides the chosen hip`), `player/remote_avatar.gd` (holster placement, `_apply_gun_parent`), `weapons/weapon_base.gd` (`holster_to`) |
 
@@ -63,11 +116,7 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 1. Start any mode with the gun holstered.
 2. Look at the gun on the hip.
 
-**Notes:** The cause is not established, but the code shows no downward tilt anywhere on this path. `Player` sets the holster's basis to the head yaw alone, and `WeaponBase.holster_to` puts the gun at `Transform3D.IDENTITY` under it, so the gun keeps the yaw-only basis. `RemoteAvatar` does the same (`yaw` basis, identity gun transform). Not checked in play: whether the remote avatar and NPCs show the same rotation, and whether the draw or holster-snap logic depends on the current holster basis.
-
----
-
-## Fixed
+**Fix:** `Player` and `RemoteAvatar` now pitch the holster basis -90° about X after the yaw, so the gun's -Z barrel points down.
 
 ### BUG-027 — Main Street: a killed NPC jumps into the air the moment it ragdolls
 

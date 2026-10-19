@@ -6,6 +6,10 @@ extends RigidBody3D
 const LIFETIME_DROPPED := 8.0
 
 
+func _ready() -> void:
+	OutlineHull.attach_model(self, true)
+
+
 func grab_to(attach: Node3D) -> void:
 	freeze = true
 	collision_layer = 0

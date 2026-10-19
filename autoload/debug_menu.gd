@@ -48,13 +48,15 @@ const RAGDOLL_SLIDERS := {
 	"edge_power": [0.5, 8.0, 0.1],
 	"outline_enabled": [0.0, 1.0, 1.0],
 	"outline_width": [0.0, 0.02, 0.0005],
+	"object_outline_width": [0.0, 0.01, 0.0001],
 }
 
-## World surface shader (`GameManager.tuning`): grain strength and tile multipliers, and the
-## share of the wind that moves plants, hay, signs, and awnings.
+## World surface shader (`GameManager.tuning`): grain strength and tile multipliers, the trim
+## sheet blend, and the share of the wind that moves plants, hay, signs, and awnings.
 const WORLD_SLIDERS := {
 	"grain_strength_mult": [0.0, 3.0, 0.05],
 	"grain_scale_mult": [0.25, 4.0, 0.05],
+	"sheet_mix": [0.0, 1.0, 0.05],
 	"sway_scale": [0.0, 3.0, 0.05],
 }
 
@@ -100,6 +102,7 @@ var _voice_gate_widgets: Dictionary = {}
 var _voice_status: Label
 var _cig_spin_axis_option: OptionButton
 var _holster_side_option: OptionButton
+var _spin_fx_option: OptionButton
 var _combat_sliders: Dictionary = {}
 var _jam_sliders: Dictionary = {}
 var _movement_sliders: Dictionary = {}
@@ -493,6 +496,8 @@ func _build_gunplay_section(root: Control) -> void:
 		"spin_coupling": [0.0, 12.0, 0.1],
 		"spin_relock_time": [0.04, 0.4, 0.01],
 		"self_hit_grace": [0.08, 0.8, 0.02],
+		"spin_visual_mult": [1.0, 6.0, 0.1],
+		"twirl_rate": [5.0, 60.0, 1.0],
 	}
 	for spin_key in SPIN_SLIDERS:
 		var spin_range: Array = SPIN_SLIDERS[spin_key]
@@ -504,6 +509,18 @@ func _build_gunplay_section(root: Control) -> void:
 						return
 					GameManager.set_tuning(tune_spin, value))
 		_spin_sliders[tune_spin] = spin_widgets
+	var spin_fx_label := Label.new()
+	spin_fx_label.text = "spin_fx_mode"
+	root.add_child(spin_fx_label)
+	_spin_fx_option = OptionButton.new()
+	_spin_fx_option.add_item("Off")
+	_spin_fx_option.add_item("On")
+	_spin_fx_option.selected = mini(int(GameManager.tuning["spin_fx_mode"]), 1)
+	_spin_fx_option.item_selected.connect(func(index: int) -> void:
+		if _refreshing:
+			return
+		GameManager.set_tuning("spin_fx_mode", index))
+	root.add_child(_spin_fx_option)
 
 	_add_header(root, "Cigarette Boomerang")
 	const CIG_SLIDERS := {
@@ -826,6 +843,8 @@ func _refresh_from_systems() -> void:
 		_hitbox_toggle.button_pressed = show_hitboxes
 	if _holster_side_option != null:
 		_holster_side_option.selected = int(GameManager.tuning["holster_side"])
+	if _spin_fx_option != null:
+		_spin_fx_option.selected = mini(int(GameManager.tuning["spin_fx_mode"]), 1)
 	for key in _release_sliders:
 		var rel_widgets: Dictionary = _release_sliders[key]
 		var rel_value: float = float(GameManager.tuning[key])

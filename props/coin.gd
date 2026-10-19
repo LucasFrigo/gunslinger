@@ -49,6 +49,7 @@ func _ready() -> void:
 	max_contacts_reported = 4
 	continuous_cd = true
 	body_entered.connect(_on_body_entered)
+	OutlineHull.attach_model($Model)
 	_hold_body()
 
 

@@ -143,6 +143,7 @@ BIND_PROP_RADIAL,Prop Radial
 BIND_PROP_FIRE,Cigarette / Prop
 BIND_VOICE_MUTE,Mute Mic
 BIND_VOICE_PTT,Push To Talk
+BIND_FLAT_TWIRL,Gun Twirl
 BIND_GRIP,Grip
 BIND_TRICK_SHOT,Trick Shot
 BIND_GATE,Gate
@@ -276,6 +277,7 @@ BOARD_FLAT_FIRE,FIRE — %s
 BOARD_FLAT_COCK,COCK — %s
 BOARD_FLAT_RELOAD,RELOAD — %s
 BOARD_FLAT_JAM,"JAM — look down, hold %s"
+BOARD_FLAT_TWIRL,TWIRL — hold %s with the gun drawn
 BOARD_FLAT_PROPS,PROPS — %s for the wheel; hold %s to throw
 BOARD_FLAT_BOTTLES,"BOTTLES — %s to grab, %s again to throw"
 BOARD_FLAT_SLOTS,SLOTS — %s while looking at the lever

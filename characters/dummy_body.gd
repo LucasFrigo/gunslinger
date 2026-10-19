@@ -50,8 +50,6 @@ const PART_BODY := &"body"
 const PART_HEAD := &"head"
 const PART_HAND := &"hand"
 const SKIN_ROUGHNESS := 0.9
-## Welded outline mesh: positions closer than this share one averaged normal.
-const WELD_EPSILON := 0.0001
 ## The skin snap casts the shot from this far before the hit volume's point, up to this
 ## far past it. Hit volumes sit off the skin (the torso by up to its radius).
 const SNAP_BACK := 0.15
@@ -833,14 +831,7 @@ func _make_part(part_name: String, mesh: ArrayMesh, outline: ArrayMesh) -> MeshI
 	part.layers = _mesh.layers
 	part.skeleton = part.get_path_to(_skeleton)
 	_parts.append(part)
-	var line := MeshInstance3D.new()
-	line.name = "Outline"
-	line.mesh = outline
-	line.skin = _mesh.skin
-	part.add_child(line)
-	line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	line.layers = part.layers
-	line.skeleton = line.get_path_to(_skeleton)
+	var line := OutlineHull.attach(part, null, _skeleton, outline)
 	_outline_parts.append(line)
 	return part
 
@@ -908,40 +899,8 @@ static func _parse_split(mesh: ArrayMesh, skin: Skin, skeleton: Skeleton3D) -> D
 		var part_mesh := ArrayMesh.new()
 		part_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, part_arrays, [], {}, flags)
 		intact[part] = part_mesh
-		outline[part] = _weld_normals(part_mesh, flags)
+		outline[part] = OutlineHull.weld(part_mesh, flags)
 	return {"intact": intact, "outline": outline, "bind_tris": bind_tris}
-
-
-## A copy of `mesh` (one skinned surface) for the ink hull: the normal at every vertex is
-## the sum over all vertices sharing its position, normalized, so the hull stays closed
-## along the flat-shaded facet edges. Indices, bones, and weights are kept; UVs and
-## tangents are dropped.
-static func _weld_normals(mesh: ArrayMesh, flags: int) -> ArrayMesh:
-	var source := mesh.surface_get_arrays(0)
-	var verts: PackedVector3Array = source[Mesh.ARRAY_VERTEX]
-	var normals: PackedVector3Array = source[Mesh.ARRAY_NORMAL]
-	var cells: Array[Vector3i] = []
-	var sums := {}
-	for i in verts.size():
-		var cell := Vector3i((verts[i] / WELD_EPSILON).round())
-		cells.append(cell)
-		sums[cell] = (sums[cell] as Vector3 if sums.has(cell) else Vector3.ZERO) + normals[i]
-	var welded := PackedVector3Array()
-	welded.resize(verts.size())
-	for i in verts.size():
-		var sum: Vector3 = sums[cells[i]]
-		# Opposed normals at one point cancel; keep the vertex's own then.
-		welded[i] = sum.normalized() if sum.length_squared() > 0.000001 else normals[i]
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = welded
-	arrays[Mesh.ARRAY_BONES] = source[Mesh.ARRAY_BONES]
-	arrays[Mesh.ARRAY_WEIGHTS] = source[Mesh.ARRAY_WEIGHTS]
-	arrays[Mesh.ARRAY_INDEX] = source[Mesh.ARRAY_INDEX]
-	var out := ArrayMesh.new()
-	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
-	return out
 
 
 ## Every surface's arrays end to end, indices offset.

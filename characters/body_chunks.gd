@@ -99,8 +99,8 @@ static func gib_meshes() -> Array[ArrayMesh]:
 	return _gib_meshes
 
 
-## Boot warmup under `host`: a probe with both hole passes and an ink hull child, and one
-## frozen gib (not counted toward `gib_cap`).
+## Boot warmup under `host`: a probe with both hole passes and an ink hull child, a plain
+## probe with the held-object hull, and one frozen gib (not counted toward `gib_cap`).
 static func spawn_for_compile(host: Node3D) -> void:
 	var skin := skin_material_new()
 	var cavity := cavity_material_new()
@@ -127,6 +127,11 @@ static func spawn_for_compile(host: Node3D) -> void:
 	hull.material_override = outline
 	probe.add_child(hull)
 	host.add_child(probe)
+	# The held-object hull: unskinned, on the shared gun material (no holes).
+	var object := MeshInstance3D.new()
+	object.mesh = sphere
+	host.add_child(object)
+	OutlineHull.attach(object, OutlineHull.gun_material())
 	var gib := BodyGib.make(gib_meshes()[0], DummyBody.solid_material(COMPILE_ALBEDO), BoxShape3D.new(),
 			Vector3.ZERO)
 	gib.freeze = true

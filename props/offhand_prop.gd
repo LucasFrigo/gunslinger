@@ -14,6 +14,12 @@ var _attach: Node3D
 var _charge := 0.0
 
 
+func _ready() -> void:
+	var model := get_node_or_null(^"Model")
+	if model != null:
+		OutlineHull.attach_model(model)
+
+
 func is_flying() -> bool:
 	return false
 

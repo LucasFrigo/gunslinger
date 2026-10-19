@@ -267,8 +267,10 @@ func _animate_arm(progress: float) -> void:
 	# Blend the arm from resting (gun at the hip) to aiming at the player's chest.
 	var aim_point := _target_head() + Vector3.DOWN * 0.25
 	var aimed := arm.global_transform.looking_at(aim_point, Vector3.UP).basis
-	var rest := global_transform.basis * _rest_arm_basis
-	arm.global_transform.basis = rest.slerp(aimed, ease(progress, 0.4))
+	# BUG-023: a spawn point's rounded basis leaves the NPC a hair off unit scale, which
+	# slerp's rotation check rejects. Only the orientation matters here.
+	var rest := (global_transform.basis * _rest_arm_basis).orthonormalized()
+	arm.global_transform.basis = rest.slerp(aimed.orthonormalized(), ease(progress, 0.4))
 
 
 func _fire() -> void:
@@ -350,7 +352,23 @@ func apply_replay_pose(pose: Dictionary) -> void:
 	arm.global_transform = pose["right"]
 	# A corpse stands for the clip before the death; its fall takes over from there.
 	_dummy.set_pose_driven(true)
-	revolver.hold_replay_pose(pose["gun"], int(pose.get("flags", 0)))
+	var flags := int(pose.get("flags", 0))
+	revolver.hold_replay_pose(pose["gun"], flags)
+	_aim_replay_hand(flags)
+
+
+## BUG-029: the death flings the revolver out of this subtree, which breaks the IK's relative
+## target path, so the hand stayed at the side. Aim at the grip while the clip has the gun held.
+func _aim_replay_hand(flags: int) -> void:
+	var gun_held := flags & NetworkManager.POSE_FLAG_GUN_DRAWN != 0 \
+			and flags & NetworkManager.POSE_FLAG_GUN_FREE == 0
+	var anchor: Node3D = _grip_target
+	if gun_held:
+		anchor = revolver.get_node_or_null("GripAnchor") as Node3D if is_instance_valid(revolver) else null
+		if anchor == null:
+			anchor = _grip_target
+	_dummy.set_arm_target(true, anchor, true, DummyBody.WRIST_INSET)
+	_dummy.set_hand_curl(true, HandFingers.Pose.PISTOL if gun_held else HandFingers.Pose.OPEN, 0.0)
 
 
 func clear_replay_pose() -> void:

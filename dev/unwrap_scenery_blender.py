@@ -1,9 +1,14 @@
 """UV-unwrap the scenario `.blend` files onto the trim sheet and re-export their GLBs.
 
+PAUSED: the game now uses a hand-painted image per GLB (`dev/unwrap_per_glb_blender.py`), and
+those GLBs carry per-GLB UVs with `uv_lock`, which this script skips. Running it on an unlocked
+object would put strip UVs back and export with no image, so only use it to revive the trim sheet.
+
 Opens each scenario `.blend`, runs `scenery_uv.process_scene()`, saves it, and exports
-every root empty to `<root name>.glb` beside it. The game looks the same afterwards: the
-GLBs gain UVs, but no shader reads them yet. Objects with the custom property `uv_lock`
-are skipped. See `docs/TEXTURING.md`.
+every root empty to `<root name>.glb` beside it. An object whose name matches a photo cell
+that has an image (`assets/texture_src/cells_manifest.json`, written by
+`dev/build_trim_sheet.py`) is laid on that cell; the rest go on their strip. Objects with
+the custom property `uv_lock` are skipped. See `docs/TEXTURING.md`.
 
 Run:
     & "C:\\Program Files\\Blender Foundation\\Blender 5.1\\blender.exe" -b --python dev/unwrap_scenery_blender.py
@@ -66,10 +71,11 @@ def run(name: str, dry: bool) -> bool:
     bpy.ops.wm.open_mainfile(filepath=blend)
     stats = scenery_uv.process_scene()
     problems = scenery_uv.check_scene()
-    print("UNWRAP %s: %d objects, %d on the sheet, %d tiling, %d skipped, %d locked, "
-          "%d cuts, tris %d -> %d" % (
-              name, stats["objects"], stats["unwrapped"], stats["tiling"], stats["skipped"],
-              stats["locked"], stats["cuts"], stats["tris_before"], stats["tris_after"]))
+    print("UNWRAP %s: %d objects, %d on the sheet (%d on cells), %d tiling, %d skipped, "
+          "%d locked, %d cuts, tris %d -> %d" % (
+              name, stats["objects"], stats["unwrapped"], stats["cells"], stats["tiling"],
+              stats["skipped"], stats["locked"], stats["cuts"], stats["tris_before"],
+              stats["tris_after"]))
     for obj_name, why in stats["review"]:
         print("  REVIEW %s: %s" % (obj_name, why))
     for problem in problems:
@@ -93,4 +99,5 @@ def main() -> None:
         sys.exit(1)
 
 
-main()
+if __name__ == "__main__":
+    main()

@@ -13,7 +13,8 @@ const TUNING_PATH := "user://tuning.cfg"
 ## Tuning keys that are also `[shader_globals]` in project.godot: skin, cavity, and world
 ## surfaces read them, so one F3 value covers every banded shader.
 const WORLD_GLOBALS: Array[StringName] = [
-	&"band_low", &"band_soft", &"grain_strength_mult", &"grain_scale_mult"]
+	&"band_low", &"band_soft", &"grain_strength_mult", &"grain_scale_mult",
+	&"sheet_mix"]
 
 ## Scenario registry -- add new scenarios here and they appear in every menu.
 const SCENARIOS: Array[String] = [
@@ -127,6 +128,13 @@ var tuning := {
 	"spin_coupling": 3.0,
 	## Seconds to tween back to the locked pose after stick-up.
 	"spin_relock_time": 0.12,
+	## Cartoon spin: the blaster mesh turns this many times faster than the real
+	## hinge. Visual only; catch, throw, and fire still use the real hinge.
+	"spin_visual_mult": 3.0,
+	## Flat twirl flourish (rad/s) while the twirl key is held.
+	"twirl_rate": 25.0,
+	## Spin effect (smear wedge + ink arcs): 0 off, 1 on.
+	"spin_fx_mode": 1,
 	## Cigarette boomerang: flight speed (m/s), same outbound and homing.
 	"cig_speed": 9.0,
 	## Range of a tap (m): zero charge still throws this far.
@@ -214,10 +222,12 @@ var tuning := {
 	## Banded body light: share the first band passes, and the step softness.
 	"band_low": 0.65,
 	"band_soft": 0.03,
-	## World surface shader: grain strength and tile scale multipliers, and the share of the
-	## wind that moves plants, hay, signs, and awnings (0 holds them still).
+	## World surface shader: grain strength and tile scale multipliers, how far the trim sheet
+	## replaces the flat color (0 is the old look), and the share of the wind that moves
+	## plants, hay, signs, and awnings (0 holds them still).
 	"grain_strength_mult": 1.0,
 	"grain_scale_mult": 1.0,
+	"sheet_mix": 1.0,
 	"sway_scale": 1.0,
 	## Skin silhouette rim: strength and falloff exponent (hands get none).
 	"edge_strength": 0.35,
@@ -226,6 +236,9 @@ var tuning := {
 	## view distance (held between 1 m and 14 m).
 	"outline_enabled": 1.0,
 	"outline_width": 0.004,
+	## Same line on the revolver, offhand props, and brass: metres per metre of view
+	## distance (held between 0.3 m and 6 m). `outline_enabled` hides these too.
+	"object_outline_width": 0.0015,
 }
 
 var mode: int = GameMode.BOOT

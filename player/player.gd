@@ -184,6 +184,7 @@ func _process(delta: float) -> void:
 	_broadcast_pose(delta)
 	_update_vr_message(delta)
 	_update_reload_event(delta)
+	_update_twirl()
 
 
 # -- Body / hitboxes ------------------------------------------------------------
@@ -224,8 +225,9 @@ func _follow_body() -> void:
 	var hip := HOLSTER_HIP
 	if int(GameManager.tuning["holster_side"]) != 0:
 		hip.x = -hip.x
+	# Barrel hangs down: the gun's -Z is pitched to -Y (BUG-028).
 	holster.global_transform = Transform3D(
-		yaw,
+		yaw * Basis(Vector3.RIGHT, -PI * 0.5),
 		Vector3(head.origin.x, global_position.y + 1.0, head.origin.z) + yaw * hip)
 
 	# Ammo belt around the waist / lower torso.
@@ -550,6 +552,7 @@ func reset_for_wave() -> void:
 	_clear_held_cartridge(true)
 	_release_held_bottle()
 	props.reset_for_duel()
+	props.restore_saved_item()
 	_holster_gun()
 	revolver.reset()
 	_refresh_health_hud()
@@ -928,6 +931,25 @@ func _update_jam_clear(delta: float) -> void:
 	elif _jam_clear_accum > 0.0:
 		_jam_clear_accum = 0.0
 		_refresh_reload_status()
+
+
+## Flat only. A twirl flourish needs a drawn gun after the bell, or the practice hub.
+func twirl_allowed() -> bool:
+	if use_vr or not alive or not revolver.held or revolver.gate_open or revolver.jammed \
+			or _combat_blocked():
+		return false
+	return GameManager.in_practice() \
+			or (GameManager.duel != null and GameManager.duel.state == DuelManager.State.DRAW)
+
+
+## Hold the twirl bind: the blaster turns. Release or any gate closing eases it out.
+func _update_twirl() -> void:
+	if use_vr:
+		return
+	if twirl_allowed() and Input.is_action_pressed("flat_twirl"):
+		revolver.begin_twirl()
+	else:
+		revolver.end_twirl()
 
 
 func _refresh_health_hud() -> void:
@@ -1547,6 +1569,8 @@ func pose_flags() -> int:
 		flags |= NetworkManager.POSE_FLAG_HOLSTER_LEFT
 	if revolver.gate_open:
 		flags |= NetworkManager.POSE_FLAG_GATE_OPEN
+	if revolver.is_twirling():
+		flags |= NetworkManager.POSE_FLAG_GUN_TWIRL
 	flags |= revolver.chamber_index() << NetworkManager.POSE_FLAG_CHAMBER_SHIFT
 	if PlayerSettings.voice_muted:
 		flags |= NetworkManager.POSE_FLAG_VOICE_MUTED

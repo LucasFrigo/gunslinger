@@ -30,6 +30,9 @@ const SPIN_BREAKAWAY_WHIP := 1.55
 const AIM_STEADY_SLOW_DEG := 25.0
 const AIM_STEADY_FAST_DEG := 150.0
 const AIM_STEADY_MAX_TAU := 0.12
+## Flat twirl: ramp to full rate, and ease-out to a whole turn on release.
+const TWIRL_ACCEL := 140.0
+const TWIRL_EASE_TIME := 0.25
 
 @export var max_rounds := 6
 ## Single-action: must cock the hammer before each shot.
@@ -65,6 +68,19 @@ var _relock_elapsed := 0.0
 var _spin_motion_init := false
 ## Tossed off a hinge spin and still airborne: a catch resumes the hinge at this speed.
 var carrying_spin := false
+## Cosmetic twirl: only the blaster mesh turns (see `_apply_twirl_pose`). Fire,
+## muzzle, chamber, and the grip anchor never read it.
+var twirl_angle := 0.0
+## Visual turn rate (rad/s) of the blaster in the world, for the spin effect.
+var twirl_speed := 0.0
+var _twirl_posed := false
+var _twirl_holding := false
+var _twirl_omega := 0.0
+var _twirl_easing := false
+var _twirl_ease_from := 0.0
+var _twirl_ease_to := 0.0
+var _twirl_ease_t := 0.0
+var _twirl_ease_dur := TWIRL_EASE_TIME
 var _prev_parent_basis := Basis.IDENTITY
 var _prev_pivot_world := Vector3.ZERO
 var _prev_pivot_vel := Vector3.ZERO
@@ -96,6 +112,7 @@ func reset() -> void:
 	_jam_last_shot_s = -1.0
 	carrying_spin = false
 	reset_spin()
+	_reset_twirl()
 	_on_gate_changed()
 	state_changed.emit()
 
@@ -184,6 +201,9 @@ func attach_to(hand_attach: Node3D, rumble_hand: StringName = &"right_hand") -> 
 	var carried := _caught_spin_omega(hand_attach)
 	carrying_spin = false
 	reset_spin()
+	_twirl_holding = false
+	if carried == 0.0:
+		_reset_twirl()
 	_freeze_attached()
 	follow_parent = true
 	shooting_hand = rumble_hand
@@ -203,6 +223,9 @@ func release_into_world(parent: Node, velocity: Vector3, spin: Vector3, keep_hin
 	carrying_spin = keep_hinge and spinning and not relocking
 	var xf := global_transform
 	reset_spin()
+	_twirl_holding = false
+	if not carrying_spin:
+		_reset_twirl()
 	reparent(parent, true)
 	global_transform = xf
 	held = false
@@ -252,6 +275,7 @@ func pain_jerk_into_world(parent: Node) -> void:
 func holster_to(holster: Node3D) -> void:
 	carrying_spin = false
 	reset_spin()
+	_reset_twirl()
 	_freeze_attached()
 	follow_parent = true
 	reparent(holster, false)
@@ -319,6 +343,7 @@ func _spin_start_kick() -> float:
 func end_spin(snap: bool) -> void:
 	if snap:
 		reset_spin()
+		_reset_twirl()
 		_sync_follow_parent()
 		return
 	if not spinning and not relocking:
@@ -332,12 +357,14 @@ func end_spin(snap: bool) -> void:
 	spin_omega = 0.0
 	_spin_world_omega = 0.0
 	_relock_elapsed = 0.0
+	_begin_twirl_ease(true, maxf(_tune("spin_relock_time", 0.12), 0.01))
 
 
 ## Pin the mesh to a recorded world pose. Physics must not keep a toss going.
 func hold_for_replay(world_xf: Transform3D) -> void:
 	carrying_spin = false
 	reset_spin()
+	_reset_twirl()
 	follow_parent = false
 	visible = true
 	_freeze_attached()
@@ -459,8 +486,101 @@ func _apply_steady_pose(p: Node3D, integrate: bool) -> void:
 	global_transform = Transform3D(_steady_basis, origin)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_sync_follow_parent(false)
+	_update_twirl(delta)
+
+
+func is_twirling() -> bool:
+	return twirl_angle != 0.0 or _twirl_holding or spinning or carrying_spin
+
+
+## Flat flourish: hold to keep the blaster turning at `twirl_rate`. The caller gates it;
+## a remote avatar's gun is never `held` but twirls from the pose flag.
+func begin_twirl() -> void:
+	_twirl_holding = true
+	_twirl_easing = false
+
+
+## Release: the blaster eases forward to a whole turn so it lands on its rest pose.
+func end_twirl() -> void:
+	if not _twirl_holding:
+		return
+	_twirl_holding = false
+	if not spinning and not carrying_spin:
+		_begin_twirl_ease(false, TWIRL_EASE_TIME)
+
+
+## Subclasses move their mesh; the base has none.
+func _apply_twirl_pose() -> void:
+	pass
+
+
+func _reset_twirl() -> void:
+	twirl_angle = 0.0
+	twirl_speed = 0.0
+	_twirl_omega = 0.0
+	_twirl_holding = false
+	_twirl_easing = false
+	if _twirl_posed:
+		_twirl_posed = false
+		_apply_twirl_pose()
+
+
+## `nearest` picks the closest whole turn; otherwise the next one in the turn direction.
+func _begin_twirl_ease(nearest: bool, duration: float) -> void:
+	if absf(twirl_angle) < 0.001:
+		_reset_twirl()
+		return
+	var turns := twirl_angle / TAU
+	if nearest or absf(_twirl_omega) < 0.01:
+		turns = roundf(turns)
+	elif _twirl_omega > 0.0:
+		turns = ceilf(turns)
+	else:
+		turns = floorf(turns)
+	_twirl_ease_from = twirl_angle
+	_twirl_ease_to = turns * TAU
+	_twirl_ease_t = 0.0
+	_twirl_ease_dur = duration
+	_twirl_easing = true
+
+
+func _update_twirl(delta: float) -> void:
+	if twirl_angle == 0.0 and not _twirl_holding and not spinning and not carrying_spin:
+		twirl_speed = 0.0
+		return
+	var real_delta := delta / maxf(Engine.time_scale, 0.001)
+	if real_delta <= 0.0:
+		return
+	var prev := twirl_angle
+	if spinning or carrying_spin:
+		_twirl_easing = false
+		var real_omega := spin_omega
+		if not spinning:
+			real_omega = angular_velocity.dot(global_basis.x.normalized())
+		_twirl_omega = (_tune("spin_visual_mult", 3.0) - 1.0) * real_omega
+		twirl_angle = fmod(twirl_angle + _twirl_omega * real_delta, TAU)
+		twirl_speed = _twirl_omega + real_omega
+	elif _twirl_holding:
+		_twirl_omega = move_toward(_twirl_omega, _tune("twirl_rate", 25.0), TWIRL_ACCEL * real_delta)
+		twirl_angle = fmod(twirl_angle + _twirl_omega * real_delta, TAU)
+		twirl_speed = _twirl_omega
+	elif _twirl_easing:
+		_twirl_ease_t = minf(_twirl_ease_t + real_delta / _twirl_ease_dur, 1.0)
+		var inv := 1.0 - _twirl_ease_t
+		twirl_angle = lerpf(_twirl_ease_from, _twirl_ease_to, 1.0 - inv * inv)
+		_twirl_omega = (twirl_angle - prev) / real_delta
+		twirl_speed = _twirl_omega
+		if _twirl_ease_t >= 1.0:
+			_reset_twirl()
+			return
+	else:
+		# Carry ended (a bounce) or the hold lapsed: land on the next whole turn.
+		_begin_twirl_ease(false, TWIRL_EASE_TIME)
+		return
+	_twirl_posed = true
+	_apply_twirl_pose()
 
 
 func _physics_process(delta: float) -> void:

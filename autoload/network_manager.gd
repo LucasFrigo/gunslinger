@@ -29,6 +29,9 @@ const POSE_FLAG_GUN_STEADIED := 128
 const POSE_FLAG_GATE_OPEN := 256
 ## Chamber 0–5 lives in the next three bits. Bit 16 is the replay present flag.
 const POSE_FLAG_CHAMBER_SHIFT := 9
+## The gun is mid-twirl (flat flourish or VR cartoon spin). Peers turn the blaster locally;
+## no phase rides the wire.
+const POSE_FLAG_GUN_TWIRL := 4096
 const STEAM_REFRESH_SEC := 4.0
 const VERSION_HANDSHAKE_TIMEOUT := 3.0
 ## A refused peer is dropped this long after the RPC that says why, and never in the
@@ -67,7 +70,7 @@ func _ready() -> void:
 	discovery.hosts_updated.connect(func(hosts: Array) -> void: lan_hosts_updated.emit(hosts))
 
 	multiplayer.peer_connected.connect(_on_peer_connected)
-	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	multiplayer.peer_disconnected.connect(_queue_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
@@ -356,6 +359,13 @@ func _on_peer_connected(peer_id: int) -> void:
 	_pending_peers[peer_id] = VERSION_HANDSHAKE_TIMEOUT
 
 
+## BUG-022: two peers that quit together reach the host in one poll. ENet marks both dead
+## before the first signal fires, so a broadcast from that handler hit the second one
+## ("Unable to send packet on channel 0"). Handle it after the poll, once both are gone.
+func _queue_peer_disconnected(peer_id: int) -> void:
+	_on_peer_disconnected.call_deferred(peer_id)
+
+
 func _on_peer_disconnected(peer_id: int) -> void:
 	_pending_peers.erase(peer_id)
 	_kick_peers.erase(peer_id)
@@ -525,8 +535,11 @@ func _is_lobby_host() -> bool:
 ## Host: push the roster to every verified peer and tell local listeners.
 func _sync_roster() -> void:
 	var data := roster.pack()
+	var linked := multiplayer.get_peers()
 	for peer_id: int in _verified_peers:
-		_roster_sync.rpc_id(peer_id, data)
+		# Gone from the engine, its own disconnect still queued: its roster is moot.
+		if linked.has(peer_id):
+			_roster_sync.rpc_id(peer_id, data)
 	roster_changed.emit()
 
 

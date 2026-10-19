@@ -104,16 +104,6 @@ def _collect_meshes(root):
 # Builders — origin at ground, centred on width (X), facade toward +Y.
 # ---------------------------------------------------------------------------
 
-def build_env_street_ground(mats):
-    root = empty("env_street_ground")
-    # Town dirt strip only — surrounding desert is env_terrain.
-    ground = box("Street", (0, 0, -0.5), (28, 90, 1), root)
-    assign(ground, mats["dirt"])
-    flat_shade(ground)
-    convcol("Street", (0, 0, -0.5), (28, 90, 1), root)
-    return root
-
-
 def build_env_terrain(mats):
     """Large flat desert apron. Top slightly above y=0 so building feet bury into dirt."""
     root = empty("env_terrain")
@@ -772,7 +762,6 @@ def build_env_desert_scatter(mats):
 
 
 PIECES = [
-    ("env_street_ground", build_env_street_ground),
     ("env_terrain", build_env_terrain),
     ("env_desert_scatter", build_env_desert_scatter),
     ("bld_saloon", build_bld_saloon),

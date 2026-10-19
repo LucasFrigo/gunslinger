@@ -192,7 +192,9 @@ func _close_radial(equip: bool) -> void:
 	if not _player.use_vr and is_instance_valid(GameManager.hud):
 		GameManager.hud.hide_prop_radial()
 	if equip and index >= 0:
-		equip_item(ITEMS[index]["id"])
+		var id: StringName = ITEMS[index]["id"]
+		equip_item(id)
+		PlayerSettings.set_offhand_item(id)
 
 
 func _refresh_highlight(force := false) -> void:
@@ -216,12 +218,23 @@ func _show_vr_wheel(hand: StringName) -> void:
 	_vr_wheel.setup(item_labels())
 
 
-func equip_item(id: StringName) -> void:
+## Put the saved wheel pick back in the hand after a reset. Silent, and it never saves.
+func restore_saved_item() -> void:
+	var id := StringName(PlayerSettings.offhand_item)
+	if id == ITEM_NONE or not _item_allowed_here() or _player.rig == null:
+		return
+	for item in ITEMS:
+		if item["id"] == id:
+			equip_item(id, false)
+			return
+
+
+func equip_item(id: StringName, announce := true) -> void:
 	# Reselecting the same wedge despawns the old instance (grounded card, etc.).
 	_clear_prop()
 	_equipped = id
 	if id == ITEM_NONE:
-		GameManager.show_message(tr("MSG_OFFHAND_EMPTY"), 1.2)
+		_toast("MSG_OFFHAND_EMPTY", 1.2, announce)
 		return
 	var attach := _prop_attach()
 	if attach == null:
@@ -230,20 +243,25 @@ func equip_item(id: StringName) -> void:
 	match id:
 		ITEM_CIGARETTE:
 			_prop = Cigarette.spawn_held(attach)
-			GameManager.show_message(tr("MSG_OFFHAND_CIGARETTE"), 1.5)
+			_toast("MSG_OFFHAND_CIGARETTE", 1.5, announce)
 		ITEM_COIN:
 			_prop = Coin.spawn_held(attach)
 			_prop.configure_for_rig(_player != null and _player.use_vr)
-			GameManager.show_message(tr("MSG_OFFHAND_COIN"), 1.5)
+			_toast("MSG_OFFHAND_COIN", 1.5, announce)
 		ITEM_ACE:
 			_prop = AceOfSpades.spawn_held(attach)
-			GameManager.show_message(tr("MSG_OFFHAND_ACE"), 1.5)
+			_toast("MSG_OFFHAND_ACE", 1.5, announce)
 		ITEM_BOTTLE:
 			_prop = Longneck.spawn_held(attach)
-			GameManager.show_message(tr("MSG_OFFHAND_BOTTLE"), 1.5)
+			_toast("MSG_OFFHAND_BOTTLE", 1.5, announce)
 		_:
 			_equipped = ITEM_NONE
-			GameManager.show_message(tr("MSG_OFFHAND_EMPTY"), 1.2)
+			_toast("MSG_OFFHAND_EMPTY", 1.2, announce)
+
+
+func _toast(key: String, seconds: float, announce: bool) -> void:
+	if announce:
+		GameManager.show_message(tr(key), seconds)
 
 
 # -- Throw --------------------------------------------------------------------
@@ -333,6 +351,19 @@ func _clear_prop() -> void:
 		_prop.queue_free()
 	_prop = null
 	_prop_hidden = false
+
+
+## Where a saved item comes back at reset time: not the menu backdrop, the mesh lab, or
+## the MP waiting room (`duel.snapshot` is null there and set before an MP duel's setup).
+func _item_allowed_here() -> bool:
+	if GameManager.in_practice():
+		return true
+	match GameManager.mode:
+		GameManager.GameMode.FREE_DUEL, GameManager.GameMode.GAUNTLET, GameManager.GameMode.HORDE:
+			return true
+		GameManager.GameMode.MULTIPLAYER:
+			return GameManager.duel.snapshot != null
+	return false
 
 
 func _can_use_props() -> bool:
