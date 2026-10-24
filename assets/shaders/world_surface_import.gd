@@ -7,7 +7,8 @@ extends EditorScenePostImport
 ## GLB's own material and only grain and sway come from the name. Each GLB owns copies of its
 ## materials named `<base>__<glb>` (`M_Wood__bld_bank`); the suffix is dropped before every name
 ## lookup. A material with a glTF albedo image (the hand-painted texture of that GLB) becomes a
-## `use_albedo_tex` surface. The shared trim sheet is paused behind `USE_TRIM_SHEET`.
+## `use_albedo_tex` surface. The `SELF_LIT` names draw unlit (`self_lit`) and their meshes cast no
+## shadow. The shared trim sheet is paused behind `USE_TRIM_SHEET`.
 
 const SHADER := "res://assets/shaders/world_surface.gdshader"
 const GRAIN_TEX := "res://assets/shaders/world_grain.tres"
@@ -40,6 +41,9 @@ const TILING: Array[StringName] = [
 ## Materials that bend in the wind (cacti stay rigid). Each is a mesh of its own, so the
 ## mesh height is the plant's.
 const SWAY: Array[StringName] = [&"M_Yucca", &"M_Scrub", &"M_ScrubDry", &"M_Hay"]
+## Self-lit materials: drawn exactly their color (or painted image), ignoring light. Each is a
+## mesh of its own, and a mesh whose surfaces all glow casts no shadow.
+const SELF_LIT: Array[StringName] = [&"M_Flame", &"M_LampGlass"]
 ## Rigid slabs that swing about one edge, by node name. The vector points at the hinge
 ## edge in model space: up for a sign hanging from its top, toward the wall for an awning.
 const HINGES := {
@@ -97,6 +101,16 @@ func _swap(instance: MeshInstance3D) -> void:
 			material = _make(source, material_name, sway, height, sheet, painted)
 			_cache[key] = material
 		mesh.surface_set_material(surface, material)
+	_shadow(instance, mesh)
+
+
+## No shadow from a mesh whose every surface is self-lit.
+func _shadow(instance: MeshInstance3D, mesh: ArrayMesh) -> void:
+	for surface in mesh.get_surface_count():
+		var material := instance.get_active_material(surface) as ShaderMaterial
+		if material == null or material.get_shader_parameter("self_lit") != true:
+			return
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 func _make(source: StandardMaterial3D, material_name: StringName, sway: bool,
@@ -109,6 +123,9 @@ func _make(source: StandardMaterial3D, material_name: StringName, sway: bool,
 	material.set_shader_parameter("grain_tex", load(GRAIN_TEX))
 	material.set_shader_parameter("grain_strength", GRAIN.get(material_name, 0.0))
 	material.set_shader_parameter("grain_local", true)
+	if SELF_LIT.has(material_name):
+		material.set_shader_parameter("self_lit", true)
+		material.set_shader_parameter("grain_strength", 0.0)
 	if painted != null:
 		material.set_shader_parameter("use_albedo_tex", true)
 		material.set_shader_parameter("albedo_tex", _with_mipmaps(painted))

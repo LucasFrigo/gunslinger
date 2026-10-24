@@ -6476,7 +6476,9 @@ func _world_globals_ok() -> bool:
 ## (`USE_TRIM_SHEET` in the import script): while it is off no surface uses it, and when it is on a
 ## surface takes it exactly when its mesh has UVs and its material is not tiling ground or rock.
 ## A surface with a hand-painted GLB image (`use_albedo_tex`) must have UVs, an `albedo_tex`, and
-## no sheet; zero painted surfaces is fine (no PNG exists yet). Headless skips the compile.
+## no sheet; zero painted surfaces is fine (no PNG exists yet). `self_lit` sits exactly on the
+## importer's `SELF_LIT` names (`M_Flame`, `M_LampGlass`; at least one, the Saloon chandelier), and a
+## mesh casts no shadow exactly when all its surfaces are self-lit. Headless skips the compile.
 func _world_surface_ok() -> bool:
 	var shader := load("res://assets/shaders/world_surface.gdshader") as Shader
 	var sheet := load("res://assets/textures/trim_sheet.png") as Texture2D
@@ -6488,6 +6490,12 @@ func _world_surface_ok() -> bool:
 	var sheeted := 0
 	const SHEET_SURFACES_MIN := 1500
 	var plants := ["M_Yucca", "M_Scrub", "M_ScrubDry", "M_Hay"]
+	var glow_names := ["M_Flame", "M_LampGlass"]
+	var importer_glow: Variant = importer.get_script_constant_map().get("SELF_LIT") if importer != null else null
+	if importer_glow == null or (importer_glow as Array).map(func(n: StringName) -> String: return String(n)) != glow_names:
+		_fail("world_surface_import.gd SELF_LIT is %s, expected %s" % [importer_glow, glow_names])
+		return false
+	var glowing := 0
 	var slabs := [&"Sign", &"PorchSign", &"Canopy", &"ShedAwning"]
 	var hinged := {}
 	var swayed := 0
@@ -6505,6 +6513,8 @@ func _world_surface_ok() -> bool:
 			var mi := node as MeshInstance3D
 			if mi.mesh == null or not _in_scenario_glb(mi):
 				continue
+			var lit_surfaces := 0
+			var self_lit_surfaces := 0
 			for surface in mi.mesh.get_surface_count():
 				var mat := mi.get_active_material(surface)
 				if mat == null:
@@ -6515,6 +6525,15 @@ func _world_surface_ok() -> bool:
 					_fail("%s is not on world_surface.gdshader (reimport the GLBs?)" % label)
 					return false
 				var sm := mat as ShaderMaterial
+				var self_lit: bool = sm.get_shader_parameter("self_lit") == true
+				if self_lit != glow_names.has(String(sm.resource_name).get_slice("__", 0)):
+					_fail("%s self_lit is %s on %s" % [label, self_lit, sm.resource_name])
+					return false
+				if self_lit:
+					self_lit_surfaces += 1
+					glowing += 1
+				else:
+					lit_surfaces += 1
 				if sm.get_shader_parameter("grain_local") != true:
 					_fail("%s does not use grain_local" % label)
 					return false
@@ -6558,19 +6577,27 @@ func _world_surface_ok() -> bool:
 					if sm.get_shader_parameter("sheet_tex") != sheet:
 						_fail("%s sheet_tex is not trim_sheet.png" % label)
 						return false
+			# A mesh that is all glow casts no shadow; every other mesh still does.
+			var all_glow := self_lit_surfaces > 0 and lit_surfaces == 0
+			var no_shadow := mi.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			if all_glow != no_shadow:
+				_fail("%s %s: %d self-lit and %d lit surfaces, cast_shadow %d" % [
+						path.get_file(), mi.name, self_lit_surfaces, lit_surfaces, mi.cast_shadow])
+				return false
 		for body in instance.find_children("*", "StaticBody3D", true, false):
 			if _in_scenario_glb(body) and body.find_children("*", "MeshInstance3D", false, false).size() > 0:
 				_fail("%s collision proxy %s grew a mesh" % [path.get_file(), body.name])
 				return false
 		instance.queue_free()
-	if surfaces < 500 or swayed == 0 or hinged.size() != slabs.size():
-		_fail("world surface: %d surfaces, %d swaying, hinges on %s" % [surfaces, swayed, hinged.keys()])
+	if surfaces < 500 or swayed == 0 or glowing == 0 or hinged.size() != slabs.size():
+		_fail("world surface: %d surfaces, %d swaying, %d self-lit, hinges on %s" % [
+				surfaces, swayed, glowing, hinged.keys()])
 		return false
 	if trim_on and sheeted < SHEET_SURFACES_MIN:
 		_fail("world surface: only %d surfaces take the trim sheet" % sheeted)
 		return false
-	print("AUTOTEST: %d scenario surfaces wear world_surface.gdshader (%d sway, %d hand-painted, %d on the trim sheet (%s), hinges %s)" % [
-			surfaces, swayed, painted, sheeted, "on" if trim_on else "paused", hinged.keys()])
+	print("AUTOTEST: %d scenario surfaces wear world_surface.gdshader (%d sway, %d self-lit, %d hand-painted, %d on the trim sheet (%s), hinges %s)" % [
+			surfaces, swayed, glowing, painted, sheeted, "on" if trim_on else "paused", hinged.keys()])
 	return true
 
 

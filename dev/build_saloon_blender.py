@@ -1,5 +1,7 @@
 """Build the Saloon interior greybox inside Blender (headless).
 
+Retired: the final meshes live in saloon.blend (docs/design/scenarios/saloon.md); do not re-run this, it wipes them.
+
 True metric scale, Z-up, 1 BU = 1 m. Export is glTF Y-up, so Blender
 (x, y, z) becomes Godot (x, z, -y):
 

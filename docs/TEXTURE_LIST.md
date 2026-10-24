@@ -1,6 +1,6 @@
 # Texture list
 
-One hand-painted 256×256 image per exported scenario GLB, 24 GLBs. Workflow and rules: [`TEXTURING.md`](TEXTURING.md#hand-painted-texture-per-glb). Source for ripper output and photos: `assets/texture_src/` (credit each photo in `SOURCES.md`; that folder is not imported by Godot).
+One hand-painted 256×256 image per exported scenario GLB, 29 GLBs. Workflow and rules: [`TEXTURING.md`](TEXTURING.md#hand-painted-texture-per-glb). Source for ripper output and photos: `assets/texture_src/` (credit each photo in `SOURCES.md`; that folder is not imported by Godot).
 
 Nothing is painted yet. Every GLB is still flat colour and grain. A box is checked when `tex/<glb>.png` is saved, linked (`dev/unwrap_per_glb_blender.py -- --link --glb <glb>`), and looks right in game.
 
@@ -39,7 +39,13 @@ Nothing is painted yet. Every GLB is still flat colour and grain. A box is check
 
 | Done | GLB | PNG | Meshes | Density | Left alone |
 |---|---|---|---|---|---|
-| [ ] | `saloon_interior` | `saloon/tex/saloon_interior.png` | 195 | 5.0 px/m | 0 |
+| [ ] | `saloon_bar` | `saloon/tex/saloon_bar.png` | 6 | 20.0 px/m | 0 |
+| [ ] | `saloon_shell` | `saloon/tex/saloon_shell.png` | 6 | 6.4 px/m | 0 |
+| [ ] | `saloon_table` | `saloon/tex/saloon_table.png` | 4 (one image for both tables) | 95.1 px/m | 0 |
+| [ ] | `saloon_chair` | `saloon/tex/saloon_chair.png` | 1 (one image for all eight chairs) | 171.0 px/m | 0 |
+| [ ] | `saloon_balcony` | `saloon/tex/saloon_balcony.png` | 3 | 16.8 px/m | 0 |
+| [ ] | `saloon_dressing` | `saloon/tex/saloon_dressing.png` | 7 | 40.9 px/m | 0 |
+| [ ] | `saloon_lamps` | `saloon/tex/saloon_lamps.png` | 4 | 71.1 px/m | 0 |
 
 ## Train Rooftop (`train_rooftop/train_rooftop.blend`)
 
@@ -58,9 +64,9 @@ Nothing is painted yet. Every GLB is still flat colour and grain. A box is check
 
 | Done | GLB | PNG | Meshes | Density | Left alone |
 |---|---|---|---|---|---|
-| [ ] | `canyon` | `canyon/tex/canyon.png` | 289 (plants) | 9.4 px/m | 104 rock blocks and sand planes |
+| [ ] | `canyon` | `canyon/tex/canyon.png` | 25 (plants) | 13.7 px/m | 16 tiling meshes: the 4 cliff objects, the 2 cover objects, the floor, the 4 rim objects, and the 5 horizon rock and sand objects |
 
-Density is set by the GLB's total surface area and by its longest single piece (an 8 m rail cannot be longer than 256 px). A dozen small pieces on a tiny GLB (`prp_hitching_rail`) get 97 px/m; the Saloon and the train share 195 and 371 meshes in one image and get 4 to 5 px/m, so a 2 cm detail there is a fraction of one pixel. See the stats table in [`TEXTURING.md`](TEXTURING.md#what-the-unwrap-gave-each-glb).
+Density is set by the GLB's total surface area and by its longest single piece (an 8 m rail cannot be longer than 256 px). A dozen small pieces on a tiny GLB (`prp_hitching_rail`) get 97 px/m; the train shares 371 meshes in one image and gets 4.3 px/m, so a 2 cm detail there is a fraction of one pixel. See the stats table in [`TEXTURING.md`](TEXTURING.md#what-the-unwrap-gave-each-glb).
 
 ## Stays flat (ground and rock)
 
@@ -71,7 +77,7 @@ Ground and rock keep their tiling UVs (one tile per 8 m), flat colour, and grain
 | Main Street | `TerrainFlat`, `Track_Ballast` (the GLB `env_terrain`, and the ballast in `env_rail_track_8m`) |
 | Train Rooftop | 14 cliff pieces (`horizon_ridge`) |
 | Practice Hub | `Lot`, `Desert`, `Berm`, 6 `Mesa*` |
-| Canyon | 102 rock blocks and two sand planes |
+| Canyon | The 4 cliff objects (`Cliffs_*`), the 2 cover objects (`Cover_*`), the floor (`Floor_Sand`), the 4 rim objects (`Rim_*`), and the horizon's plain, butte, and mesas (`Horizon_Desert`, `Horizon_CapDark`, `Horizon_RockDark`, `Horizon_Cap`, `Horizon_Rock`) |
 
 ## Not scenery (separate textures, already exist or undecided)
 

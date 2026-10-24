@@ -34,6 +34,27 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Fixed
 
+### BUG-031 — Canyon: the desert plain draws a line behind the enemy instead of fading into the fog
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-23 |
+| Fixed | 2026-10-23 |
+| Platforms | All (seen in a flat run; the fog is the same in VR). |
+| Areas | `scenarios/canyon/canyon.tscn` (`Environment` depth fog) |
+
+**What:** From `PlayerSpawn` the 6 km plain under the butte drew as its own darker band, behind the enemy from the shins to the chest, with a bright edge line where it met the sky. The distant mesas drew almost unfogged.
+
+**Repro:**
+1. Load the Canyon (any time of day) in a flat run.
+2. Stand at `PlayerSpawn` and look down the lane past `EnemySpawn`.
+
+**Cause:** In depth mode `fog_density` is the fog's maximum opacity (Godot's Environment reference), and the Compatibility shader multiplies the depth fog by it. At 0.012 the fog never passed 1.2%, so begin 60 m and end 220 m did almost nothing.
+
+**Fix:** `fog_density` 1.0 in `canyon.tscn`, with `fog_depth_begin` 80 and `fog_depth_end` 400. The user found 60 and 220 at full density too strong, since the far mesas washed out. Curve 1.4 stays. The fog now takes about 0.2% at 100 m, 28% at 220 m, and all of it from about 390 m, where the plain lies. A flat capture of Lane P before the fix showed the plain at (204, 94, 55) at dusk under a bright line (242, 140, 71), against a sky of (240, 128, 64) at the horizon. After it, the plain draws (243, 140, 71), the horizon's own colour, at dusk and (237, 153, 112) at dawn, with no line, and Mesa5 keeps its colour ((255, 140, 62) at dusk). `--autotest=load` (its time-of-day horizon contract) passes. Design: `docs/design/scenarios/canyon.md` F1 and H.
+
 ### BUG-029 — Kill replay: the NPC's hand stays at its side, no draw animation
 
 | | |

@@ -1,5 +1,7 @@
 """Build the Canyon at Dusk greybox inside Blender (headless).
 
+Retired: the final cliffs live in canyon.blend (dev/build_canyon_finals_blender.py, docs/design/scenarios/canyon.md); do not re-run this, it wipes them.
+
 True metric scale, Z-up, 1 BU = 1 m. Export is glTF Y-up, so Blender
 (x, y, z) becomes Godot (x, z, -y):
 

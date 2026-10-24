@@ -2,9 +2,9 @@ shader_type spatial;
 render_mode cull_disabled;
 // Every static scenario surface, written into the GLBs by `world_surface_import.gd`: the
 // flat color, banded light, one grain lookup projected along the face's dominant axis, the
-// GLB's hand-painted albedo image on surfaces that have one (the trim sheet is paused), and
-// wind. `cull_disabled` because the GLBs ship every material double-sided: plants, awnings,
-// and signs are single slabs that would vanish otherwise.
+// GLB's hand-painted albedo image on surfaces that have one (the trim sheet is paused), wind,
+// and an unlit path for the self-lit names. `cull_disabled` because the GLBs ship every
+// material double-sided: plants, awnings, and signs are single slabs that would vanish otherwise.
 #include "res://assets/shaders/toon_light.gdshaderinc"
 
 // Declared in project.godot [shader_globals]. GameManager pushes the grain multipliers (F3
@@ -28,6 +28,10 @@ uniform bool use_sheet = false;
 // island never reads the opposite edge; no grain on it.
 uniform sampler2D albedo_tex : source_color, filter_nearest_mipmap, repeat_disable, hint_default_white;
 uniform bool use_albedo_tex = false;
+// Self-lit (flames, lamp glass): drawn exactly its color, or its painted texels, whatever the
+// light. ALBEDO 0 zeroes every light, band, and ambient term; EMISSION carries the color, which
+// the linear tonemap passes through. Set by the importer by material name; no grain.
+uniform bool self_lit = false;
 // Tiles per metre.
 uniform float grain_scale = 0.35;
 uniform float grain_strength = 0.0;
@@ -101,6 +105,12 @@ void fragment() {
 		base = mix(albedo.rgb, texture(sheet_tex, UV).rgb, sheet_mix);
 		flat_k = 1.0 - sheet_mix;
 	}
-	ALBEDO = base * (1.0 + grain * 2.0 * grain_strength * grain_strength_mult * fade * flat_k);
 	ROUGHNESS = roughness_amount;
+	if (self_lit) {
+		ALBEDO = vec3(0.0);
+		SPECULAR = 0.0;
+		EMISSION = base;
+	} else {
+		ALBEDO = base * (1.0 + grain * 2.0 * grain_strength * grain_strength_mult * fade * flat_k);
+	}
 }

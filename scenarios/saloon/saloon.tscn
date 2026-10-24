@@ -1,13 +1,19 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scenarios/scenario_base.gd" id="1"]
-[ext_resource type="PackedScene" path="res://assets/models/scenarios/saloon/saloon_interior.glb" id="2"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/saloon/saloon_bar.glb" id="3"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/saloon/saloon_shell.glb" id="4"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/saloon/saloon_table.glb" id="5"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/saloon/saloon_chair.glb" id="6"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/saloon/saloon_balcony.glb" id="7"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/saloon/saloon_dressing.glb" id="8"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/saloon/saloon_lamps.glb" id="9"]
 
 [sub_resource type="Environment" id="env"]
 background_mode = 1
 background_color = Color(0.05, 0.04, 0.03, 1)
 ambient_light_source = 2
-ambient_light_color = Color(0.8, 0.6, 0.4, 1)
+ambient_light_color = Color(0.7, 0.66, 0.62, 1)
 ambient_light_energy = 0.25
 
 [node name="Saloon" type="Node3D"]
@@ -43,9 +49,83 @@ environment = SubResource("env")
 
 [node name="Chandelier" type="OmniLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.4, 0)
-light_color = Color(1, 0.8, 0.55, 1)
+light_color = Color(1, 0.93, 0.82, 1)
 light_energy = 2.5
 omni_range = 14.0
 shadow_enabled = true
 
-[node name="Interior" parent="." instance=ExtResource("2")]
+[node name="BarLampS" type="SpotLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -5.2, 2.35, 2.8)
+light_color = Color(1, 0.93, 0.82, 1)
+light_energy = 1.0
+shadow_enabled = false
+spot_range = 3.5
+spot_angle = 35.0
+spot_angle_attenuation = 8.0
+
+[node name="BarLampN" type="SpotLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -5.2, 2.35, -2.8)
+light_color = Color(1, 0.93, 0.82, 1)
+light_energy = 1.0
+shadow_enabled = false
+spot_range = 3.5
+spot_angle = 35.0
+spot_angle_attenuation = 8.0
+
+[node name="TableLampA" type="SpotLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 3.5, 1.95, 2.5)
+light_color = Color(1, 0.93, 0.82, 1)
+light_energy = 1.0
+shadow_enabled = false
+spot_range = 3.0
+spot_angle = 30.0
+spot_angle_attenuation = 8.0
+
+[node name="TableLampB" type="SpotLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 4, 1.95, -3)
+light_color = Color(1, 0.93, 0.82, 1)
+light_energy = 1.0
+shadow_enabled = false
+spot_range = 3.0
+spot_angle = 30.0
+spot_angle_attenuation = 8.0
+
+[node name="Bar" parent="." instance=ExtResource("3")]
+
+[node name="Shell" parent="." instance=ExtResource("4")]
+
+[node name="TableA" parent="." instance=ExtResource("5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.5, 0, 2.5)
+
+[node name="TableB" parent="." instance=ExtResource("5")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 4, 0, -3)
+
+[node name="ChairA0" parent="." instance=ExtResource("6")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 4.45, 0, 2.5)
+
+[node name="ChairA1" parent="." instance=ExtResource("6")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 2.55, 0, 2.5)
+
+[node name="ChairA2" parent="." instance=ExtResource("6")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 3.5, 0, 1.55)
+
+[node name="ChairA3" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 3.5, 0.26, 3.5)
+
+[node name="ChairB0" parent="." instance=ExtResource("6")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 4.95, 0, -3)
+
+[node name="ChairB1" parent="." instance=ExtResource("6")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 3.05, 0, -3)
+
+[node name="ChairB2" parent="." instance=ExtResource("6")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 4, 0, -3.95)
+
+[node name="ChairB3" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, -2.05)
+
+[node name="Balcony" parent="." instance=ExtResource("7")]
+
+[node name="Dressing" parent="." instance=ExtResource("8")]
+
+[node name="Lamps" parent="." instance=ExtResource("9")]

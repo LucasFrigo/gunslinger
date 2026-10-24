@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://2t4ug6arw3h4"
-path="res://.godot/imported/saloon_interior.glb-a9d28505fb645ecb1b7854319246bc23.scn"
+uid="uid://beuxj88i7pmd"
+path="res://.godot/imported/saloon_shell.glb-67cf4103b0a91014664b6d9347912869.scn"
 
 [deps]
 
-source_file="res://assets/models/scenarios/saloon/saloon_interior.glb"
-dest_files=["res://.godot/imported/saloon_interior.glb-a9d28505fb645ecb1b7854319246bc23.scn"]
+source_file="res://assets/models/scenarios/saloon/saloon_shell.glb"
+dest_files=["res://.godot/imported/saloon_shell.glb-67cf4103b0a91014664b6d9347912869.scn"]
 
 [params]
 

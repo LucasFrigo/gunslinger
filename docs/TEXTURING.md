@@ -24,7 +24,7 @@ Two things follow from this:
 
 **Status: `partial`. The unwrap, the materials, the image hookup, the export, and the importer are built and tested; no image has been painted, so every GLB is flat colour and grain in game.** This replaced the shared trim sheet ([paused](#trim-sheet-on-scenery-paused)): you texture one GLB at a time, by hand, and the rest stay flat until you get to them.
 
-Each exported scenario GLB (23 of them) has **one 256×256 image**. Every mesh in that GLB samples it. You open the map's `.blend`, look at the GLB's unwrap, make an image for it (ripped textures arranged to fit the UV islands, or painted straight over the exported layout), save it under `tex/`, and run one command.
+Each exported scenario GLB (29 of them) has **one 256×256 image**. Every mesh in that GLB samples it. You open the map's `.blend`, look at the GLB's unwrap, make an image for it (ripped textures arranged to fit the UV islands, or painted straight over the exported layout), save it under `tex/`, and run one command.
 
 ### Decisions
 
@@ -42,7 +42,7 @@ Each exported scenario GLB (23 of them) has **one 256×256 image**. Every mesh i
 | In game | A material with an image becomes `world_surface.gdshader` with the image as `albedo_tex` (`use_albedo_tex`): nearest filter with mipmaps, clamped, banded light, outline, and wind sway kept, grain off. The `load` autotest accepts it |
 | Trim sheet | Off in game. The code and files stay; one switch (`USE_TRIM_SHEET` in `assets/shaders/world_surface_import.gd`, false) brings it back |
 
-### The 23 GLBs
+### The 29 GLBs
 
 Each row is one image. The path is relative to `assets/models/scenarios/`. A GLB with nothing in its layout (all ground or rock) has no image to paint. The same list with mesh counts and a done box is in [`TEXTURE_LIST.md`](TEXTURE_LIST.md).
 
@@ -52,7 +52,13 @@ Each row is one image. The path is relative to `assets/models/scenarios/`. A GLB
 | `main_street/main_street.blend` | `env_awning_post`, `env_boardwalk_4m`, `env_cattle_fence_4m`, `env_desert_scatter`, `env_rail_track_8m` | `main_street/tex/<glb>.png` |
 | `main_street/main_street.blend` | `prp_barrels`, `prp_cow`, `prp_hitching_rail`, `prp_trough` | `main_street/tex/<glb>.png` |
 | `main_street/main_street.blend` | `env_terrain` (all ground: nothing to paint) | none |
-| `saloon/saloon.blend` | `saloon_interior` | `saloon/tex/saloon_interior.png` |
+| `saloon/saloon.blend` | `saloon_bar` | `saloon/tex/saloon_bar.png` |
+| `saloon/saloon.blend` | `saloon_shell` | `saloon/tex/saloon_shell.png` |
+| `saloon/saloon.blend` | `saloon_table` (module, two copies share one image) | `saloon/tex/saloon_table.png` |
+| `saloon/saloon.blend` | `saloon_chair` (module, eight copies share one image) | `saloon/tex/saloon_chair.png` |
+| `saloon/saloon.blend` | `saloon_balcony` | `saloon/tex/saloon_balcony.png` |
+| `saloon/saloon.blend` | `saloon_dressing` | `saloon/tex/saloon_dressing.png` |
+| `saloon/saloon.blend` | `saloon_lamps` | `saloon/tex/saloon_lamps.png` |
 | `train_rooftop/train_rooftop.blend` | `train_rooftop` | `train_rooftop/tex/train_rooftop.png` |
 | `train_rooftop/train_rooftop.blend` | `horizon_ridge` (all rock: nothing to paint) | none |
 | `practice_hub/practice_hub.blend` | `practice_hub` | `practice_hub/tex/practice_hub.png` |
@@ -124,13 +130,19 @@ Texel density is pixels per metre at 256 px. It is set by the GLB's total surfac
 | `prp_cow` | 2 | 71 | 70.7 | 2 | 69% | 0 |
 | `prp_hitching_rail` | 1 | 18 | 96.9 | 2 | 43% | 0 |
 | `prp_trough` | 3 | 38 | 80.4 | 2 | 67% | 0 |
-| `saloon_interior` | 195 | 1052 | 5.0 | 0 | 82% | 122 |
+| `saloon_bar` | 6 | 659 | 20.0 | 1 | 53% | 0 |
+| `saloon_shell` | 6 | 663 | 6.4 | 1 | 61% | 1 |
+| `saloon_table` | 4 | 68 | 95.1 | 2 | 77% | 0 |
+| `saloon_chair` | 1 | 39 | 171.0 | 2 | 56% | 0 |
+| `saloon_balcony` | 3 | 331 | 16.8 | 1 | 62% | 0 |
+| `saloon_dressing` | 7 | 389 | 40.9 | 1 | 66% | 0 |
+| `saloon_lamps` | 4 | 325 | 71.1 | 1 | 70% | 0 |
 | `train_rooftop` | 371 | 1878 | 4.3 | 0 | 84% | 132 |
 | `practice_hub` | 181 | 858 | 7.4 | 1 | 41% | 3 |
-| `canyon` | 289 | 1455 | 9.4 | 0 | 86% | 0 |
+| `canyon` | 25 | 1091 | 13.7 | 0 | 86% | 0 |
 | `env_terrain`, `horizon_ridge` | 0 | 0 | | | | all ground or rock |
 
-Expect the Saloon and the train to be the hardest to paint: 195 and 371 meshes share one 256 px image at about 5 px/m, so a table leg is two or three pixels wide, and the 122 and 132 smallest pieces get fewer than 16 px² each. Painting those GLBs well means a few large flat colours per surface, not fine detail. If a GLB needs more, the lever is a bigger image or splitting the GLB, not a smaller pad; neither is decided.
+Expect the train to be the hardest to paint: 371 meshes share one 256 px image at 4.3 px/m, and the 132 smallest pieces get fewer than 16 px² each. The Saloon's greybox GLB, `saloon_interior`, is retired: its last pieces, the chandelier, became `saloon_lamps` (71.1 px/m; its six shades, fonts, and flames and the chain links are flat colour). `saloon_balcony` gets 16.8 px/m: its 13.4 m fascia and deck are single islands, and its 48 balusters are flat colour. `saloon_dressing` gets 40.9 px/m; its shards, splinters, checks, and cards are flat colour. The two modules are the opposite case: one table gets 95 px/m and one chair 171 px/m, painted once for every copy. `saloon_shell` gets 6.4 px/m, under the sheet's estimate of 8 (G2): the floor (13.4 × 17.4 m) and each wall are one island, and the ceiling bays are next largest, so a 4.2 m wall gets about 27 px of height; its one TINY mesh is `Shell_Iron` (the hasp and the hatch ring), left flat. Painting those GLBs well means a few large flat colours per surface, not fine detail. If a GLB needs more, the lever is a bigger image or splitting the GLB, not a smaller pad; neither is decided.
 
 ### Keeping your work (`uv_lock`)
 
@@ -164,7 +176,8 @@ From `.claude/skills/gunslinger-taste/` and `SHADERS.md`. Check a texture agains
    - Grain 0.2: `M_Sand`, `M_Dirt`, `M_Rock`, `M_Cap` (and their `Far` / `Dark` variants).
    - Grain 0.12: `M_Wood`, `M_Plank`, `M_Roof`, `M_Car`, `M_Floor`, `M_Bar`, `M_Trim`, `M_Masonry`, `M_Whitewash`.
    - Sway: `M_Yucca`, `M_Scrub`, `M_ScrubDry`, `M_Hay`.
-   - Any other name: flat color, no grain. A new grained or swaying material needs a line in that script.
+   - Self-lit (`SELF_LIT`): `M_Flame`, `M_LampGlass`. Drawn exactly their color (or their painted texels), ignoring light, with no grain; a mesh whose surfaces are all self-lit casts no shadow, so give a glowing material its own mesh. Nothing else may use these names.
+   - Any other name: flat color, no grain. A new grained, swaying, or self-lit material needs a line in that script.
 2. Set the color on the Principled BSDF Base Color and set roughness. Leave metallic at 0; the shader ignores it.
 3. Add no vertex colors, no normal maps, no alpha. The one image a GLB may have is the `GlbTexture` node that `dev/unwrap_per_glb_blender.py` adds and links (see [Hand-painted texture per GLB](#hand-painted-texture-per-glb)); leave it unlinked for a flat GLB. A material copy is named `<base>__<glb>`; keep the base name.
 4. Reuse exact color values. Surfaces with the same color, name, and roughness share one material at import; a slightly different shade is a new material.
@@ -194,7 +207,7 @@ From `.claude/skills/gunslinger-taste/` and `SHADERS.md`. Check a texture agains
 
 - **Materials are draw calls.** One material per object; share materials between objects where the colors match.
 - **Opaque only.** For holes or fringe use alpha scissor (cutout), never alpha blend. Blended surfaces near the eye are the costly case on Quest.
-- **Small textures.** Nothing in the project is above 512 px. Treat that as the ceiling for a worn or held asset. Scenery has 21 images of 256×256, one per paintable GLB (up to about 5.6 MB uncompressed with mipmaps, less if Godot compresses them; not timed or measured on a Quest yet). The paused trim sheet was 512×1024.
+- **Small textures.** Nothing in the project is above 512 px. Treat that as the ceiling for a worn or held asset. Scenery has 25 images of 256×256, one per paintable GLB (up to about 6.2 MB uncompressed with mipmaps, less if Godot compresses them; not timed or measured on a Quest yet). The paused trim sheet was 512×1024.
 - **Coarse detail.** Fine high-contrast detail under nearest sampling shimmers when the head moves. The world grain fades out between 15 m and 45 m for that reason.
 - **Power-of-two sizes**, so the ETC2 / ASTC import (`project.godot`) and mipmaps work.
 - **Measure on the Quest.** Compare frame time before and after a batch of new assets. None of the current look has been timed in a headset yet (`RELEASE_TODOS.md`).
@@ -353,7 +366,7 @@ It prints one line per map and any object that needs a look.
 | Saloon | 195 | 149 | 0 | 46 | 38 | 2024 → 2176 |
 | Train Rooftop | 385 | 365 | 14 | 6 | 255 | 5972 → 6940 |
 | Practice Hub | 191 | 69 | 10 | 112 | 12 | 1172 → 1220 |
-| Canyon | 393 | 0 | 104 | 289 | 0 | unchanged |
+| Canyon | 41 | 0 | 16 | 25 | 0 | unchanged |
 
 Faces within 10% of 64 px per metre: Main Street 91%, Saloon 95%, Train Rooftop 83%, Practice Hub 59%. The rest are round parts by design: tapered fence posts, wheel caps scaled down onto Blank, axles wrapped once, and faces squeezed up to 30% onto a strip. No face leaves its strip.
 
@@ -614,13 +627,12 @@ The script did the unwrap. What is left is a look in Blender (Material Preview) 
 
 #### Saloon
 
-`assets/models/scenarios/saloon/saloon.blend`, `saloon_interior.glb`. Build script `dev/build_saloon_blender.py`. Seen from a few metres, so texel mistakes show most here.
+`assets/models/scenarios/saloon/saloon.blend`, `saloon_bar.glb`, `saloon_shell.glb`, `saloon_table.glb`, `saloon_chair.glb`, `saloon_balcony.glb`, `saloon_dressing.glb`, and `saloon_lamps.glb`. Build script `dev/build_saloon_blender.py` (greybox only; never re-run it: every Saloon GLB is final, and the greybox `saloon_interior.glb` it wrote is retired). Seen from a few metres, so texel mistakes show most here. The checks below date from the trim sheet and cover the greybox.
 
 - [ ] Four walls, wainscot, and ceiling: bands line up at the corners.
 - [ ] The 16 floor planks run along their length on Boards.
 - [ ] `Stair` (slanted) and `StoveBody` (flagged).
-- [ ] Tables: the `TableTop_A/B` caps are squeezed to fit Boards.
-- [ ] Left flat on purpose: bottles, candles, flames, glass panes, mirror, brass, cushions, piano keys.
+- [ ] Left flat on purpose: bottles, candles, flames, glass panes, mirror, brass, piano keys.
 
 #### Train Rooftop
 
@@ -644,6 +656,6 @@ The script did the unwrap. What is left is a look in Blender (Material Preview) 
 
 `assets/models/scenarios/canyon/canyon.blend`, `canyon.glb`. Build script `dev/build_canyon_blender.py`.
 
-Nothing here is built from wood or iron: 102 rock blocks and two sand planes carry tiling UVs, and 289 plants are flat. The trim sheet does not apply. Texturing the rock means a separate tiling texture, which is not decided.
+Nothing here is built from wood or iron. The final cliffs (`CanyonCliffs`: four merged objects, 8,118 triangles), cover rocks (`CanyonCover`: two objects, 656 triangles), floor (`CanyonFloor`: `Floor_Sand`, 267 triangles), rim (`CanyonRim`: four objects, 1,611 triangles), and the horizon's rock and sand (`CanyonHorizon`: `Horizon_Desert`, the butte, and the nine mesas in four objects, 1,288 triangles), all from `dev/build_canyon_finals_blender.py`, carry 8 m tiling UVs. The 65 plants in 25 meshes are flat (per-GLB unwrap: 25 meshes, 1091 islands, 13.7 px/m, 86% covered, 16 tiling meshes untouched). The trim sheet does not apply. Texturing the rock means a separate tiling texture, which is not decided.
 
 - [ ] Decide whether rock and ground get a tiling texture (decision 12 only prepared the UVs).
