@@ -4,6 +4,11 @@
 [ext_resource type="PackedScene" uid="uid://dn0el7qivd0v1" path="res://assets/models/scenarios/train_rooftop/train_rooftop.glb" id="2"]
 [ext_resource type="PackedScene" uid="uid://bakqgn6ekd6uh" path="res://assets/models/scenarios/main_street/env_terrain.glb" id="3"]
 [ext_resource type="Script" uid="uid://c2k2mqdp2f4mh" path="res://scenarios/train_rooftop/scenery_belt.gd" id="4"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/train_rooftop/train_car_coach.glb" id="5"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/train_rooftop/train_coupler.glb" id="6"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/train_rooftop/train_engine.glb" id="7"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/train_rooftop/train_car_baggage.glb" id="8"]
+[ext_resource type="PackedScene" path="res://assets/models/scenarios/train_rooftop/train_car_business.glb" id="9"]
 [ext_resource type="Shader" path="res://scenarios/sky_western.gdshader" id="sky_shader"]
 [ext_resource type="Texture2D" path="res://scenarios/sky_clouds.tres" id="sky_clouds"]
 
@@ -80,6 +85,45 @@ environment = SubResource("env")
 [node name="Terrain" parent="." unique_id=1415572440 instance=ExtResource("3")]
 
 [node name="Train" parent="." unique_id=634539408 instance=ExtResource("2")]
+
+[node name="CarRearB" parent="." instance=ExtResource("9")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 33)
+
+[node name="CarRearA" parent="." instance=ExtResource("5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 19.8)
+
+[node name="CarA" parent="." instance=ExtResource("5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6.6)
+
+[node name="CarB" parent="." instance=ExtResource("5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -6.6)
+
+[node name="CarFrontA" parent="." instance=ExtResource("5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -19.8)
+
+[node name="CarFrontB" parent="." instance=ExtResource("8")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -33)
+
+[node name="Engine" parent="." instance=ExtResource("7")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -40.2)
+
+[node name="Coupler0" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 26.4)
+
+[node name="Coupler1" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 13.2)
+
+[node name="Coupler2" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+
+[node name="Coupler3" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -13.2)
+
+[node name="Coupler4" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -26.4)
+
+[node name="Coupler5" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -39.6)
 
 [node name="Scenery" type="Node3D" parent="." unique_id=1293527590]
 script = ExtResource("4")

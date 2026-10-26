@@ -51,8 +51,13 @@ Nothing is painted yet. Every GLB is still flat colour and grain. A box is check
 
 | Done | GLB | PNG | Meshes | Density | Left alone |
 |---|---|---|---|---|---|
-| [ ] | `train_rooftop` | `train_rooftop/tex/train_rooftop.png` | 371 | 4.3 px/m | 0 |
-| n/a | `horizon_ridge` | none | 0 | | 14 |
+| [ ] | `train_car_coach` | `train_rooftop/tex/train_car_coach.png` | 5 (one image for all four coaches; final) | 12.5 px/m | 0 |
+| [ ] | `train_coupler` | `train_rooftop/tex/train_coupler.png` | 1 (one image for all six couplers; final) | 141.2 px/m | 0 |
+| [ ] | `train_engine` | `train_rooftop/tex/train_engine.png` | 8 (final) | 10.5 px/m | 0 |
+| [ ] | `train_car_baggage` | `train_rooftop/tex/train_car_baggage.png` | 5 (final) | 13.3 px/m | 0 |
+| [ ] | `train_car_business` | `train_rooftop/tex/train_car_business.png` | 7 (final) | 11.9 px/m | 0 |
+| n/a | `train_rooftop` | none (the four invisible guard walls only) | 0 | | 0 |
+| n/a | `horizon_ridge` | none | 0 | | 11 (all tiling rock, all final: `Canyon_*` and `Mesa_*`, four each; `Butte_Rock`, `Butte_RockDark`, `Butte_Cap`) |
 
 ## Practice Hub (`practice_hub/practice_hub.blend`)
 
@@ -66,7 +71,7 @@ Nothing is painted yet. Every GLB is still flat colour and grain. A box is check
 |---|---|---|---|---|---|
 | [ ] | `canyon` | `canyon/tex/canyon.png` | 25 (plants) | 13.7 px/m | 16 tiling meshes: the 4 cliff objects, the 2 cover objects, the floor, the 4 rim objects, and the 5 horizon rock and sand objects |
 
-Density is set by the GLB's total surface area and by its longest single piece (an 8 m rail cannot be longer than 256 px). A dozen small pieces on a tiny GLB (`prp_hitching_rail`) get 97 px/m; the train shares 371 meshes in one image and gets 4.3 px/m, so a 2 cm detail there is a fraction of one pixel. See the stats table in [`TEXTURING.md`](TEXTURING.md#what-the-unwrap-gave-each-glb).
+Density is set by the GLB's total surface area and by its longest single piece (an 8 m rail cannot be longer than 256 px). A dozen small pieces on a tiny GLB (`prp_hitching_rail`) get 97 px/m; the train's coach gets 12.5 px/m, so a 2 cm detail there is a quarter of a pixel; the final engine gets 10.5 px/m, the final baggage car 13.3 px/m, and the final business car 11.9 px/m. See the stats table in [`TEXTURING.md`](TEXTURING.md#what-the-unwrap-gave-each-glb).
 
 ## Stays flat (ground and rock)
 
@@ -75,7 +80,7 @@ Ground and rock keep their tiling UVs (one tile per 8 m), flat colour, and grain
 | Map | Meshes left alone |
 |---|---|
 | Main Street | `TerrainFlat`, `Track_Ballast` (the GLB `env_terrain`, and the ballast in `env_rail_track_8m`) |
-| Train Rooftop | 14 cliff pieces (`horizon_ridge`) |
+| Train Rooftop | 11 rock objects (`horizon_ridge`: `Canyon_Rock`, `Canyon_RockDark`, `Canyon_CapDark`, `Canyon_Cap`, the same four `Mesa_*`, and `Butte_Rock`, `Butte_RockDark`, `Butte_Cap`) |
 | Practice Hub | `Lot`, `Desert`, `Berm`, 6 `Mesa*` |
 | Canyon | The 4 cliff objects (`Cliffs_*`), the 2 cover objects (`Cover_*`), the floor (`Floor_Sand`), the 4 rim objects (`Rim_*`), and the horizon's plain, butte, and mesas (`Horizon_Desert`, `Horizon_CapDark`, `Horizon_RockDark`, `Horizon_Cap`, `Horizon_Rock`) |
 

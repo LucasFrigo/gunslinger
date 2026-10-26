@@ -59,7 +59,12 @@ Each row is one image. The path is relative to `assets/models/scenarios/`. A GLB
 | `saloon/saloon.blend` | `saloon_balcony` | `saloon/tex/saloon_balcony.png` |
 | `saloon/saloon.blend` | `saloon_dressing` | `saloon/tex/saloon_dressing.png` |
 | `saloon/saloon.blend` | `saloon_lamps` | `saloon/tex/saloon_lamps.png` |
-| `train_rooftop/train_rooftop.blend` | `train_rooftop` | `train_rooftop/tex/train_rooftop.png` |
+| `train_rooftop/train_rooftop.blend` | `train_car_coach` (module, four copies share one image) | `train_rooftop/tex/train_car_coach.png` |
+| `train_rooftop/train_rooftop.blend` | `train_coupler` (module, six copies share one image) | `train_rooftop/tex/train_coupler.png` |
+| `train_rooftop/train_rooftop.blend` | `train_engine` (final) | `train_rooftop/tex/train_engine.png` |
+| `train_rooftop/train_rooftop.blend` | `train_car_baggage` (final) | `train_rooftop/tex/train_car_baggage.png` |
+| `train_rooftop/train_rooftop.blend` | `train_car_business` (final) | `train_rooftop/tex/train_car_business.png` |
+| `train_rooftop/train_rooftop.blend` | `train_rooftop` (the guard walls only: nothing to paint) | none |
 | `train_rooftop/train_rooftop.blend` | `horizon_ridge` (all rock: nothing to paint) | none |
 | `practice_hub/practice_hub.blend` | `practice_hub` | `practice_hub/tex/practice_hub.png` |
 | `canyon/canyon.blend` | `canyon` | `canyon/tex/canyon.png` |
@@ -137,12 +142,17 @@ Texel density is pixels per metre at 256 px. It is set by the GLB's total surfac
 | `saloon_balcony` | 3 | 331 | 16.8 | 1 | 62% | 0 |
 | `saloon_dressing` | 7 | 389 | 40.9 | 1 | 66% | 0 |
 | `saloon_lamps` | 4 | 325 | 71.1 | 1 | 70% | 0 |
-| `train_rooftop` | 371 | 1878 | 4.3 | 0 | 84% | 132 |
+| `train_car_coach` | 5 | 545 | 12.5 | 1 | 60% | 0 |
+| `train_coupler` | 1 | 35 | 141.2 | 2 | 63% | 0 |
+| `train_engine` | 8 | 573 | 10.5 | 1 | 58% | 0 |
+| `train_car_baggage` | 5 | 426 | 13.3 | 1 | 61% | 0 |
+| `train_car_business` | 7 | 567 | 11.9 | 1 | 58% | 0 |
+| `train_rooftop` | 0 | 0 | | | | guard walls only |
 | `practice_hub` | 181 | 858 | 7.4 | 1 | 41% | 3 |
 | `canyon` | 25 | 1091 | 13.7 | 0 | 86% | 0 |
 | `env_terrain`, `horizon_ridge` | 0 | 0 | | | | all ground or rock |
 
-Expect the train to be the hardest to paint: 371 meshes share one 256 px image at 4.3 px/m, and the 132 smallest pieces get fewer than 16 px² each. The Saloon's greybox GLB, `saloon_interior`, is retired: its last pieces, the chandelier, became `saloon_lamps` (71.1 px/m; its six shades, fonts, and flames and the chain links are flat colour). `saloon_balcony` gets 16.8 px/m: its 13.4 m fascia and deck are single islands, and its 48 balusters are flat colour. `saloon_dressing` gets 40.9 px/m; its shards, splinters, checks, and cards are flat colour. The two modules are the opposite case: one table gets 95 px/m and one chair 171 px/m, painted once for every copy. `saloon_shell` gets 6.4 px/m, under the sheet's estimate of 8 (G2): the floor (13.4 × 17.4 m) and each wall are one island, and the ceiling bays are next largest, so a 4.2 m wall gets about 27 px of height; its one TINY mesh is `Shell_Iron` (the hasp and the hatch ring), left flat. Painting those GLBs well means a few large flat colours per surface, not fine detail. If a GLB needs more, the lever is a bigger image or splitting the GLB, not a smaller pad; neither is decided.
+The train is split into one GLB per asset (`docs/design/scenarios/train_rooftop.md` H). The final coach module gets 12.5 px/m for all four copies: its walk top is one island and each side wall one island between its window holes; wheels, vents, and railing bars are flat colour. The coupler module gets 141.2 px/m. The final engine gets 10.5 px/m: its tender walk top is one island, and its wheels, logs, rods, and small brass are flat colour. The final baggage car gets 13.3 px/m and the final business car 11.9 px/m: each walk top is one island, each baggage door leaf one island, and their wheels, balusters, lamp caps, and jacks are flat colour; the greybox ladder's TINY rungs are gone with it. The Saloon's greybox GLB, `saloon_interior`, is retired: its last pieces, the chandelier, became `saloon_lamps` (71.1 px/m; its six shades, fonts, and flames and the chain links are flat colour). `saloon_balcony` gets 16.8 px/m: its 13.4 m fascia and deck are single islands, and its 48 balusters are flat colour. `saloon_dressing` gets 40.9 px/m; its shards, splinters, checks, and cards are flat colour. The two modules are the opposite case: one table gets 95 px/m and one chair 171 px/m, painted once for every copy. `saloon_shell` gets 6.4 px/m, under the sheet's estimate of 8 (G2): the floor (13.4 × 17.4 m) and each wall are one island, and the ceiling bays are next largest, so a 4.2 m wall gets about 27 px of height; its one TINY mesh is `Shell_Iron` (the hasp and the hatch ring), left flat. Painting those GLBs well means a few large flat colours per surface, not fine detail. If a GLB needs more, the lever is a bigger image or splitting the GLB, not a smaller pad; neither is decided.
 
 ### Keeping your work (`uv_lock`)
 
@@ -636,12 +646,12 @@ The script did the unwrap. What is left is a look in Blender (Material Preview) 
 
 #### Train Rooftop
 
-`assets/models/scenarios/train_rooftop/train_rooftop.blend`, `train_rooftop.glb` and `horizon_ridge.glb`. Build script `dev/build_train_rooftop_blender.py`. The duel is on the car roofs, so check those first.
+`assets/models/scenarios/train_rooftop/train_rooftop.blend`, `train_rooftop.glb` and `horizon_ridge.glb`. Build script `dev/build_train_rooftop_blender.py`. The duel is on the car roofs, so check those first. Since the split (`docs/design/scenarios/train_rooftop.md` H) this list is out of date: the greybox coaches and couplers it names are gone (replaced by `train_car_coach` and `train_coupler`), the other greybox pieces moved to `train_car_baggage` and `train_car_business`, which are final now too (five and seven merged objects), and the engine is final (eight merged objects, `Engine_Car` to `Engine_LampGlass`), so the `Engine_*` and `CarRearBLadder_Rail*` items below no longer apply.
 
 - [ ] `Car*_Roof` and `Car*_Lip*` on Shingles.
 - [ ] `Engine_Boiler`, `Engine_Smokebox`, `Engine_Stack`, `Engine_Pilot`, `CarRearBLadder_Rail*` (flagged).
 - [ ] The 161 wheels, axles, and couplers are on Metal, with wheel caps on Blank. They sit under the cars; lock any you fix.
-- [ ] `horizon_ridge` and the `M_Cap`/`M_Rock` blocks have tiling UVs only.
+- [ ] `horizon_ridge` and the `M_Cap`/`M_Rock` blocks have tiling UVs only. The `Canyon`, `Mesa`, and `Butte` spans are final (four, four, and three tiling objects, from `dev/build_horizon_ridge_finals_blender.py`, which writes their 8 m tiling UVs itself).
 
 #### Practice Hub
 

@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Status | `planned`. Decided 2026-10-23 (section F); nothing is built. The engine smoke is a separate Roadmap item (F13) |
+| Status | `partial`: built, untextured, awaiting the user's review. Decided 2026-10-23 (section F). Built 2026-10-26 in five batches (H): the GLB split (C step 1), the hero `train_car_coach` with `train_coupler` (C step 2), `train_engine` (C step 3), `train_car_baggage` with `train_car_business` (C step 4), and the horizon's `Canyon`, `Mesa`, and `Butte` spans (C step 6, built by the F19 finals script), all final and untextured; batch 5 also fixed two coplanar spots on the coach. Still to do: the in-context review in a headset (D) and Quest timing. The engine smoke is a separate Roadmap item (F13) |
 | Kind | Scenario design sheet: greybox to final, untextured, UV-unwrapped meshes |
-| In code | Greybox only. `dev/build_train_rooftop_blender.py` writes `train_rooftop.glb` (the consist: 371 visible meshes, 6,908 triangles, 30 proxies) and `horizon_ridge.glb` (three spans, 14 meshes, 168 triangles) beside `train_rooftop.blend` in `assets/models/scenarios/train_rooftop/`. `scenarios/train_rooftop/train_rooftop.tscn` instances the consist as `Train`, Main Street's `env_terrain.glb` as `Terrain`, and `Scenery` (`scenery_belt.gd`), which loops 90 Main Street tracks, 180 cactus clones, and 84 horizon spans past the stationary train |
+| In code | Split into one GLB per asset in `train_rooftop.blend` (`assets/models/scenarios/train_rooftop/`), exported by `dev/unwrap_per_glb_blender.py`: `train_car_coach` (final, 1,556 triangles in 5 objects, ×4), `train_coupler` (final, 100 triangles, ×6), `train_engine` (final, 2,294 triangles in 8 objects), `train_car_baggage` (final, 1,156 triangles in 5 objects), `train_car_business` (final, 1,602 triangles in 7 objects), `train_rooftop` (the four guard walls only), and `horizon_ridge` (11 meshes, 669 triangles: `Canyon` 292 in 4 objects, `Mesa` 236 in 4, `Butte` 141 in 3, all final), all built, untextured, and awaiting the user's review. The spans come from `dev/build_horizon_ridge_finals_blender.py` (F19). `scenarios/train_rooftop/train_rooftop.tscn` instances them under the greybox node names (`CarA`, `Coupler2`, `Engine`, …), keeps `Train` for the guard walls, and adds Main Street's `env_terrain.glb` as `Terrain` and `Scenery` (`scenery_belt.gd`), which loops 90 Main Street tracks, 180 cactus clones, and 84 horizon spans past the stationary train: 46,691 triangles in 902 objects in all (H, Whole scene). The greybox came from `dev/build_train_rooftop_blender.py`, which must not be re-run (G7). The scene facts below describe the greybox as measured before the split |
 | Prompt | [`prompts/train_rooftop.md`](prompts/train_rooftop.md) |
 | Inherits | [`main_street.md`](main_street.md): global rules 1 to 28, the palette, the backdrop method, and the build lessons. [`canyon.md`](canyon.md): the rock vocabulary, the four rock values, and the band order, for `horizon_ridge`. [`saloon.md`](saloon.md): brass, lamp glass, and two build lessons. The exceptions are in A, each with its reason |
 
@@ -94,7 +94,7 @@ From an eye 1.7 m over the roof (y 4.9) at one spawn, looking at a duelist at th
 - **The field at head height is the sky** from both spawns: the Canyon's "open field", which the Canyon rejected for its own rung, the pale Ghost (backdrop check).
 - **The roofs are the floor of every view.** The player's own roof runs from under the feet to 10 m ahead. A 10 cm feature is 72 px tall at 2 m on a Quest 3 and 7 px at 20 m.
 - **Over the edge.** From the walk's centre the car's own side is hidden by the roof edge; the ground shows from about 4.6 m out. A player at a guard wall leaning out sees the side.
-- **Death cam.** It orbits the corpse's chest at 3.2 m (1.4 to 7 m), 16° up, with no collision, so it swings up to about 3 m outside the car sides at roof height plus 1 m. The duel cars' upper sides, eaves, and windows near both spawns are seen there from 1.5 to 3 m.
+- **Death cam.** It orbits the corpse's chest at 3.2 m (1.4 to 7 m), 16° up, with no collision, so it swings up to about 3 m outside the car sides at roof height plus 1 m. From that height the 0.30 m eave (F5) hides the windows: the death cam sees the duel cars' deck edges and fascias from 1.5 to 3 m. The side wall itself shows only to an eye below the eave or leaning out past it (found in the hero build, H).
 - **The cab roof** is the walkable front end. From it the boiler top, domes, bell, stack, and headlight are 1 to 7 m ahead and below: the engine's close-range view.
 
 ### The brief's facts, checked
@@ -272,7 +272,7 @@ Signature details, cut from the bottom:
 
 Signature details, cut from the bottom:
 
-1. The coach's deck and walk, with two express hatches 1.0 × 1.0 m, 6 cm proud with bone rims, one each side of the walk.
+1. The coach's deck and walk, with two express hatches 0.80 × 1.0 m (across by along: the strip between the walk and the deck's edge is 1.0 m), 6 cm proud with bone rims, one each side of the walk.
 2. A sliding door each side, 1.8 × 1.6 m, blue with bone Z-bracing, on an iron top track; the shut door shows its edge 4 cm proud.
 3. A blind front end toward the tender: no door, no gate, the railing closed.
 4. Two small high windows a side, 0.5 × 0.4 m, ink in bone frames.
@@ -288,7 +288,7 @@ Signature details, cut from the bottom:
 
 | | |
 |---|---|
-| Role | `CarRearB`, z 27.0 to 39.0: the end of the train and the company agent's car (`sheriff.md`: on the train the company's agent outranks the Sheriff). From `EnemySpawn` its roof is behind the player's thighs and hips (−2.6° to −2.0°), and its rear edge is the line at his hips. `GuardEndRear` stands just past it; a player there looks down on the observation platform |
+| Role | `CarRearB`, z 27.0 to 39.0: the end of the train and the company agent's car (`sheriff.md`: on the train the company's agent outranks the Sheriff). From `EnemySpawn` its roof is behind the player's thighs and hips (−2.6° to −2.0°), and its rear edge is the line at his hips. `GuardEndRear` stands just past it. The deck runs on over the observation platform, so from the roof it shows only to a player leaning out over `GuardEndRear`; it is seen from behind the train |
 | Size | The coach's body and trucks; the rear platform deepened to 1.2 m inside the body proxy; six wider windows a side, 1.0 × 0.95 m |
 | Squint | From the lane: a blue deck with two smoke jacks at its corners. From the rear: a gold railing round an open platform under the deck's end, two lamps at its corners. Company blue, brass, ink |
 | Triangles | 916 today; 1,800 at most |
@@ -371,9 +371,9 @@ Signature details, cut from the bottom:
 The Canyon's rock vocabulary at the belt's own size floor, so the train's desert and the Canyon's read as one country (E).
 
 - **Pieces.** Ledge slabs, fluted slabs, cap slabs, chamfered blocks, wedges, pillars, and fallen blocks, as the Canyon defines them, at a 0.5 m floor: chamfers 0.5 m or more, flutes 1.0 to 1.5 m apart (at 7 m/s one passes in 10 to 15 frames at 72 Hz, so it does not strobe). Big planes, one planar n-gon per flat region, edges hard, vertices on a 0.25 m grid. No per-vertex noise, subdivision, or slivering booleans.
-- **Bands** over the span's foot, as on the Canyon's walls: apron of 35° wedges to 2.0 to 2.5 m; lower body; one violet slab from 7.0 to 8.25 m standing 0.3 m or more proud or set back (never flush); upper body; a bone cap 1.25 to 2.0 m tall overhanging 0.5 to 0.8 m, broken into blocks with sky between them.
-- **Colour by face** (rule 17 by this sun): a face the sun ever reaches (its normal leans to +x or +z) is vermilion; a face it never reaches (to −x or −z) is pink. So the left-hand side sees vermilion walls and the right-hand side pink ones, as the Canyon's player sees them.
-- **Turned planes.** On the vermilion face, main planes turned 15 to 45° toward +z take the full step at dawn, late afternoon, and dusk. On the pink face, a sawtooth of planes turned 50 to 60° toward +z takes the middle step at every hour, and those planes face you as a span comes toward you: lit teeth on the shade side.
+- **Bands** over the span's foot, as on the Canyon's walls: apron of 35° wedges to 2.0 to 2.5 m (so the toe stands about 3.4 m out from the body, wherever that puts it: see `Canyon`'s Size); lower body; one violet slab from 7.0 to 8.25 m standing 0.3 m or more proud or set back (never flush); upper body; a bone cap 1.25 to 2.0 m tall overhanging 0.5 to 0.8 m, broken into blocks with sky between them.
+- **Colour by side first** (rule 17 by this sun, as built in H). Bone and violet stay. A rock face whose plan normal leans to Blender +X (x 0.3 or more) is vermilion, and one leaning to −X is pink, whatever its turn toward the ends. A face along the span is vermilion toward −Y (Godot +z, the end the sun reaches) and pink toward +Y. A ledge top takes its side's colour (the low ledge ring is split at x 0); a top above the eye takes the colour of its centre. Why side first, not "every face the sun reaches is vermilion": the pink face's teeth turn toward Godot +z, so they do take sun, but they must stay pink, so the shade side reads pink with lit teeth. So the left-hand side sees vermilion walls and the right-hand side pink ones, as the Canyon's player sees them.
+- **Turned planes.** On the vermilion face, main planes turned 15 to 45° toward +z take the full step at dawn, late afternoon, and dusk. On the pink face, a sawtooth of planes turned 51 to 60° toward +z takes the middle step at every hour (at 50° the noon N·L is 0.0298, under the band's start at 0.03; the spans' teeth are built at 56.3°, N·L 0.067), and those planes face you as a span comes toward you: lit teeth on the shade side.
 - **Both sides finished.** Every part has a counterpart on the other face, placed differently. Nothing is one-sided.
 - **Closed ends** (F15): within the last 6 to 8 m at each end the span steps down to its apron in two or three steps, so any neighbour at any offset reads as a separate formation with a saddle between. Keep the 47.75 m length and the 0.125 m clearance at each end.
 - **No coplanar faces.** Build each span as one exact self-union per material, as the Canyon's cliffs were built, then dissolve coplanar faces. Pieces of different materials step at least 0.3 m. Span bases sit at y 0, 12 cm under the terrain's top; no face lies at 0.12.
@@ -385,7 +385,7 @@ The Canyon's rock vocabulary at the belt's own size floor, so the train's desert
 | | |
 |---|---|
 | Role | The mid band's even slots, x ±28 to ±40 at 7 m/s: the tallest and nearest walls, 15 to 21% fogged at their nearest. Its right-hand copies throw the passing shadows at dawn and dusk |
-| Size | Greybox: talus 18 × 47.75 × 2.0 m, wall 8 × 47.70 m to 17.7, buttress 1.8 × 4.5 m to 10.4 on the +x face, cap 6 × 12 m to 19.7. Final: a ridge 8 to 10 m thick on a talus skirt to ±9 m, skyline tops 14 to 19.7 m in segments about 6 m long |
+| Size | Greybox: talus 18 × 47.75 × 2.0 m, wall 8 × 47.70 m to 17.7, buttress 1.8 × 4.5 m to 10.4 on the +x face, cap 6 × 12 m to 19.7. Final: a ridge 8 to 10 m thick on a talus skirt, skyline tops 14 to 19.7 m in segments about 6 m long. As built (H): the 35° apron meets the 9.25 m ridge's faces at 2.36 m, so its toe stands at x 7.875 and −8.125, not ±9 (a toe at ±9 would meet them at about 3.1 m); the free pillars and fallen blocks reach out to x ±9 |
 | Squint | From the left: a long vermilion wall with a violet stripe and a broken bone top. From the right: the same wall in pink with lit teeth. Vermilion or pink, violet, bone |
 | Triangles | 48 today; 300 at most |
 
@@ -469,14 +469,14 @@ Signature details, cut from the bottom:
 | Lane E | Godot | Eye at (0, 4.9, −10), looking at (0, 4.9, 10) | The coach roofs, the business car, the rear edge, the backlit side |
 | Strafe | Godot | From Lane P's eye, aimed at (±1.5, 4.9, −10) | The deck under the boot at each end of the swing; what stands behind the legs there |
 | Down | Godot | Eye at (0, 4.9, 10) pitched 60° down; eye at (0, 4.9, 1.2) pitched 75° down over the mid-lane gap | The deck, walk, hatch, vents; the open gap, its platforms, the coupler, the track below |
-| Edge | Godot | Eye at (±1.3, 4.9, 7), looking at (±4, 1.5, 7) | The fascia, eave, letterboard, windows, trucks, and truss on both sides |
-| Death cam | Godot | Eye at (±3.08, 4.28, −10), looking at (0, 3.4, −10) | The duel car's upper side at the orbit's range |
+| Edge | Godot | Eye at (±2.1, 4.6, 7), leaning out past the eave, looking at (±1.45, 1.8, 7); and from the ground beside the car, eye at (±4.5, 2.2, 7), looking at (0, 2.2, 7) | The fascia, eave, letterboard, windows, trucks, and truss on both sides |
+| Death cam | Godot | Eye at (±3.08, 4.28, −10), looking at (0, 3.4, −10) | The duel car's deck edge and fascia at the orbit's range (the eave hides the windows) |
 | Cab | Godot | Eye at (0, 4.9, −48.7), looking at (0, 3.0, −55) | Boiler top, domes, bell, stack, headlight's back, pilot |
-| Rear | Godot | Eye at (0, 4.9, 38.8) pitched 55° down toward +z | The observation platform, railing, lamps |
+| Rear | Godot | From behind the train: eye at (0, 3.0, 46), looking at (0, 2.0, 38). From the roof the deck hides the platform | The observation platform, railing, lamps |
 | Pass | Godot | From Lane P's eye, aimed at (±35, 8, −40) | Spans arriving on both sides, their ends, the far band's repeat |
 | Top | Blender, the asset's `.blend` | Straight down from 1.7 m over the walk's centre | Every car (the roof as the player sees it) |
-| Side | Blender | From +x, 10 m out, 2.0 m up, aimed at the asset's centre, 50 mm lens; spans from x 34 (mid) or 85 (far), 4.9 m up | Every asset (its duel-lane view in Blender) |
-| Three-quarter | Blender | 45° between +x and −z (the front), 15 m out, 4.9 m up, 50 mm lens | Every asset |
+| Side | Blender | From +x and −x, 2.0 m up, aimed at the asset's centre: a car 22 m out with a 50 mm lens, the engine 26 m out with 50 mm or 15 m with 24 mm (50 mm at 10 m frames neither a 12.3 m car nor the 16.6 m engine); spans from x ±34 (mid) or ±85 (far), 4.9 m up, at 35 or 24 mm | Every asset (its duel-lane view in Blender) |
+| Three-quarter | Blender | 45° between +x and −z (the front), 15 m out, 4.9 m up, 35 mm lens (50 mm does not frame a car at 15 m) | Every asset |
 | Silhouette | Blender: Workbench, flat lighting, one black colour, white world | Side, end-on, and the Top view; spans from both faces | Every asset |
 | Squint | The Side render | Shrunk to 64 px wide, enlarged back with nearest filtering | Every asset |
 
@@ -504,14 +504,14 @@ Signature details, cut from the bottom:
 13. Do the gaps across the lane read as clean dark joints, with the walk's toothed ends on both sides?
 14. At dawn and dusk: do the passing shadows read the way F16 decided?
 15. Pass: does any span pop, show a seam where it meets a neighbour, or show a cut end? Does the far band's repeat show?
-16. Death cam and Edge: do the car side, letterboard, and windows read at 1.5 m without shimmer when you move your head?
+16. Edge: do the car side, letterboard, and windows read at 1.5 m without shimmer when you move your head? Death cam: does the deck edge read as a clean blue line?
 17. In a headset: does crossing an open gap on the invisible walk read as a stride over a joint rather than a fall? Does the walk feel 3.2 m off the ground when you lean out?
 
 ### Asset checks
 
 | Asset | Check |
 |---|---|
-| `train_car_coach` | Is the walk at 3.20 under all seven markers? Does the sprung board sit in a free band on both duel cars? Does the death cam see blue, bone, and ink, not black? |
+| `train_car_coach` | Is the walk at 3.20 under all seven markers? Does the sprung board sit in a free band on both duel cars? From the Edge views, do the sides read blue, bone, and ink, not black? |
 | `train_car_baggage` | From Lane P, does the smoke jack stay beside the enemy, not behind him? |
 | `train_car_business` | From Lane E, do the smoke jacks stay beside the player? Do the marker lenses glow and cast no shadow? |
 | `train_engine` | Is the tender's slot closed? Does the headlight glow? Does the stack's crown stay at 4.40? |
@@ -528,7 +528,7 @@ Run `--import`, then `--autotest=load` (the world shader on every surface of eve
 & "C:\Users\lukeg\Downloads\Godot_v4.7-stable_win64.exe\Godot_v4.7-stable_win64_console.exe" --headless --path . -- --autotest=multi
 ```
 
-`load` only checks that the belt built 80 pieces, which the tracks alone pass. Count them: 90 tracks, 180 cacti, 84 spans, 354 in all. Headless runs do not compile shaders. The look needs a flat run, then a headset.
+`load` does not see the belt's cloned spans or cactus copies: they are `duplicate()`s, which its scenario-GLB check (`_in_scenario_glb`) skips. It covers the belt only by the count of at least 80 pieces, which the tracks alone pass, and by the template GLBs' own surfaces. So count the belt in a flat run: 90 tracks, 180 cacti, 84 spans, 354 children under `Scenery`, every span copy on the world shader and none swaying. Headless runs do not compile shaders. The look needs a flat run, then a headset.
 
 ## E. Cross-scene dependencies
 
@@ -610,6 +610,480 @@ Where the existing texturing pipeline (`docs/TEXTURING.md`) adds work or constra
 16. **The texturing docs go stale.** `TEXTURE_LIST.md` and the Train Rooftop rows in `TEXTURING.md` (one GLB, 371 meshes at 4.3 px per metre) will be wrong after the split. Simplest: refresh them from the script's printout.
 
 The trim sheet, its texel-density targets, and the texture ripper play no part in this sheet.
+
+## H. As built
+
+### The split (C step 1)
+
+Done on 2026-10-26 in `train_rooftop.blend`, by hand in a headless Blender session (a throwaway script outside the repo; F19: no train finals script in `dev/`). Every parentless empty is now one GLB root, exported by `dev/unwrap_per_glb_blender.py`:
+
+| Root (GLB) | Parked in the `.blend` at Blender y | Holds | Proxies |
+|---|---|---|---|
+| `train_car_coach` | −6.6 (`CarA`'s place) | The final coach (below) | `Coach_Body`, `Coach_Roof` |
+| `train_coupler` | 0 (`Coupler2`'s place) | The final coupler (below) | `Coupler_GapWalk` |
+| `train_engine` | 40.2 (the greybox `Engine` root, unparented and renamed) | The greybox engine, geometry unchanged | `Engine_TenderBody`, `Engine_TenderRoof`, `Engine_Fuel`, `Engine_CabBody`, `Engine_CabRoof`, `Engine_GapWalk`, `Engine_Boiler`, `Engine_Pilot` |
+| `train_car_baggage` | 33.0 (was `CarFrontB`) | The greybox car, geometry unchanged | `Baggage_Body`, `Baggage_Roof` |
+| `train_car_business` | −33.0 (was `CarRearB`, with its ladder) | The greybox car, geometry unchanged | `Business_Body`, `Business_Roof` |
+| `train_rooftop` | 0 | Nothing visible | `GuardSideL`, `GuardSideR`, `GuardEndRear`, `GuardEndFront`, boxes unchanged |
+| `horizon_ridge` | 0 (children parked as before) | Unchanged | none |
+
+All proxies carry `-convcolonly`. Deleted: `CarRearA`, `CarA`, `CarB`, `CarFrontA` (50 objects each), `Coupler0` to `Coupler4` (4 meshes each), the six `GapWalk*` proxies, and the buried `BulkA`/`BulkB` of the baggage and business cars (4 objects, 48 triangles). The export zeroes each root's location, so every GLB is modelled from its own origin and the scene carries the offsets.
+
+- **Scene.** `train_rooftop.tscn` keeps `Train` (now the four guard walls) and gains, under the greybox node names, with no rotation: `CarRearB` (business) at z 33.0, `CarRearA`, `CarA`, `CarB`, `CarFrontA` (coach) at 19.8, 6.6, −6.6, −19.8, `CarFrontB` (baggage) at −33.0, `Engine` at −40.2 (the greybox root's Blender y, checked: its instance spans z −40.27 to −56.83 and up to y 4.40, as the greybox did), and `Coupler0` to `Coupler5` at 26.4, 13.2, 0, −13.2, −26.4, and −39.6. Markers, `Sun`, environment, and `Scenery` are untouched. Each new GLB has a `.glb.import` copied from `train_rooftop.glb.import` (`import_script/path`, `gltf/embedded_image_handling=3`), its uid filled in by Godot.
+- **Names.** Godot strips `-convcolonly`, so a proxy may not share a name with a visual sibling: three greybox engine meshes are renamed (`Engine_Boiler` → `Engine_BoilerJacket`, `Engine_CabRoof` → `Engine_CabRoofSlab`, `Engine_Pilot` → `Engine_Cowcatcher`), geometry unchanged. Before that, Godot named those three proxies `@StaticBody3D@…`. `Talus.001` and `Talus.002` in `horizon_ridge` keep their dots until the spans are built (Found 6).
+- **Materials.** The unwrap gave the three greybox GLBs their own copies of the greybox materials (`M_Car__train_car_baggage` and so on: 6 copies each), so they look exactly as before. The `__train_rooftop` copies have no users left and are gone.
+
+### `train_car_coach` (hero) and `train_coupler`
+
+Built on 2026-10-26 in `train_rooftop.blend` under the two new roots, by a throwaway headless script outside the repo that always starts from a backup of the greybox `.blend`. Exported, with every other root, by:
+
+```powershell
+& "C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" -b --python dev/unwrap_per_glb_blender.py -- --map train_rooftop --relayout
+```
+
+- **Tests:** `--import`, then `load`, `multi`, `ragdoll`, and `gauntlet`: all print `AUTOTEST PASS`. `load`: "1191 scenario surfaces wear world_surface.gdshader". `multi`: "rooftop strafe stays continuous and ragdolls ignore the guard walls". `ragdoll`: "spawn markers flush on the floor on every arena".
+- **Belt:** counted in a throwaway run: 354 children under `Scenery` (90 tracks, 180 cacti, 84 spans).
+- **Unwrap:**
+  - `GLB train_car_coach [train_rooftop]: 5 meshes, 561 islands, 12.5 px/m at 256 px (pad 1, 60% covered, 0 tiling meshes untouched); 0 materials copied; image none (flat colour)`
+  - `GLB train_coupler [train_rooftop]: 1 meshes, 35 islands, 141.2 px/m at 256 px (pad 2, 63% covered, 0 tiling meshes untouched); 0 materials copied; image none (flat colour)`
+  - No TINY share on either. No UV overlap across islands (a triangle-pair test on the saved `.blend`), nothing outside 0 to 1. The walk top is one 24-vertex n-gon and one island. 0 copies, because the materials were made under their per-GLB names (`M_Car__train_car_coach`), with the Palette's values, roughness 0.9, metallic 0, Specular IOR Level 0.5, and no emission.
+  - UV islands counted in the `.blend` (faces joined by shared UV edges): `Coach_Car` 19, `Coach_Trim` 147, `Coach_Glass` 18, `Coach_Plank` 68, `Coach_Iron` 317, `Coupler_Iron` 35. The unwrap counts 309 charts in `Coach_Iron`; some of its charts touch only at a vertex.
+  - 12.5 px/m, against G2's estimate of 15: a 7.5 cm texel, about 48 px across at 2 m.
+- **Collision:** `Coach_Body-convcolonly` x ±1.45, u ±6.0, z 1.15 to 3.01; `Coach_Roof-convcolonly` x ±1.525, u ±5.8, z 3.0 to 3.2 (the greybox's 3.05 m; the sheet's 3.04 is a rounding). `Coupler_GapWalk-convcolonly` x ±1.45, ±0.9, z 3.0 to 3.2, one per instance. In Godot after import, a ray down at all seven markers hits `Coach_Roof` at y 3.20, and at z 0, 13.2, and −39.6 it hits `Coupler_GapWalk` at 3.20.
+- **Checks** (scratch scripts on the saved `.blend`): no zero-area triangles, non-planar faces, three-collinear corners, or smooth faces; names unique, no dots. Ray down in the module: the walk top is 3.20 under all seven marker lines; at x ±1.71 (the boot) every marker line lands on the tin at 3.16. No vertex above 3.20 inside u −3.75..−2.75, −1.95..−1.25, or 2.75..4.75. The highest points are the vents, the hinge, the handle, and the sprung board's lifted end, all at 3.26.
+- **Views:** Blender renders: Top from 1.7 m over the walk and an orthographic top, Side at 10 and 22 m from both sides, Three-quarter (front right and rear left), Close views of a platform, a truck, the hatch, and the sprung board, Silhouettes (side, end-on, top), and the 64 px squints. The coupler alone (side, three-quarter, top, silhouettes, squint) and between two coaches at mid-lane (down 75°, from the roof, from the side). Flat Godot captures at noon, dusk, and dawn: Lane P, Lane E, Strafe both ends, Down 60° and over the mid-lane gap at 75°, Edge both sides, and Death cam both sides. Also the cab, the car-to-tender gap from the side and above, the mid-lane gap from beside the track, and the sprung board from `PlayerSpawn`. All outside the repo. The headset review is open.
+
+| GLB | Triangles / budget | Objects | Copies | In scene |
+|---|---|---|---|---|
+| `train_car_coach` | 1,588 / 1,600 | 5 | 4 | 6,352 |
+| `train_coupler` | 100 / 100 | 1 | 6 | 600 |
+| `train_engine` (greybox) | 1,472 / 3,500 | 58 | 1 | 1,472 |
+| `train_car_baggage` (greybox) | 824 / 1,300 | 46 | 1 | 824 |
+| `train_car_business` (greybox) | 892 / 1,800 | 51 | 1 | 892 |
+| `train_rooftop` | 0 | 0 | 1 | 0 |
+| **Train** | | | | **10,140** in 181 objects (the greybox: 6,908 in 371) |
+
+| Object | Material | Triangles | Holds |
+|---|---|---|---|
+| `Coach_Car` | `M_Car__train_car_coach` | 150 | Side walls, end walls, doors, deck tin, fascias, downstands, soffit, hatch cover |
+| `Coach_Trim` | `M_Trim__train_car_coach` | 404 | Letterboards, window frames, reveals, sills, door frames and reveals, hatch rim |
+| `Coach_Glass` | `M_Glass__train_car_coach` | 36 | 16 panes, 2 door lights |
+| `Coach_Plank` | `M_Plank__train_car_coach` | 158 | The walk and the sprung board, platform floors, step treads |
+| `Coach_Iron` | `M_Iron__train_car_coach` | 840 | Trucks, wheels, sills, truss, railings, brake staffs, rungs, grab irons, step hangers, vents, hinge, handle |
+| `Coupler_Iron` | `M_Iron__train_coupler` | 100 | Drawheads, drawbars, link, pins and rings, safety chains |
+
+Against B's lines: body, windows, and ends 524 (B: 450); roof deck, walk, hatch, and vents 276 (250); two platforms 444 (400); trucks 272 (350); underframe and truss 72 (150). The 16 windows take 384 of the body's 524. Coupler: drawheads 16, drawbars 12, link 24, pins and rings 36, chains 12.
+
+**Where the coach departs from B:**
+
+- **Windows.** The bone frames are flush in the wall plane (10 cm members; the top member is 13.5 cm and meets the letterboard, so no strip of blue under 10 cm runs between them). Each side wall is therefore one comb-shaped n-gon (36 vertices) and one island. The reveals run 12 cm back to the ink pane; the head reveal faces down and is deleted (rule 27). Sills are 10 cm tall, 12 cm proud, and 1.0 m long, under each frame.
+- **Letterboard.** 2.76 to 3.01 m, 3 cm proud, the full body length; its top meets the soffit and is deleted, and the wall behind it is not modelled.
+- **Deck.** The tin is two C-shaped faces: each strip plus an 8 cm tab at each end (u ±6.07 to ±6.15, x 0 to ±0.75) that fills the notches between the walk's short boards. The tabs join the two strips, so the tin is one island, not two. Side fascias run 3.01 to 3.16 m. The 0.20 m end fascia is the 0.15 m deck edge over a 10 cm deep downstand from 2.96 to 3.01 m (u ±6.05 to ±6.15). The soffit is two C-shaped faces round the deleted body top.
+- **Walk.** Long boards end at u ±6.15 and short ones at ±6.07. The front reads long, short, long, short, long, short from x −0.75; the rear is the opposite, so the teeth interlock across every gap.
+- **Sprung board.** The outermost right-hand board (x 0.50 to 0.75) from the rear end (u −6.15) to u −5.0, as its own piece, with the end at −5.0 lifted 6 cm. The walk n-gon is notched round it. On `CarB` it lies at z −1.6, x 0.5 to 0.75.
+- **Hatch.** A bone rim 0.70 × 0.90 m, 10 cm wide and 8 cm proud (top at 3.24), with the blue cover flush inside it. The hinge (on the outboard edge) and the handle are iron straps 10 cm wide and 2 cm tall on top, to 3.26 m, so the roof's 10 cm ceiling holds. Their 2 cm height is under the size floor.
+- **Vents.** 6-sided (rule 9): a 14 cm stem to 3.21 m and a 25 cm cap to 3.26 m. The left-hand vents are at u −5.0 and 0.8, the right-hand ones at −2.35 and 5.4, so the 0.8 vent sits across the walk from the hatch.
+- **Platforms.** A raw-wood floor from 1.13 to 1.23 m. Two treads a side, 10 cm thick at 0.84 and 0.45 m, hang outboard of the body line (x 1.45 to 1.70, under the eave) on 8 cm iron hangers at each end: the platform floor is too close to the sill for treads under it. The railing is posts at x ±0.39 and ±1.41, with a top rail at 2.15 to 2.23 and a mid rail at 1.69 to 1.77 m, and no balusters (the triangle budget). The gate gap is 0.70 m between the posts' inner faces. The brake staff is 6-sided, 8 cm across its flats, with an 8-sided wheel 0.45 m across at 2.27 to 2.33 m: front platform at the right corner, rear at the left. Three solid iron rungs (0.40 × 0.10 × 0.08 m) at 1.55, 2.05, and 2.55 m stand on the other side of the door. Grab irons, 8 cm square from 1.35 to 2.35 m, stand at the end wall's corners.
+- **End wall and door.** The blue leaf is recessed 5 cm behind a bone frame whose head (13 cm) meets the soffit. The ink light, 0.45 × 0.60 m, is flush with the leaf. Each door frame is three mitred quads. One n-gon frame per end gave the object exactly two faces of more than four vertices, which `scenery_uv._is_cylinder` read as a cylinder's caps, so the unwrap unrolled all of `Coach_Trim` as one cylinder (788 overlapping triangle pairs) until it was split.
+- **Underframe.** The wooden sills are one iron box, x ±1.45, u ±6.0, 0.95 to 1.13 m. The body wall and the platform floors start at 1.13, 2 cm under `Coach_Body`'s 1.15.
+- **Trucks.** The wheels are exactly the greybox's: 8 sides, bottoms at 0.21, treads x ±0.62 to ±0.82, axle centres at u ±3.7 ± 0.72. Side frames stand outside the wheels (x ±0.86 to ±0.98), with a dropped middle that reads as the equalizer bar. Axle boxes stand on the frames at each axle, and a bolster crosses at 0.78 to 0.95 m. Rule 27 deletes the axles, the wheels' inner caps, and the two tread faces that face down: from every view in D the axles are hidden by the wheels, the side frames, and the sill.
+- **Truss.** Two 8 cm square rods at x ±1.30 drop from the sill at u ±3.7 to queen posts at u ±1.2 (rod at 0.55 m, 0.4 m under the sill), with a 10 × 25 cm turnbuckle block at u 0. The faces toward the car's centre and the downward faces are deleted.
+- **Unseen undersides deleted:** the vent caps, the brake wheels, the step treads, the rungs.
+
+**Where the coupler departs from B:**
+
+- **Height.** The drawheads are centred at 1.04 m (0.30 m cubes, 0.89 to 1.19 m) at ±0.25 to ±0.55 m from the gap centre, under the platform floors' level. Their faces toward the cars, in a 5 cm slot, and their bottoms are dropped. The drawbars (14 cm square) run on to ±0.85 m, 0.25 m into each car's sill.
+- **Link.** A 6-sided oval, 0.88 m long and 0.28 m wide over the 8 cm bar, its ends inside the drawheads. Top and outer faces only: the shader draws both sides, so its far bar's back shows through the hole.
+- **Pins.** 8 cm square, not 6-sided as rule 9 asks: the budget. Each stands 0.25 m above its drawhead with a flat ring 0.24 m across (8 cm bar), facing along the train. The front pin (toward the engine) leans 10° toward the gap centre.
+- **Chains.** Three links a side at x ±0.45, each a flat diamond 0.46 m long and 0.10 m wide, the middle one in the vertical plane and the outer two flat. They droop from 1.04 m at the ends to 0.80 m. "Three 10 cm links" cannot span a 1.2 m gap, so the links are 10 cm wide and about 0.46 m long.
+- **The car-to-tender gap** (`Coupler5`, z −39.6): the car's end is 0.6 m from the centre and the tender's rear face 0.72 m. The drawbar reaches 0.85 m and a chain end 0.74 m, so both meet the tender's face line, with the same module at all six gaps. The greybox tender has no end beam at coupler height (its body starts at 1.15 m), so the drawbar and chain ends run 2 to 13 cm under its body. The engine's final needs an end beam there, about 0.95 to 1.15 m.
+
+**Build lessons:**
+
+- `scenery_uv._is_cylinder` takes any object with exactly two faces of more than four vertices and quads elsewhere as a cylinder, if the n-gons' corners lie near a circle. A merged per-material object can trip it. After the unwrap, check UV overlap, or keep n-gons off such objects (more than two, or none).
+- Godot strips `-convcolonly`. A proxy named like a visual sibling (`Engine_Boiler`) imports as `@StaticBody3D@…`.
+- Workbench F12 renders take the world colour, not the viewport background: set `scene.world.color` to white for silhouettes.
+
+**Found while reviewing:**
+
+- **The Edge and Death cam views in D do not see the car's side.** From (±1.3, 4.9, 7) the eye is inside the 0.30 m eave, so the deck hides everything below it out to about x 2.6 on the ground. From (±3.08, 4.28, −10) looking at (0, 3.4, −10) the eye is 1.1 m above the tin and looks down across the deck: it sees blue tin, the walk, and the fascia, not the letterboard or windows. D16 and the coach's asset check ("does the death cam see blue, bone, and ink") need an eye below about 3.0 m to look at the side.
+- **Noon.** The raw-wood walk under the noon sun and grain draws nearly white in the flat capture, close to the bone trim. The silver walk on blue tin reads at every time; at dawn and dusk it is mid-brown.
+- **The gaps.** From Lane P the mid-lane gap reads as a dark joint with the toothed walk ends on both sides, and through it the far platform's railing, the coupler's pins, and the track. The sprung board shows from `PlayerSpawn` as a short raised step at the far side of the mid-lane gap.
+
+**Still open:**
+
+- The rest of C: `train_engine` (done, below), `train_car_business` and `train_car_baggage` (the coach's kit; done, below), then `horizon_ridge`. The coupler is already at all six gaps.
+- The in-context review in a headset: D items 10 to 17, and the coach's and coupler's asset checks there (the gap crossing, leaning out at a guard wall).
+- Late afternoon flat captures, and three captures 2 s apart per view (only one per view was taken).
+- Whether 12.5 px/m on the coach is enough to paint the deck (G2).
+- Quest timing: the train is 181 objects (was 371).
+
+### `train_engine` (C step 3)
+
+Built on 2026-10-26 in `train_rooftop.blend` under the `train_engine` root only, by a throwaway headless script outside the repo that starts from a backup of the `.blend` holding the approved coach and coupler. It deletes the root's 58 greybox visuals, keeps the eight proxies untouched, deletes the stale copies (`M_Boiler__train_engine`, `M_CarDark__…`, `M_Lamp__…`, `M_Window__…`), and writes the eight materials under their per-GLB names with the Palette's values, roughness 0.9, metallic 0, Specular IOR Level 0.5, and no emission. Every other root is untouched. Exported alone by:
+
+```powershell
+& "C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" -b --python dev/unwrap_per_glb_blender.py -- --map train_rooftop --glb train_engine --relayout
+```
+
+- **Tests:** `--import`, then `load`, `multi`, `ragdoll`, and `gauntlet`: all print `AUTOTEST PASS`. `load`: "1141 scenario surfaces wear world_surface.gdshader (… 3 self-lit …)" (1191 before: the engine went from 58 meshes to 8). `multi`: "rooftop strafe stays continuous and ragdolls ignore the guard walls". `multi` and `ragdoll`: "spawn markers flush on the floor on every arena".
+- **Unwrap:** `GLB train_engine [train_rooftop]: 8 meshes, 573 islands, 10.5 px/m at 256 px (pad 1, 58% covered, 0 tiling meshes untouched); 0 materials copied; image none (flat colour)`. No TINY share (a first pass flagged the lamp glass at 15.8 px²; the lens grew from 0.38 to 0.41 m across). UV islands counted in the `.blend`: 575 (`Engine_Brass` 69, `Engine_Car` 12, `Engine_Glass` 4, `Engine_Iron` 326, `Engine_LampGlass` 1, `Engine_Plank` 10, `Engine_Red` 122, `Engine_Trim` 31). No UV overlap between any two triangles of different faces, nothing outside 0 to 1. The tender walk top is one quad and one island. No object trips `scenery_uv._is_cylinder` (each has 0, 1, or more than 2 n-gons; checked by calling it).
+- **Other GLBs:** `train_car_coach`, `train_coupler`, `train_car_baggage`, `train_car_business`, `train_rooftop`, and `horizon_ridge` are byte-identical before and after (MD5); in the `.blend` they hold 5/1,588, 1/100, 46/824, 51/892, 0/0, and 14/168 objects/triangles, as before.
+- **In Godot:** a ray down hits `Engine_TenderRoof` at y 3.20 on the tender deck (z −41.0, −43.5, −45.5), `Engine_GapWalk` at 3.20 over the tender-to-cab gap (z −47.4), `Engine_CabRoof` at 3.20 on the cab roof (z −48.7, −49.4), and `Coupler_GapWalk` at 3.20 at z −39.6. The proxies import as `StaticBody3D` under their own names (`Engine_Boiler`, `Engine_CabBody`, …: no `@StaticBody3D@`). `Engine_LampGlass` is self-lit and casts no shadow; every other engine mesh casts. Four `Guard*` walls. The `Engine` instance spans x ±1.525, y 0.21 to 4.40, z −40.24 to −56.83.
+- **Checks** (scratch scripts on the saved `.blend`): no zero-area triangles, non-planar faces, three-collinear corners, or smooth faces; no two overlapping triangles share a plane anywhere on the engine; names unique, no dots, and no visual shares a stripped name with a proxy. The highest vertex is the stack's crown at 4.40; nothing else passes 3.73 (the headlight's chimney). Tops: steam dome and whistle 3.58, sand dome 3.33, bell yoke 3.34. Every wheel bottom is at 0.21 with its tread at x ±0.62 to ±0.82.
+- **Views:** Blender renders: Side from +x at 15 m (24 mm) and at 26 m (50 mm: a 50 mm lens at 10 or 15 m cannot frame the 16.6 m engine), Side from −x at 26 m, Three-quarter (front right and rear left), orthographic Top, the cab view, the tender walk, Close views of the running gear, domes, stack and headlight, cab window, pilot, and the tender's rear, Silhouettes (side, front, rear, top), the 64 px squints, and the car-to-tender gap with `Coupler5` and the baggage car. Flat Godot captures at noon and dusk: Lane P (wide and zoomed on the engine), the Cab view, a low side view from both sides, a front quarter, the car-to-tender gap from beside the track and from above, and the tender deck. All outside the repo. The headset review is open.
+
+| GLB | Triangles / budget | Objects | Copies | In scene |
+|---|---|---|---|---|
+| `train_engine` | 2,294 / 3,500 | 8 | 1 | 2,294 |
+| **Train** | | | | **10,962** in 131 objects (after the coach: 10,140 in 181) |
+
+| Object | Material | Triangles | Holds |
+|---|---|---|---|
+| `Engine_Car` | `M_Car__train_engine` | 58 | Tender sides and ends, deck tin, cab walls, boiler jacket |
+| `Engine_Trim` | `M_Trim__train_engine` | 154 | Tender rim, four arched window frames and their reveals |
+| `Engine_Glass` | `M_Glass__train_engine` | 24 | Four cab panes |
+| `Engine_Plank` | `M_Plank__train_engine` | 272 | Tender walk, the cordwood heap |
+| `Engine_Iron` | `M_Iron__train_engine` | 846 | Smokebox and door, stack, cylinders and saddle, cab roof and floor plate, frames, running boards, handrails, rods, crossheads and guides, counterweights, crank bosses, pilot beam, truck frames, tender sills and end beams, grab irons, fall plate, drawbar, headlight bracket |
+| `Engine_Brass` | `M_Brass__train_engine` | 494 | Bands, steam and sand domes, whistle, bell and yoke, headlight body |
+| `Engine_Red` | `M_Red__train_engine` | 440 | Drivers, pilot and tender wheels, cowcatcher |
+| `Engine_LampGlass` | `M_LampGlass__train_engine` | 6 | The headlight lens |
+
+Against B's lines (about; the script's sections do not fall exactly on them): boiler, smokebox, bands, and stack 346 (B: 450); domes, bell, whistle, and headlight 348 (400); cab 194 (400); tender and wood heap 658, of which the heap is 264 (900); drivers, rods, and cylinders 376 (650); pilot and pilot truck 256 (350); frame, running boards, and handrails 116 (350).
+
+Positions below are the root's local Blender y (Godot z = −y − 40.2).
+
+**Where the engine departs from B:**
+
+- **Merged prisms.** B's UV note asks for the boiler, smokebox, and stack as plain prisms on the unwrap's cylinder path. Merged into eight objects (rule 26) they are not single cylinders, so they unroll as charts (a 12-sided barrel in about three). The jacket is one open 12-sided tube, flat face on top (z 2.73), y 9.40 to 13.55; its rear end is inside the cab.
+- **Drivers under a fattened boiler.** The 1.56 m boiler is wider than the gauge, so each driver's top (to 1.73) runs inside the barrel's lower side from about 1.48 up. The running boards (1.76 to 1.84, x ±0.70 to ±1.30) cover the join from above and the side; there are no splashers. Interpenetration, not a shared plane.
+- **Wheel layout.** Driver axles at 10.35 and 12.15 (Godot z −50.55, −52.35): 1.52 m across corner to corner, 12-sided, vertex down like the coach's wheels, centre 0.97. The rear driver clears the cab front (9.51) by 8 cm. Pilot axles at 13.75 and 14.75, wheels 0.80 m, 8-sided. Tender axles where the greybox had them (1.55 ± 0.72, 5.45 ± 0.72), 0.84 m, 8-sided, now vermilion. No axles are modelled; the wheels' inner faces and the treads that face down are deleted (rule 27, as the coach).
+- **Rods.** Crank pins set back and up (150°), so the side rod runs level at 1.12 between them and the main rod runs from a crosshead at 13.20 to the front pin. Counterweights are iron, not vermilion, so they read on the red wheel; B does not say. Cylinders are horizontal, 8-sided, 0.48 m, at x ±1.10, y 13.70 to 14.60, on an iron saddle.
+- **Stack.** 8-sided: a 0.5 m pipe to 3.55, the double cone 1.2 m across the flats at 4.00, a crown 0.96 m across from 4.34 to 4.40. Read "crown 1.2 m across" as the double cone's width. Leaning 2° back, its highest corner is exactly 4.40, so the crown's centre is at (0, 4.383, −54.25): 1.7 cm under 4.40, on the smoke's axis.
+- **Headlight.** On a 12 cm iron bracket on the smokebox's flat top (2.81): a brass box 0.54 × 0.52 × 0.60 m, a roof step, and a chimney, 0.80 m tall from 2.93 to 3.73. B's 3.6 m ceiling names the domes, bell, and whistle, not the lamp; it stays under 4.40 and behind the stack from Lane P. The lens is an 8-sided `M_LampGlass` face 0.41 m across, 5 cm inside a brass reveal.
+- **Cab windows.** One arched window a side (opening 0.80 m wide, sill 1.95, spring 2.48, crown 2.86) and two small arched windows in the front wall over the boiler's shoulders (0.30 m wide), whose outer stiles are the cab corners so no blue strip under 10 cm is left. The arch has five segments with a flat crown: a four-segment arch came to a Gothic point. As on the coach, each bone frame runs up to the roof's soffit (3.02) and is three mitred quads plus a head n-gon, so each wall is one notched n-gon. The panes are 8 cm in, with reveals all round. The right-hand side window is the racked one (2°); its head stays level at the soffit. The rear wall is plain blue. The boiler passes through the front wall; the hidden part of the wall is not cut out.
+- **Cab roof.** Iron slab 3.02 to 3.20, eaves 0.25 m at the sides (x ±1.525) and 0.10 m at the ends, so it stops short of the fall plate and under `GuardEndFront`. The greybox's cab-roof slab name is gone with it.
+- **Tender.** Sides and ends blue from 1.15 to 3.06, then a bone rim 3.06 to 3.20, 3 cm proud and 12 cm wide on top: the 15 cm slot is closed (Found 2). Inside the rim the deck is blue tin at 3.16, as on the coach, with the plank walk (x ±0.75, y 0.24 to 4.05) at 3.20 on the rear half. `Engine_TenderRoof` still tops out at 3.20 everywhere, so the tin beside the walk is 4 cm under the proxy, as the coach's tin is.
+- **Cordwood.** 43 logs in two rows of 1.24 m cordwood (y 4.12 to 5.36 and 5.36 to 6.60), stacked 7, 6, 5, 4 a row as pointy-topped hexagons 0.2 m across the flats, resting on the tin; the front row lacks one top log, which shows a notch from the side and the cab. Top at 3.91 (`Engine_Fuel` 3.96). Every face two logs share is removed, so the heap is the end grain toward the cars, the front row's end grain toward the cab, and the outer faces.
+- **End beam (new, from batch 1).** Iron, x ±1.44, y 0.06 to 0.22 (Godot z −40.26 to −40.42), z 0.95 to 1.15, under the tender's rear wall, with a matching beam at the front. `Coupler5`'s drawbar runs 19 cm into it and the chain ends 8 cm; seen from beside the track and from above. Grab irons stand on the rear corners.
+- **Fall plate.** Iron over the tender-to-cab gap, top at 3.20, y 6.95 to 7.34, x ±0.75 (the greybox plate reached 3.21). An iron drawbar joins the tender's front beam to the cab's floor plate underneath.
+- **Bands.** 12 cm wide, 5 cm proud, at 9.80, 11.89, and 13.25, clear of the dome flares; the three faces under the barrel are left out (between the frames, behind the wheels).
+- **Domes and bell.** Steam dome at 10.65 with the whistle (6-sided) to 3.58, bell in its yoke at 11.55 to 3.34, sand dome at 12.55 to 3.33. The sand dome's flat is a 10.1 cm facet on its front right shoulder, cut by a plane (wear).
+- **Running boards and handrails.** Boards to 14.85, 4 cm short of the smokebox's front. Handrails 8 cm square at x ±0.74 to ±0.82, z 2.46 to 2.54, on three stanchions a side.
+- **Pilot.** The beam is iron (x ±1.05, y 15.05 to 15.30). Eight vermilion slats (10 × 6 cm) at x ±0.16, ±0.40, ±0.64, ±0.88 fall from a top V rail at 1.05 to a bottom V rail at 0.33, with a nose post; the tip reaches 16.63. Pilot truck frames and axle boxes are iron.
+- **Hidden faces deleted:** body bottoms, the bell yoke posts' tops, the stack and domes' bottoms, the boiler's rear end, the frames' ends, the sills' tops and ends.
+
+**Found while reviewing:**
+
+- **Lane P.** Zoomed on the engine, the iron crown is the highest thing on the axis with open sky above it at noon and dusk; the silver end grain of the heap stands below it and hides the domes and the cab. The domes and the headlight do not show from `PlayerSpawn`.
+- **Cab view.** The steam dome, whistle, bell yoke, and sand dome fill the near half, the stack the far; the headlight's back hides behind the stack's pipe.
+- **Noon.** The heap and the tender walk draw near white at noon, as the coach's walk does.
+- **Dusk.** The headlight's lens reads as a lit disc in the front quarter view.
+
+**Still open:**
+
+- The headset review: stand on the cab roof (D's Cab view at 1 to 7 m), walk the tender deck and cross the tender-to-cab gap, and check the lamp glass reads flat and unshadowed.
+- Dawn and late afternoon captures, and three captures 2 s apart per view.
+- The baggage and business cars (C step 4; done, below) and `horizon_ridge` (C step 6). The engine smoke is its own Roadmap item; the crown's centre is at (0, 4.383, −54.25).
+- Whether 10.5 px/m is enough to paint the engine (G2).
+- Quest timing: the train is now 131 objects.
+
+### `train_car_baggage` and `train_car_business` (C step 4)
+
+Built on 2026-10-26 in `train_rooftop.blend` under those two roots only, by a throwaway headless script outside the repo that starts from a backup of the `.blend` holding the approved coach, coupler, and engine. It reuses batch 1's coach geometry and numbers (deck at 3.16 tin and 3.20 walk, x ±1.75, fascias, eaves, soffit, platforms, windows, letterboard, trucks, wheels, truss), parameterised by where each body's end walls stand. It deletes both roots' greybox visuals (46 and 51 objects), keeps the four proxies untouched, deletes the stale copies (`M_CarDark__…`, `M_Roof__…`, `M_Window__…`, `M_Wood__…` for both GLBs), and writes the materials under their per-GLB names with the Palette's values, roughness 0.9, metallic 0, Specular IOR Level 0.5, and no emission. Every other root is untouched. Exported one at a time by:
+
+```powershell
+& "C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" -b --python dev/unwrap_per_glb_blender.py -- --map train_rooftop --glb train_car_baggage --relayout
+& "C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" -b --python dev/unwrap_per_glb_blender.py -- --map train_rooftop --glb train_car_business --relayout
+```
+
+- **Tests:** `--import`, then `load`, `multi`, `ragdoll`, and `gauntlet`: all print `AUTOTEST PASS`. `load`: "1056 scenario surfaces wear world_surface.gdshader (204 sway, 4 self-lit, …)" (1141 before: the two cars went from 46 and 51 meshes to 5 and 7; the business car's lamp glass is the fourth self-lit surface). `multi`: "spawn markers flush on the floor on every arena" and "rooftop strafe stays continuous and ragdolls ignore the guard walls".
+- **Unwrap:**
+  - `GLB train_car_baggage [train_rooftop]: 5 meshes, 426 islands, 13.3 px/m at 256 px (pad 1, 61% covered, 0 tiling meshes untouched); 0 materials copied; image none (flat colour)`
+  - `GLB train_car_business [train_rooftop]: 7 meshes, 567 islands, 11.9 px/m at 256 px (pad 1, 58% covered, 0 tiling meshes untouched); 0 materials copied; image none (flat colour)`
+  - No TINY share on either (the four marker lenses together are well over 16 px²). No UV overlap between any two triangles of different faces, nothing outside 0 to 1. Each walk top is one 24-vertex n-gon and one island. No object trips `scenery_uv._is_cylinder` (checked by calling it).
+  - UV islands counted in the `.blend`: baggage 434 (`Baggage_Car` 28, `Baggage_Trim` 61, `Baggage_Glass` 8, `Baggage_Plank` 49, `Baggage_Iron` 288); business 576 (`Business_Car` 19, `Business_Trim` 117, `Business_Glass` 14, `Business_Plank` 41, `Business_Iron` 246, `Business_Brass` 135, `Business_LampGlass` 4). The unwrap's counts are lower where charts touch only at a vertex.
+  - A first pass found 16 overlapping triangle pairs in `Baggage_Trim`: the Z-brace's diagonal shared the battens' corners, so its 3 cm edges and theirs fell into one folded chart. The diagonal now stops 6 cm short of the leaf's edges, and the overlap is gone.
+- **Other GLBs:** `train_car_coach`, `train_coupler`, `train_engine`, `train_rooftop`, and `horizon_ridge` are byte-identical before and after (MD5); in the `.blend` they hold 5/1,588, 1/100, 8/2,294, 0/0, and 14/168 objects/triangles, as before.
+- **In Godot:** a ray down hits `Business_Roof` at y 3.20 at z 38.7, 33.0, 27.3, and at x 1.4 (z 30); `Baggage_Roof` at 3.20 at z −27.3, −33.0, −38.7, and at x −1.4 (z −35); `Coupler_GapWalk` at 3.20 at z 26.4, 13.2, −26.4, and −39.6, the gaps either side of both cars. The proxies import as `StaticBody3D` under their own names (`Business_Body`, `Business_Roof`, `Baggage_Body`, `Baggage_Roof`). `Business_LampGlass` is self-lit and casts no shadow; every other mesh on both cars casts. Four `Guard*` walls. In the scene the train is 12,004 triangles in 46 meshes.
+- **Checks** (scratch scripts on the saved `.blend`): no zero-area triangles, non-planar faces, three-collinear corners, or smooth faces; no two overlapping triangles share a plane on either car; names unique, no dots, and no visual shares a stripped name with a proxy. Ray down along x −0.7, 0, and 0.7 from u −6.1 to 6.1: the walk is 3.20 everywhere and the tin 3.16 beside it; at x ±1.71 (the boot) the tin is 3.16. Nothing stands more than 0.15 m above the walk within ±0.6 m of the axis: every vertex over 3.35 is a smoke jack. Highest points: the baggage jack 3.859 (leaning), the business jacks 3.86. Every wheel bottom is at 0.21 with its tread at x ±0.62 to ±0.82.
+- **Views:** Blender renders of both cars: Side from +x and −x at 22 m (50 mm) and from +x at 10 m (24 mm), Three-quarter (front right and rear left, 35 mm: a 50 mm lens at 15 m crops the 12.3 m car), orthographic Top, Top from 1.7 m over the walk (down and forward), Silhouettes (side, both ends, top), and the 64 px squints. Close views: the baggage car's door, ajar hatch, jack, and blind front end; the business car's rear platform, the rear from low behind, both lamps, the dent, the windows and pilasters, and the jacks; each car's roof from the walk. Flat Godot captures at noon and dusk: Lane P (wide and zoomed on the baggage car), Lane E (wide and zoomed on the business car), with a stand-in capsule 0.6 m across at the far spawn; D's Rear view; leaning over `GuardEndRear`; behind the train, low; each car from the side at 9 m; and the whole train from 26 m on both sides. All outside the repo. The headset review is open.
+
+| GLB | Triangles / budget | Objects | Copies | In scene |
+|---|---|---|---|---|
+| `train_car_baggage` | 1,156 / 1,300 | 5 | 1 | 1,156 |
+| `train_car_business` | 1,602 / 1,800 | 7 | 1 | 1,602 |
+| **Train** | | | | **12,004** in 46 objects (after the engine: 10,962 in 131) |
+
+| Object | Material | Triangles | Holds |
+|---|---|---|---|
+| `Baggage_Car` | `M_Car__train_car_baggage` | 114 | Side walls (two pieces a side), door leaves, end walls, the rear door, deck tin, fascias, downstands, soffit, the closed hatch's cover and the ajar one |
+| `Baggage_Trim` | `M_Trim__train_car_baggage` | 162 | Letterboards, window frames and reveals, Z-bracing, the rear door frame, hatch rims |
+| `Baggage_Glass` | `M_Glass__train_car_baggage` | 14 | Four panes, the rear door light, the ajar hatch's slit |
+| `Baggage_Plank` | `M_Plank__train_car_baggage` | 118 | The walk, platform floors, step treads |
+| `Baggage_Iron` | `M_Iron__train_car_baggage` | 748 | Trucks, wheels, sills, truss, railings, brake staffs, rungs, grab irons, step hangers, door tracks, the smoke jack |
+| `Business_Car` | `M_Car__train_car_business` | 102 | Side walls, end walls, doors, deck tin, fascias, downstands, soffit, hatch cover |
+| `Business_Trim` | `M_Trim__train_car_business` | 320 | Letterboards, window frames and reveals, pilasters, sill courses, door frames, hatch rim |
+| `Business_Glass` | `M_Glass__train_car_business` | 28 | Twelve panes, two door lights |
+| `Business_Plank` | `M_Plank__train_car_business` | 102 | The walk, both platform floors, the front step treads |
+| `Business_Iron` | `M_Iron__train_car_business` | 726 | Trucks, wheels, sills, truss, the front railing, brake staff, rungs, grab irons, step hangers, vents, hinge, handle, two smoke jacks |
+| `Business_Brass` | `M_Brass__train_car_business` | 316 | The rear railing (top rail and 20 balusters), two marker lamp bodies with caps and stems |
+| `Business_LampGlass` | `M_LampGlass__train_car_business` | 8 | Four lenses |
+
+Baggage by section: sides, walls, and windows 92; doors and tracks 80; letterboards 16; end walls and the rear door 30; rear platform 206; blind front platform 196; deck, fascias, soffit, and walk 118; hatches 40; jack 34; underframe, trucks, and truss 344. Business: sides, windows, pilasters, and sill course 312; letterboards 16; end walls and doors 56; front platform 206; observation platform and railing 208; marker lamps 124; deck, fascias, soffit, and walk 118; hatch and vents 150; jacks 68; underframe, trucks, and truss 344.
+
+Positions below are the root's local Blender (x, u); Godot z = −u − 33.0 for the baggage car and 33.0 − u for the business car.
+
+**Where both cars depart from the coach's kit:**
+
+- **Two kit faults fixed in the copies, not in the coach.** The coach's step treads end against the hangers with both end faces in the hangers' planes, and its queen posts share the truss rod's outer plane (a coplanar pair the engine's check would flag; batch 1 did not run it). On these two cars the tread ends are dropped and the queen posts stand 1 cm proud of the rod. The approved coach is untouched; see Still open.
+- **No sprung board** on either walk: neither car's wear names one. Each walk is the coach's toothed 24-vertex n-gon.
+
+**Where the baggage car departs from B:**
+
+- **Express hatches** are 0.80 × 1.00 m, not 1.0 × 1.0: the strip between the walk (x 0.75) and the deck edge (1.75) is 1.0 m, and a full-width hatch would leave no tin and put its side in the walk's side plane. They stand at x ±0.85 to ±1.65, 6 cm proud (top 3.22), with 10 cm bone rims and blue covers: left at u −1.0, right at u 1.0. The right one is ajar, hinged on its outboard edge with the inboard edge lifted 4 cm (to 3.26); an ink slit (`M_Glass`, a quad and two triangles) closes the gap, so it reads as a dark line under a raised lid.
+- **Sliding doors.** Each leaf is 1.8 × 1.6 m (u −0.9 to 0.9, z 1.08 to 2.68), blue, 4 cm proud, its top hidden under the track. The Z-bracing is bone, 3 cm proud: two 12 cm battens flush with the leaf's top and bottom and a 12 cm diagonal from bottom rear to top front. The iron track is 8 × 8 cm at 2.68 to 2.76, under the letterboard, from u −0.9 to 2.75, the length of two doors (the door slides toward the front). The wall behind the leaf and the track is cut, so each side wall is two pieces and two islands; each door leaf is one island.
+- **Windows.** Two a side at u ±3.6, openings 0.5 × 0.4 m (2.25 to 2.65), flush 10 cm frames whose top member (11 cm) meets the letterboard, as the coach's do, 12 cm reveals, ink panes. No sills: B does not ask for them.
+- **The blind front end** (u 5.2, toward the tender) is one blue face with no door. The railing is closed: posts at x ±1.41 and 0, both rails continuous. Steps, brake staff (right corner), rungs, and grab irons are the coach's. The rear end (toward `CarFrontA`) is the coach's platform and door.
+- **Smoke jack** at (1.25, −4.0): a 6-sided pipe 0.20 m across to 3.76, a 6-sided brim 0.32 m across its corners (3.76 to 3.80), and a low 6-sided pyramid to 3.86, 0.70 m in all. It leans 3° outboard about its foot; the pipe starts 3 cm inside the deck so the lean opens no gap. From `PlayerSpawn` it stands 1.8° right of the axis, beside the stand-in capsule at `EnemySpawn` in both zoomed captures.
+- **No vents:** B lists none for this car.
+
+**Where the business car departs from B:**
+
+- **Observation platform.** The rear end wall stands at u −4.8, so the platform is 1.2 m deep inside `Business_Body`, on a raw-wood floor (1.13 to 1.23). The railing's top rail is one 8 × 8 cm bar swept round three sides (2.15 to 2.23, 1.0 m over the floor) with mitred corners, its ends against the end wall. Twenty 8 cm balusters stand under it: twelve across the rear at 0.256 m centres, corner posts included, and four a side at 0.25 m; their tops follow the rail's underside. The railing is closed on three sides as B says: no gate, steps, or brake wheel on the rear platform. The rear door is the coach's door kit in its bone frame.
+- **The dent** is at the right-rear corner (+x, the lit side): the rail drops 4 cm to the corner over its last 0.46 m on both the rear and the side run. Those two sloped, mitred quads on top and bottom are each two triangles.
+- **Marker lamps** hang from the soffit at the rear corners (x ±1.52, u −5.85), outside the side railing and over the platform's corners, under the deck end: brass bodies 0.44 × 0.44 × 0.50 m (2.40 to 2.90), a cap 0.52 m square (2.90 to 2.95), and a 10 cm stem to the soffit. Each has two lenses, on its rear and outboard faces, 0.24 × 0.30 m and 3 cm inside a 10 cm brass frame. The left lamp is turned 10° about its stem; its cap reaches x −1.82, 7 cm past the deck edge.
+- **Windows and pilasters.** Six a side, openings 1.0 × 0.95 m (1.675 to 2.625) at a 1.4 m pitch centred on the body (u −3.3 to 3.7), in flush 10 cm frames whose top member (13.5 cm) meets the letterboard, with 12 cm reveals and ink panes. Bone pilasters 0.20 m wide, 3 cm proud (flush with the letterboard's face), run from the sill course to the letterboard: five between the windows, where each with the two frame stiles makes a 0.40 m bone post, and two at the body's corners. In place of single sills, one sill course runs the body's length, 12 cm proud and 10 cm tall. Blue shows as a dado under the sill course and as a 0.7 m panel at each end of the window row: the side reads as a bone colonnade with ink windows on blue, the richer car.
+- **Smoke jacks** at (±1.25, 4.0), as the baggage car's but upright, top 3.86. From `EnemySpawn` they stand either side of the stand-in capsule at `PlayerSpawn` in both zoomed captures.
+- **Deck kit.** The coach's hatch (no mark, F14) and four vents at the coach's places. The front end is the coach's platform kit, facing `CarRearA` across `Coupler0`.
+- **The greybox ladder is dropped**; the three rungs on the front end wall are the coach's.
+
+**Found while reviewing:**
+
+- **D's Rear view does not see the observation platform.** From (0, 4.9, 38.8) pitched 55° down toward +z, the eye looks past the deck's end (39.15) at the track: the deck runs on over the platform to 39.15 as the coach kit's does, so the platform lies under it. It shows when you lean over `GuardEndRear` (eye at (0.3, 4.5, 39.8): the brass railing and the lamps under the deck's edge) and from behind the train. B's Role ("a player there looks down on the observation platform") holds only leaning out past the wall.
+- **The rear at dusk.** From behind and below, the brass railing, the bone-framed door, and both lit lenses read clearly against the blue end.
+- **Noon.** The walks and the business car's bone side band draw near white at noon, as on the coach and the engine.
+
+**Still open:**
+
+- The headset review: lean over `GuardEndRear` and check the platform, railing, dent, and lamps read under the deck's edge; check the lenses read flat in their own colour with no shadow; walk both roofs and cross the gaps at z 26.4, −26.4, and −39.6.
+- The coach's two kit faults (tread ends and queen posts sharing planes): fixed in batch 5 (Coach fix, below).
+- Dawn and late afternoon captures, and three captures 2 s apart per view.
+- Whether 13.3 and 11.9 px/m are enough to paint the two cars (G2).
+- `horizon_ridge` (C step 6; `Canyon` and `Mesa` done, below). Quest timing: the train is now 46 objects.
+
+### `horizon_ridge`: `Canyon` and `Mesa` (C step 6)
+
+Built on 2026-10-26 in `train_rooftop.blend` under the `Canyon` and `Mesa` children of `horizon_ridge` only, by the finals script F19 asks for, `dev/build_horizon_ridge_finals_blender.py`, committed and deterministic. It opens the `.blend` itself, runs headless, and never calls `scenery_uv.process_scene()`. `--part canyon` and `--part mesa` delete the span's children (the greybox `Talus`, `Wall`, `Buttress`, `Cap`, and `Talus.001`, `Lower`, `Upper`, or an earlier final) and build four merged objects under it. `--part butte` is a stub that leaves the greybox `Butte` as it is (the next batch). `--part all` runs all three. The span roots keep their names and their parked places beside the train (`Canyon` at Blender (40, 56, 0), `Mesa` at (40, 112, 0); `PARKED_CHILDREN`). The script writes the Palette's four rock values to `M_Rock`, `M_RockDark`, `M_CapDark` (new in this `.blend`) and `M_Cap`, with roughness 0.9, metallic 0, and Specular IOR Level 0.5. These are shared tiling names with no per-GLB copies, so the greybox Butte now wears them too. Every other root is untouched. Built and exported by:
+
+```powershell
+& "C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" -b --python dev/build_horizon_ridge_finals_blender.py -- --part all
+& "C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" -b --python dev/unwrap_per_glb_blender.py -- --map train_rooftop --glb horizon_ridge
+```
+
+- **How it is built.** Every piece is a closed prism placed by an explicit table on the 0.25 m grid (`CANYON_*`, `MESA_*`): slabs, blocks, 35° wedges, pillars, and fallen blocks. Each slab's foot is sunk 0.25 m into the slab under it, and a cap block stands on its body. One exact self-union per span is cut at z 0, so no face lies at 0 or at the terrain's 0.12. Coplanar fragments are dissolved, the 7.0 m ledge ring is split at x 0, every face is coloured (below), and the result is dissolved into one planar n-gon per flat region per material and split into one object per material. Each object sits at its span's origin with zero rotation and carries one `UVMap` of 8 m tiling UVs (`scenery_uv.unwrap_object(obj, scenery_uv.TILING)`, `uv_role` `tiling`). Nothing is random.
+- **Colour by face** (rule 17 by this sun, toward Blender +X and −Y). Bone and violet stay as built. Each body face is coloured by these rules:
+  - A vertical face or slope whose plan normal leans to +X (x component 0.3 or more) is `M_Rock`, and one leaning to −X is `M_RockDark`. So the −X face's sawtooth, turned 56.3° toward −Y, stays pink with lit teeth, as B's squint asks.
+  - A face along the span is vermilion toward −Y, the end the sun reaches, and pink toward +Y. So the turned planes' returns on the +X face are pink, and so is every +Y end. The −Y ends and the pillars' −Y sides are vermilion on both faces.
+  - The 7.0 m ledge ring is split at x 0 and takes its side's colour. Each top above it (the saddle, the upper body's strips in the sky gaps) crosses x 0 and takes the colour of its centre: pink on the Canyon, vermilion on the Mesa. All of those sit above the 4.9 m eye.
+- **Re-run:** a second `--part all` prints the same counts and geometry hashes (Canyon `0fd4b61832b3`, Mesa `c7f13e1195b9`). A second export writes a byte-identical `horizon_ridge.glb`.
+- **Tests:** `--import`, then `load`, `multi`, `ragdoll`, and `gauntlet`: all print `AUTOTEST PASS`. `load`: "1056 scenario surfaces wear world_surface.gdshader (204 sway, 4 self-lit, …)", unchanged, because it counts no belt copy (see Found). `multi`: "rooftop strafe stays continuous and ragdolls ignore the guard walls".
+- **Unwrap:** `GLB horizon_ridge [train_rooftop]: 0 meshes, 0 islands, 0.0 px/m at 256 px (pad 2, 0% covered, 15 tiling meshes untouched); 0 materials copied; image none (flat colour)`.
+- **Other GLBs:** `train_car_coach`, `train_coupler`, `train_engine`, `train_car_baggage`, `train_car_business`, and `train_rooftop` are byte-identical before and after (MD5).
+- **In Godot** (a throwaway flat run):
+  - `Scenery` has 354 children: 270 tracks and cacti, 20 `Canyon`, 20 `Mesa`, and 44 `Butte` copies.
+  - The horizon instance has `Canyon`, `Mesa`, and `Butte`, and imports 292 and 236 triangles.
+  - All 84 span copies wear world_surface.gdshader, and none sways.
+- **Checks** (printed by the script on every run, and on the saved `.blend`):
+  - Each span runs exactly y ±23.875 (47.75 m). No zero-area triangles, no non-planar faces, no smooth faces, no face at z 0 or 0.12, and no edge under 0.5 m.
+  - Coplanar test across each span's four objects: 408 (Canyon) and 332 (Mesa) coplanar triangle pairs, none sharing area.
+  - Skyline neighbours stand 0.75 m or more apart.
+  - The sawtooth's least sunlight at any of the four elevations is N·L 0.067, at noon.
+  - Names are unique with no dots.
+  - 63% (Canyon) and 81% (Mesa) of vertices sit on the 0.25 m grid. The rest are the tilted fallen blocks, the apron's mitres and toes, and the chip.
+  - 35 and 36 vertices lie on a straight outline edge (T-junctions where a neighbour's corner meets an edge: the cap blocks' ends on their body, the ledge ring's x 0 seam). Each such face triangulates without a zero-area triangle.
+- **Views:**
+  - Blender renders (Workbench, light from the scene's sun): Side from (±34, 0, 4.9) at 50 and 24 mm, Three-quarter from (±30, ±46, 4.9) onto both ends, a high three-quarter, Silhouettes (each face from 34 m, end-on from both ends), and the 64 px squints.
+  - Flat Godot captures at noon, dusk, and dawn, three per view 2 s apart: Pass left and right (Lane P's eye at (0, 4.9, 10) aimed at (±35, 8, −40)), straight out each side, and Lane P at dawn and dusk.
+  - All outside the repo. The headset review is open.
+
+| GLB child | Triangles / budget | Objects | Copies on the belt | In scene |
+|---|---|---|---|---|
+| `Canyon` | 292 / 300 | 4 | 20 | 5,840 |
+| `Mesa` | 236 / 240 | 4 | 20 | 4,720 |
+| `Butte` (greybox) | 84 / 150 | 7 | 44 | 3,696 |
+| **Horizon** | | 15 | 84 | **14,256** in 468 belt objects (the greybox: 5,376 in 448) |
+
+| Object | Material | Triangles | Holds |
+|---|---|---|---|
+| `Canyon_Rock` | `M_Rock` | 73 | The +X lower body (flats, two turned planes, the buttress), the +X apron slope and the −Y end's, the +X upper body, every −Y end and step face, the +X half of the 7.0 m ledge ring, the +X free pillar |
+| `Canyon_RockDark` | `M_RockDark` | 103 | The −X lower body (flats, three sawtooth planes, the buttress), the −X apron slope and the +Y end's, the −X upper body, every +Y face (returns, ends, steps), the −X half of the ledge ring, the saddle's top and the upper body's strips in the sky gaps, the −X free pillar |
+| `Canyon_CapDark` | `M_CapDark` | 18 | The band: its two long faces, ends, and its top ring |
+| `Canyon_Cap` | `M_Cap` | 98 | Four cap blocks (one chipped) with their undersides, two fallen blocks |
+| `Mesa_Rock` | `M_Rock` | 54 | The +X lower body (flats, two turned planes at the +Y end), the +X apron slope and the −Y end's, the +X faces of both tiers' upper bodies, the −Y faces, the +X half of the ledge ring, the strips in both rims' sky gaps |
+| `Mesa_RockDark` | `M_RockDark` | 62 | The −X lower body (flats, three sawtooth planes at the −Y end), the −X apron slope and the +Y end's, the −X faces of both upper bodies, the +Y faces, the −X half of the ledge ring |
+| `Mesa_CapDark` | `M_CapDark` | 18 | The band |
+| `Mesa_Cap` | `M_Cap` | 102 | The lower rim (two blocks) and its top round the upper tier, the upper rim (two blocks, one notched), one fallen block |
+
+Positions below are the span's own Blender frame: x across the track (+X looks at the train from its left), y along it (−Y faces `PlayerSpawn`'s end), z up.
+
+**`Canyon`, as built:**
+
+- **Bands.** The lower body runs from the apron's slope to 7.0, its faces at x 4.5 and −4.75 (9.25 m thick), y ±20.5. The band runs from 7.0 to 8.25, 0.5 m behind the lower body, y ±18.0. The upper body stands 0.5 m behind the band, y ±17.5. The bone cap blocks overhang it 0.75 m on both faces.
+- **Apron.** One 35° wedge a side, mitred at the corners: its toe at x 7.875 and −8.125 and at y ±23.875 (the span's ends), meeting the faces at 2.36 m.
+- **Turned planes.** On +X, a run of two main planes turned 20.6° toward −Y (1.5 m forward over 4.0 m) at y −13 to −5, each with a square return. On −X, a sawtooth run of three planes turned 56.3° toward −Y (1.5 m out over 1.0 m) at y 3 to 6. They take the middle step at every hour: N·L at least 0.067, at noon.
+- **Skyline.** Five 7 m segments, with tops 14.25, 15.0, 12.5 (the saddle), 17.5, and 16.75. The bodies stand at three heights (13.0, 12.5, 15.5), and each cap block is 1.25 to 2.0 m tall. Blocks stop 0.5 m short of a body's end face, with 1.0 m of sky between neighbours.
+- **Closed ends.** Each end steps down twice within its last 6.375 m. The cap comes down to the 7.0 m ledge at y ±17.5, past a 0.5 m strip of upper-body top and the band's 0.5 m lip. The lower body then comes down to the apron at ±20.5.
+- **Pillars.** Each face has two.
+  - A buttress 1.5 m wide stands 1.5 m proud of the lower body, up to its top at 7.0. It ends the face's plane run: +X at y −5.0, −X at y 6.0.
+  - A free pillar 1.5 × 1.5 m stands across the apron's toe, 2.625 m clear of the face, to 7.5 m: +X at y 12.0, −X at y −15.0.
+- **Wear.** A fallen bone block lies across each toe: +X at y −1, 1.5 × 1.25 × 1.0 m, tilted 12°; −X at y 10, 1.75 m long, tilted 15°. The −Y, +X corner of the block over segment 3 (tops 17.5) is chipped 0.75 m at 45°.
+
+**`Mesa`, as built:**
+
+- **Lower tier.** The lower body's faces stand at x 6.0 and −5.75 (11.75 m wide, the greybox's 12), y ±20.5, with the same apron (toes at x 9.375 and −9.125). The band runs from 7.0 to 8.25, 0.5 m behind the lower body, from y −18.0 to 17.5. A 1.0 m upper body (8.25 to 9.25) stands 0.5 m behind the band, from y −17.5 to 17.0.
+- **Lower rim.** The lower rim is two bone blocks overhanging 0.75 m: one from −17.0 to 11.75, top 10.5; one from 12.75 to 16.5, top 11.25. The sky shows between them past the upper tier's +Y end.
+- **Upper tier.** Its body is set back 2.25 m behind the lower rim's front on both faces (x 3.5 and −3.25), from y −11.0 to 10.5, its foot sunk into the long rim block. Its rim is two blocks with tops 15.0 and 15.75.
+- **Turned planes.** They sit at the lower body's ends, where they share its corners (about 10 triangles cheaper than mid-face). On +X, two planes at 20.6° run to the +Y end (y 12.5 to 20.5). On −X, three sawtooth planes at 56.3° start at the −Y end (y −20.5 to −17.5): the end a span shows as it comes toward the train.
+- **Closed ends.** Each end steps down through both tiers: the upper tier at y −11.0 and 10.5, then the lower rim to the 7.0 m ledge at −17.5 and 17.0 (within the last 6.4 and 6.9 m), then the lower body to the apron at ±20.5.
+- **Wear.** A notch bites 1.0 m into the +X face of the taller upper block and 1.0 m down, over its last 1.5 m (y 8.5 to 10.0). A fallen bone block lies across the −X toe at y 2.
+
+**Where the spans depart from B:**
+
+- **The budgets set the detail.** These are measured costs on this kernel, in triangles:
+  - A capped skyline segment costs about 24: 18 in its bone block, whose ends carry T-junctions, plus the upper body's strips and step faces.
+  - A turned plane or tooth costs about 13 spread along a face, and 8 to 10 in a run.
+  - A bare pillar costs 10 to 16; with a bone cap, about 32.
+  - A fallen block costs about 16.
+  - A two-groove flute patch costs about 20 a face, because its vertices also land in the band's top ring and the cap's underside.
+  - Every extra apron piece costs about 8 (a valley and an end face).
+- **Flutes are not built** (Canyon detail 6). With the pillars and the wear, the Canyon has 8 triangles left, and one patch a face would take 40. `CANYON_FLUTES` builds them if the budget moves.
+- **Pillars have no bone caps.** On each face, one pillar is a buttress ending the plane run, and one stands free on the toe (as the greybox buttress stood clear of its wall).
+- **Skyline.** The Canyon has five segments 7 m long (B: about 6 m): the 35 m between the stepped ends. The middle segment is an uncapped saddle, so four bone blocks carry the cap. That saves about 20 triangles and gives the skyline its deepest notch. Each upper body is one plane a face per height.
+- **Turned planes and sawtooth come in runs, not spread.** The Canyon has two planes on +X and three on −X; the Mesa the same, at the ends.
+- **The ends step twice** (B allows two or three).
+- **The apron is one wedge a side.** Its toe stands at 7.875 to 8.125 m (Canyon) and 9.125 to 9.375 m (Mesa), so the slope meets the faces at 2.36 m (B: 2.0 to 2.5). A toe at ±9 on the Canyon's 9.25 m ridge would meet them at about 3.1 m. The Canyon's free pillars and fallen blocks reach x 8.6 to 9.0.
+- **The Mesa's rims are two blocks each**, the lower one with its single sky gap past the upper tier's end. Its notch is a bite in the taller block's corner.
+
+**Found while reviewing:**
+
+- **`load` does not see the belt's spans or cacti.** `scenery_belt.gd` duplicates `Canyon`, `Mesa`, `Butte`, and the cactus plants out of their GLB instances. `_in_scenario_glb` looks for a parent whose `scene_file_path` ends in `.glb`, so `load`'s surface count, world-shader check, and belt sway check skip them. Only the instanced tracks are counted, and D's Tests line overstates it. The throwaway run above checked all 84 span copies.
+- **Generated LODs (G13).** With the belt frozen and the view down each band to 150 m, LODs on and off differ in 10 and 11 of 230,400 sampled pixels. No span changes shape as it comes in. `horizon_ridge.glb.import` is unchanged.
+- **The light in the flat run.**
+  - At noon the left-hand faces take the middle step and read salmon, with the cap overhangs' shadow along the top of the upper body. The band reads lavender and the caps white. The right-hand faces read mauve, the sawtooth reads as pale lit slivers, and the −Y ends and pillar sides read salmon.
+  - At dusk and dawn the left faces read full orange-red and the right faces dull pink. At dusk, Lane P's roofs lie in the right-hand spans' shadow (F16).
+  - Neighbours at any offset read as separate formations with a saddle of apron between. No cut end, seam, or flicker shows in the stills.
+- **The greybox Butte has changed colour.** It shares the four materials, so it showed vermilion, bone, and pink blocks until its final landed (batch 5, below).
+
+**Still open:**
+
+- `Butte`: built in batch 5 (below); `Talus.002` and its dot are gone.
+- Flutes on the Canyon's upper body, if the budget or another detail moves.
+- The headset review, late afternoon captures, and Quest timing. The horizon is 14,256 triangles in 468 belt objects; with the Butte merged to three objects, it will be 292 objects (B; done, below).
+
+### `horizon_ridge`: `Butte` (C step 6, batch 5)
+
+Built on 2026-10-26 by `--part butte` of `dev/build_horizon_ridge_finals_blender.py` (the stub is gone), under the `Butte` child of `horizon_ridge` only, with the Canyon and Mesa's kernel, colour rule, and printed checks. It deletes the greybox's seven objects (`Talus.002`, `TowerA` to `C`, `LipA` to `C`) and builds three: `Butte_Rock`, `Butte_RockDark`, and `Butte_Cap`. No band (B). The span keeps its name and its parked place (Blender (40, 0, 0)). Built and exported by the two commands above.
+
+- **Re-run:** two `--part all` runs print the same counts and geometry hashes for all three spans: Canyon `0fd4b61832b3` and Mesa `c7f13e1195b9` (as in batch 4), Butte `0ff5d3f14872`. A second export writes a byte-identical `horizon_ridge.glb`.
+- **Tests:** `--import`, then `load`, `multi`, `ragdoll`, and `gauntlet`: all print `AUTOTEST PASS`. `load`: "1056 scenario surfaces wear world_surface.gdshader (204 sway, 4 self-lit, …)", unchanged (it counts no belt copy).
+- **Unwrap:** `GLB horizon_ridge [train_rooftop]: 0 meshes, 0 islands, 0.0 px/m at 256 px (pad 2, 0% covered, 11 tiling meshes untouched); 0 materials copied; image none (flat colour)`.
+- **Other GLBs:** `train_coupler`, `train_engine`, `train_car_baggage`, `train_car_business`, and `train_rooftop` are byte-identical before and after (MD5); `train_car_coach` changed by the coach fix only (below).
+- **In Godot** (a throwaway flat run): `Scenery` has 354 children (270 tracks and cacti, 20 `Canyon`, 20 `Mesa`, 44 `Butte`). The horizon instance has `Canyon`, `Mesa`, and `Butte` and imports 292, 236, and 141 triangles. All 84 span copies wear world_surface.gdshader, and none sways. With the belt frozen and a 30° view on each far band, LODs on and off differ in 0 of 230,400 sampled pixels (G13).
+- **Checks** (printed by the script, and on the saved `.blend`): the formation runs y −23.25 to 19.25 inside the span's ±23.875, and z 0 to 39.0. No zero-area triangles, non-planar faces, smooth faces, three-collinear outline points, faces at z 0 or 0.12, or edges under 0.5 m. Coplanar test: 96 coplanar triangle pairs, none sharing area. The pink teeth's least sunlight is N·L 0.067, at noon. Skyline tops 31, 39, and 20 m. Names unique, no dots. 62% of vertices on the 0.25 m grid; the rest are the lean, the chamfers, and the skirts' mitres and toes.
+- **Views:** Blender renders (Workbench, light from the scene's sun): Side from (±85, 0, 4.9) at 50 and 35 mm, end-on from both ends, three-quarters onto the −Y end from both faces and onto the +Y end from −X, a high three-quarter, a close view of the lean, Silhouettes (both faces, both ends), and the 64 px squints. A close render of the coach's fixed steps and truss. Flat Godot captures at noon and dusk: the far band on each side from Lane P's eye toward (±85, 15, −100), straight out each side, and Lane P, two per view 2 s apart; and three 30° views per side 2 s apart, out and ahead. All outside the repo. The headset review is open.
+
+| GLB child | Triangles / budget | Objects | Copies on the belt | In scene |
+|---|---|---|---|---|
+| `Canyon` | 292 / 300 | 4 | 20 | 5,840 |
+| `Mesa` | 236 / 240 | 4 | 20 | 4,720 |
+| `Butte` | 141 / 150 | 3 | 44 | 6,204 |
+| **Horizon** | | 11 | 84 | **16,764** in 292 belt objects (batch 4: 14,256 in 468; the greybox: 5,376 in 448) |
+
+| Object | Material | Triangles | Holds |
+|---|---|---|---|
+| `Butte_Rock` | `M_Rock` | 46 | The +X and −Y faces of every block, the three 45° chamfers, the skirts' +X and −Y slopes and their +X, −Y hips |
+| `Butte_RockDark` | `M_RockDark` | 44 | The −X and +Y faces of every block, the three 56.3° teeth, the skirts' −X and +Y slopes and the hips under the teeth |
+| `Butte_Cap` | `M_Cap` | 51 | The three cap blocks: four sides and the underside ring each |
+
+**`Butte`, as built** (the span's own Blender frame, as above):
+
+- **Pillars.** Each is two chamfered blocks under a bone cap block that overhangs the top block 0.75 m on all four sides. Each block's foot is sunk 0.25 m into the one below, and the top block runs 0.25 m into its cap.
+  - A, centred at y −17.0: 6.5 × 6.5 m to 17.0, stepping in 0.75 m to 5.0 × 5.0; cap 1.75 m tall, its top at 31.0.
+  - B, at x 0.25, y −5.0: 5.5 × 5.0 m to 23.0, stepping in 0.75 m to 4.0 × 3.5; cap 2.0 m tall, top 39.0.
+  - C, at x −0.25, y 12.0: 8.0 × 8.5 m to 12.0, stepping in 0.75 m across and 1.0 m along to 6.5 × 6.5; cap 1.5 m tall, top 20.0.
+- **Chamfers.** One vertical edge a block, always on the −Y end (the end the sun reaches and the one a span shows as it comes in), alternating sides up each pillar. On the +X corner a 45° cut, 1.0 × 1.0 m. On the −X corner the cut is turned 56.3° toward −Y (1.5 m across, 1.0 m along): a lit tooth on the pink face.
+- **Skirts.** A 35° wedge along each edge of each pillar's foot, mitred at the corners (the Canyon's `apron()`, five wedges a pillar), its toe 3.0 m out and 2.1 m tall at the foot. Three separate skirts; the first two toes stand 0.25 m apart.
+- **Spacing.** Centres 12.0 and 17.0 m apart inside the span, 19.0 m across the belt's 48 m pitch. The formation stops 0.625 m and 4.625 m short of the span's ends, so it closes at both ends on the skirts' own slopes.
+- **Wear.** Pillar A's top block and its cap lean 3° toward −Y about the block's +Y foot: its top moves 0.65 m, and its −Y face looks slightly down.
+- **Colour** by side first, as the Canyon and Mesa (B's rules).
+
+**Where the Butte departs from B:**
+
+- **Unseen tops deleted** (rule 27). Every up-facing face over 6.5 m goes: the pillars' two ledges and the caps' tops, nine faces, all 12 m or higher. No eye in the game rises above about 6.1 m (the death cam's highest orbit; a VR player on the cab roof stands about 5.2 m), and the spans stand 70 to 100 m out, so none of them is ever seen. Closed, the span measured 219 triangles with three blocks on the tallest pillar and about 185 with two, against the 150 budget, so the budget goes on the sides that are seen. The pillars are open from above: Blender's high view shows the openings. The shader draws both sides (`cull_disabled`), so the walls still cast whole shadows. The Canyon and Mesa keep their tops.
+- **Two blocks a pillar**, not three on the tallest: a third block cost 19 triangles.
+- **Three separate skirts**, not one continuous talus as the greybox had: merging the first two cost 6 triangles, and apart they read as three formations standing in a row.
+- **The pink-side chamfer turns 56.3°**, not 45°: at 45° it would take no noon sun at all (N·L 0).
+
+**Found while reviewing:**
+
+- **From the train the far band shows above and between the mid band.** The mid spans' walls stand 12 to 20 m tall at 28 to 40 m and cover the buttes' feet nearly everywhere; the pillars' upper blocks and caps show over them and through their saddles and closed ends. The skirts show only through a gap.
+- **Noon:** the left-hand posts read salmon with white caps, the right-hand ones pale mauve with grey caps, close to the sky through 34 to 45% fog. The −Y faces and the lit teeth read as lighter strips as spans come in.
+- **Dusk:** both sides read orange through the orange fog; at that range the right-hand pink hardly separates from the left's vermilion, as it does on the mid band at the same time.
+- No flicker, pop, cut end, or seam in the stills.
+
+### Coach fix (batch 5)
+
+Batch 3 found two coplanar spots in the approved `train_car_coach` and fixed them in the baggage and business cars only. Batch 5 applied the same two fixes to the coach's saved geometry by a throwaway headless script outside the repo (batch 1's coach script was not re-run):
+
+- **Step treads:** the 16 tread end faces (at u ±5.29 and ±5.91, in the hangers' planes) are deleted from `Coach_Plank`, as on the two cars. The hangers' faces cover the ends.
+- **Queen posts:** the eight posts' outer faces move from x ±1.34 to ±1.35 (16 vertices of `Coach_Iron`), so each post stands 1 cm proud of the truss rod's outer plane.
+- Nothing else changed: colours, names, proxies, and `Coach_Car`, `Coach_Trim`, `Coach_Glass` are as before. 1,588 to 1,556 triangles (−32, all in `Coach_Plank`, 158 to 126); −128 in the scene.
+- Coplanar triangle pairs sharing area across the coach's five objects: 74 before, 0 after.
+- **Unwrap** (`-- --glb train_car_coach --relayout`): `GLB train_car_coach [train_rooftop]: 5 meshes, 545 islands, 12.5 px/m at 256 px (pad 1, 60% covered, 0 tiling meshes untouched); 0 materials copied; image none (flat colour)`. No TINY share, no UV overlap between any two triangles of different faces, nothing outside 0 to 1. The walk top is one 24-vertex n-gon and one island. UV islands counted in the `.blend`: 553 (`Coach_Plank` 52, was 68).
+- In Godot a ray down at all seven markers still hits `Coach_Roof` at y 3.20.
+
+### Whole scene
+
+The Train Rooftop's final untextured meshes are complete: the train (five GLBs plus the guard walls) and the horizon's three spans. Main Street's belt pieces and terrain are unchanged.
+
+| GLB | Triangles / budget | Objects | Copies | In scene |
+|---|---|---|---|---|
+| `train_car_coach` | 1,556 / 1,600 | 5 | 4 | 6,224 |
+| `train_coupler` | 100 / 100 | 1 | 6 | 600 |
+| `train_engine` | 2,294 / 3,500 | 8 | 1 | 2,294 |
+| `train_car_baggage` | 1,156 / 1,300 | 5 | 1 | 1,156 |
+| `train_car_business` | 1,602 / 1,800 | 7 | 1 | 1,602 |
+| `train_rooftop` | 0 / 0 | 0 | 1 | 0 |
+| **Train** | | | | **11,876** in 46 objects (greybox 6,908 in 371; B planned about 13,600) |
+| `horizon_ridge` › `Canyon` | 292 / 300 | 4 | 20 | 5,840 |
+| `horizon_ridge` › `Mesa` | 236 / 240 | 4 | 20 | 4,720 |
+| `horizon_ridge` › `Butte` | 141 / 150 | 3 | 44 | 6,204 |
+| **Horizon belt** | | | | **16,764** in 292 objects (greybox 5,376 in 448; B planned about 17,400) |
+| Main Street's `env_rail_track_8m` | 98 | 3 | 90 | 8,820 in 270 |
+| Main Street's cactus clones | about 51 a plant | | 180 | 9,219 in 293 |
+| Main Street's `env_terrain` | 12 | 1 | 1 | 12 in 1 |
+| **Shared** | | | | **18,051** in 564 objects |
+| **Scene** | | | | **46,691** in 902 objects (decided: about 49,600, F17; greybox about 30,500 in about 1,380) |
+
+- Counted in a throwaway flat-scene run: every visible mesh instance, index count over three. Collision proxies and the guard walls are not counted.
+- 46,691 triangles is 94% of the decided budget and about 3% of Meta's 1.5 million a frame for Quest 3. Half the belt is behind you or outside the view at any moment.
+- Draw calls before culling: 902, one surface per object (B planned about 900): the train 46, the horizon 292, the shared belt pieces 564. B estimates about 450 in the view from a spawn (not measured), against Meta's guideline of under 200. Going lower is code, decided after Quest timing (F18).
+- Self-lit: the engine's headlight lens and the business car's four marker lenses (`M_LampGlass`), unlit and casting no shadow.
+- Tests: `--import`, then `--autotest=load`, `multi`, `ragdoll`, and `gauntlet` all print `AUTOTEST PASS`. A flat run counts 354 children under `Scenery` and finds the walk at y 3.20 under all seven markers.
+
+**Still open:**
+
+- **The user's review**, then the in-context review in a headset: D items 10 to 17, walking the roofs from `GuardEndRear` to the cab across every gap, leaning out at the guard walls and over `GuardEndRear` (the observation platform), standing on the cab roof, and watching spans arrive on both sides.
+- **Quest timing:** 902 objects before culling (F18 decides a belt fix in code after it), and the shadow cascades at dawn, when the right-hand spans' shadows cross the train.
+- **Noon washout:** the raw-wood walks, the tender's walk and cordwood, and the business car's bone colonnade draw near white at noon, close to the bone trim.
+- **F16, the passing shadows:** seen at dusk in flat runs (Lane P's roofs lie in the right-hand spans' shadow), not yet judged by the user (D14).
+- **The Canyon's flutes are not built** (detail 6; the budget), and its pillars and the Butte's are as built: the Canyon's uncapped, the Butte's open at the top above every eye.
+- **The far band at dusk:** the right-hand pink hardly separates from the left's vermilion through the orange fog.
+- **Captures:** dawn and late afternoon captures for the engine, the end cars, and the Butte (noon and dusk only), and three captures 2 s apart for every view (some views have one or two).
+- **Painting density** (G2): 12.5 px/m on the coach, 10.5 on the engine, 13.3 and 11.9 on the end cars.
+- **`load` coverage:** it does not check the belt's cloned spans and cacti (D, Tests); a change to the test is the user's call.
+- **The engine smoke** is its own Roadmap item (F13).
 
 ## References
 
