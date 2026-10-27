@@ -64,6 +64,12 @@ extends Node
 ##              porch deck holds a dropped revolver, no wounds, flat backdrop
 ##   i18n     - every tr("KEY") / key constant / scene text key in code exists in
 ##              translations.csv, and the imported English translation resolves
+##   intro    - duel title cards: a menu free duel's cards (order, cameras, held lines, the
+##              HUD), fire skip, Reset Duel, three NPCs, the toggle, Horde, the gauntlet's
+##              retry, names, then a lobby host alone (slot order, rematch, leavers)
+##   introhost / introjoin - a real 1v1: the joiner's fire skips the cards on both peers,
+##              and the auto-rematch skips them
+## Every suite but intro* runs with `DuelManager.skip_intros` (straight to the standoff).
 ## Prints AUTOTEST PASS / AUTOTEST FAIL and sets the exit code.
 
 var mode := "duel"
@@ -79,6 +85,10 @@ func _ready() -> void:
 	GameManager.hud.pause_menu.auto_open_lobby = false
 	_saved_lobby_setup = _lobby_setup_snapshot()
 	_saved_offhand_item = PlayerSettings.offhand_item
+	_saved_intro = [PlayerSettings.duel_intro_enabled, PlayerSettings.display_name]
+	# The title cards are the `intro` suites' own; every other suite goes straight to the
+	# standoff, whatever the saved Settings say.
+	GameManager.duel.skip_intros = not mode.begins_with("intro")
 	match mode:
 		"duel":
 			_test_duel()
@@ -114,6 +124,12 @@ func _ready() -> void:
 			_test_steam()
 		"steamcycle":
 			_test_steam_cycle()
+		"intro":
+			_test_intro()
+		"introhost":
+			_test_intro_host()
+		"introjoin":
+			_test_intro_join()
 		_:
 			_fail("unknown mode %s" % mode)
 
@@ -125,6 +141,8 @@ func _test_duel() -> void:
 	if not await _screen_overlay_ok():
 		return
 	if not await _npc_replay_hand_ok():
+		return
+	if not await _spin_after_replay_ok():
 		return
 	GameManager.start_free_duel(0, 0)
 	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
@@ -173,6 +191,88 @@ func _npc_replay_hand_steps() -> bool:
 		return false
 	print("AUTOTEST: replay hand: a mid-draw NPC's hand stays on its gun (%.2f m)" % gap)
 	return true
+
+
+## Roadmap 1.4: after a replay (player won, then player lost) the next duel's drawn gun must
+## still hinge-spin and twirl, and the winner's gun must hinge-spin as soon as the replay ends.
+func _spin_after_replay_ok() -> bool:
+	var saved_speed: float = GameManager.tuning["ai_speed_mult"]
+	GameManager.tuning["ai_speed_mult"] = MULTI_AI_SPEED
+	var ok := await _spin_after_replay_round(true) and await _spin_after_replay_round(false)
+	GameManager.tuning["ai_speed_mult"] = saved_speed
+	Input.action_release("flat_twirl")
+	return ok
+
+
+func _spin_after_replay_round(player_wins: bool) -> bool:
+	var tag := "spin after replay (%s)" % ("won" if player_wins else "lost")
+	GameManager.start_free_duel(0, 0)
+	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
+		_fail("%s: the duel never reached DRAW" % tag)
+		return false
+	var player := GameManager.local_player
+	player._draw_gun()
+	if player_wins:
+		var ai: DuelistAI = GameManager.current_ais[0]
+		ai.take_bullet_hit(99.0, PackedVector3Array(), CombatRules.REGION_HEAD, false, true, 0)
+	else:
+		player.take_bullet_hit(99.0, PackedVector3Array(), CombatRules.REGION_HEAD)
+	if not await _wait_for(func() -> bool: return DeathCam.phase == DeathCam.Phase.TRAILING, 60.0):
+		_fail("%s: the replay never ended (phase %d)" % [tag, DeathCam.phase])
+		return false
+	for i in 4:
+		await get_tree().physics_frame
+	if player_wins:
+		if not await _gun_spins(player, tag + " right after the replay"):
+			return false
+		Input.action_press("flat_twirl")
+		for i in 6:
+			await get_tree().process_frame
+		var twirled_after := absf(player.revolver.twirl_angle) > 0.001
+		Input.action_release("flat_twirl")
+		if not twirled_after:
+			_fail("%s: flat twirl is dead right after the replay (%s)" % [tag, _gun_state(player.revolver)])
+			return false
+	elif player.twirl_allowed():
+		_fail("%s: a dead player may twirl" % tag)
+		return false
+	GameManager.start_free_duel(0, 0)
+	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
+		_fail("%s: the next duel never reached DRAW" % tag)
+		return false
+	player = GameManager.local_player
+	player._draw_gun()
+	await get_tree().physics_frame
+	if not await _gun_spins(player, tag + " in the next duel"):
+		return false
+	Input.action_press("flat_twirl")
+	for i in 6:
+		await get_tree().process_frame
+	var twirled := absf(player.revolver.twirl_angle) > 0.001
+	Input.action_release("flat_twirl")
+	if not twirled:
+		_fail("%s: flat twirl did not turn the gun in the next duel (%s)" % [tag, _gun_state(player.revolver)])
+		return false
+	print("AUTOTEST: %s: hinge spin and twirl work" % tag)
+	return true
+
+
+func _gun_state(gun: WeaponBase) -> String:
+	return "held %s drawn %s follow %s freeze %s blocks %s" % [
+			gun.held, gun.drawn, gun.follow_parent, gun.freeze, DeathCam.blocks_combat()]
+
+
+func _gun_spins(player: Player, tag: String) -> bool:
+	var gun: WeaponBase = player.revolver
+	gun.begin_spin()
+	for i in 6:
+		await get_tree().physics_frame
+	var turned := gun.is_spin_active() and absf(gun.spin_angle) > 0.001
+	var state := _gun_state(gun)
+	gun.end_spin(true)
+	if not turned:
+		_fail("%s: begin_spin did not turn the gun (%s)" % [tag, state])
+	return turned
 
 
 ## `ScreenOverlay` is checked as state; headless draws no shader. The NPC is slowed so its
@@ -6442,6 +6542,14 @@ func _bullet_trail_ok() -> bool:
 	if uvs.size() != 8 or not is_zero_approx(lo) or not is_equal_approx(hi, 1.0):
 		_fail("bullet trail ribbon UVs: %d verts, UV.y %.2f..%.2f" % [uvs.size(), lo, hi])
 		return false
+	var slug := Bullet.spawn(self, Vector3.ZERO, Vector3.FORWARD, 1.0, false, [], false)
+	var slug_mesh := slug.get_children().filter(func(n: Node) -> bool: return n is MeshInstance3D)
+	var casts := slug_mesh.is_empty() \
+			or (slug_mesh[0] as MeshInstance3D).cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	slug._expire()
+	if casts:
+		_fail("bullet slug casts a shadow; the boot warmup draws it without one")
+		return false
 	return true
 
 
@@ -8123,6 +8231,397 @@ func _steam_transport_ok() -> bool:
 	return true
 
 
+# -- Duel title cards ---------------------------------------------------------------
+
+## Display name the `intro` suites run under (the Steam persona wins when Steam is up).
+const INTRO_NAME := "Autotest Kid"
+const INTRO_HOST_NAME := "Intro Host"
+const INTRO_JOIN_NAME := "Intro Joiner"
+
+## The real duel-intro toggle and display name, put back on disk if a suite changed them.
+var _saved_intro: Array = []
+## States `DuelManager.state_changed` reported since `_record_intro_states`.
+var _intro_states: Array = []
+
+
+func _restore_intro_settings() -> void:
+	if _saved_intro.is_empty() or (PlayerSettings.duel_intro_enabled == _saved_intro[0]
+			and PlayerSettings.display_name == _saved_intro[1]):
+		return
+	PlayerSettings.duel_intro_enabled = _saved_intro[0]
+	PlayerSettings.display_name = _saved_intro[1]
+	PlayerSettings._save_config()
+
+
+func _record_intro_states() -> void:
+	_intro_states.clear()
+	if not GameManager.duel.state_changed.is_connected(_on_intro_state):
+		GameManager.duel.state_changed.connect(_on_intro_state)
+
+
+func _on_intro_state(state: int) -> void:
+	_intro_states.append(state)
+
+
+## The `intro` suite: single player (free duel, skip, Reset Duel, several NPCs, the toggle,
+## Horde, the gauntlet's retry), the display name, then a lobby host alone (slot order,
+## rematch detection, a leaver mid-intro).
+func _test_intro() -> void:
+	await _sleep(1.0)
+	PlayerSettings.duel_intro_enabled = true
+	PlayerSettings.display_name = INTRO_NAME
+	var ok: bool = await _intro_free_duel_ok() and _intro_skip_ok() and _intro_reset_ok() \
+			and await _intro_multi_ok() and _intro_toggle_ok() and await _intro_horde_ok() \
+			and _intro_gauntlet_ok() and _intro_name_ok() and _intro_lobby_ok()
+	if ok:
+		NetworkManager.leave("autotest")
+		_pass()
+
+
+## A free duel from the menu: the NPC's card, then the player's (mirrored), each on its own
+## camera, the HUD hidden and the lineup held, then the standoff with the camera back.
+func _intro_free_duel_ok() -> bool:
+	var duel := GameManager.duel
+	var intro := duel.intro
+	var local := GameManager.local_player
+	var hud := GameManager.hud
+	_record_intro_states()
+	GameManager.start_free_duel(0, 0)
+	var ai := GameManager.current_ais[0]
+	var npc := ai.archetype.display_name
+	var want := PackedStringArray([npc, NetworkManager.local_player_name()])
+	if duel.state != DuelManager.State.INTRO or not intro.is_active() or intro.card_names() != want \
+			or intro.shown_names != PackedStringArray([npc]):
+		_fail("intro: a free duel should open on the NPC's card (state %d, cards %s, shown %s)" % [
+				duel.state, intro.card_names(), intro.shown_names])
+		return false
+	if NetworkManager.local_player_name() != INTRO_NAME and not NetworkManager.steam_names_player():
+		_fail("intro: the player's card should carry the Settings name, not '%s'" % NetworkManager.local_player_name())
+		return false
+	var camera := local.get_viewport().get_camera_3d()
+	var spawn := ai.global_transform
+	var eye := spawn.origin - spawn.basis.z * DuelIntro.CAM_DISTANCE + Vector3.UP * DuelIntro.CAM_HEIGHT
+	if camera == null or camera.name != "DuelIntroCamera" or camera.global_position.distance_to(eye) > 0.1:
+		_fail("intro: the first card's camera should stand ahead of the NPC (%s)" % [camera])
+		return false
+	if intro.card()._mirrored or intro.card().lettered_text() != npc.to_upper() or not intro.card().is_playing():
+		_fail("intro: the first card should be the drawn layout, the NPC lettered at runtime ('%s')" % intro.card().lettered_text())
+		return false
+	if hud.reload_status.modulate.a != 0.0 or hud.health_status.modulate.a != 0.0 or not local._intro_view \
+			or not local.corpse_body()._head_mesh.visible:
+		_fail("intro: the HUD should hide and the player's whole body show while the cards play")
+		return false
+	if not GameManager._holding_messages or not GameManager._held_messages.has(npc) \
+			or hud.message_label.text.contains(tr("MSG_HOLSTER")):
+		_fail("intro: the lineup line should wait for the standoff (%s)" % [GameManager._held_messages])
+		return false
+	if not await _wait_for(func() -> bool: return intro.shown_names.size() == 2, TitleCard.DURATION + 2.0):
+		_fail("intro: the player's card never came")
+		return false
+	if not intro.card()._mirrored or intro.card().lettered_text() != want[1].to_upper():
+		_fail("intro: the second card should be mirrored and name the player")
+		return false
+	if not await _wait_for_state(DuelManager.State.STANDOFF, TitleCard.DURATION + 2.0):
+		_fail("intro: the cards never handed over to the standoff")
+		return false
+	camera = local.get_viewport().get_camera_3d()
+	if _intro_states != [DuelManager.State.INTRO, DuelManager.State.STANDOFF] or intro.is_active() \
+			or camera != (local.rig as FlatRig).camera:
+		_fail("intro: after the cards the standoff should follow with the player's camera (%s, %s)" % [_intro_states, camera])
+		return false
+	if hud.reload_status.modulate.a != 1.0 or local._intro_view or local.corpse_body()._head_mesh.visible \
+			or GameManager._holding_messages:
+		_fail("intro: the HUD and the first-person body should come back at the standoff")
+		return false
+	if not hud.message_label.text.contains(npc) or not hud.message_label.text.contains(tr("MSG_HOLSTER")):
+		_fail("intro: the standoff line should carry the held lineup ('%s')" % hud.message_label.text)
+		return false
+	print("AUTOTEST: intro free duel ok (%s)" % ", ".join(want))
+	return true
+
+
+## Fire during the cards skips them and fires nothing; the gun may be drawn meanwhile.
+func _intro_skip_ok() -> bool:
+	var duel := GameManager.duel
+	var local := GameManager.local_player
+	GameManager.start_free_duel(0, 0)
+	if duel.state != DuelManager.State.INTRO:
+		_fail("intro skip: a menu free duel should play the cards")
+		return false
+	local._draw_gun()
+	var rounds := local.revolver.rounds
+	if not local.revolver.held:
+		_fail("intro skip: the gun should draw during the cards")
+		return false
+	local._on_trigger_changed(&"right_hand", true)
+	local._on_trigger_changed(&"right_hand", false)
+	var skipped := duel.state == DuelManager.State.STANDOFF and not duel.intro.is_active()
+	var fired := local.revolver.rounds != rounds
+	local._holster_gun()
+	if not skipped or fired:
+		_fail("intro skip: fire should skip to the standoff without a shot (state %d, fired %s)" % [duel.state, fired])
+		return false
+	print("AUTOTEST: intro fire skip ok (no shot)")
+	return true
+
+
+func _intro_reset_ok() -> bool:
+	_record_intro_states()
+	GameManager.reset_current_duel()
+	if GameManager.duel.state != DuelManager.State.STANDOFF or _intro_states.has(DuelManager.State.INTRO):
+		_fail("intro: Reset Duel should go straight to the standoff (%s)" % [_intro_states])
+		return false
+	print("AUTOTEST: intro skipped on Reset Duel")
+	return true
+
+
+## Three Mixed NPCs: a card each in lineup order, then the player, sides alternating.
+func _intro_multi_ok() -> bool:
+	var duel := GameManager.duel
+	var intro := duel.intro
+	GameManager.start_free_duel(0, GameManager.ARCHETYPES.size(), 3)
+	var want := PackedStringArray()
+	for ai in GameManager.current_ais:
+		want.append(ai.archetype.display_name)
+	want.append(NetworkManager.local_player_name())
+	if duel.state != DuelManager.State.INTRO or intro.card_names() != want:
+		_fail("intro multi: want cards %s, got %s" % [want, intro.card_names()])
+		return false
+	for card in range(1, want.size()):
+		duel._timer = card * TitleCard.DURATION + 0.01
+		await get_tree().process_frame
+		if intro.shown_names.size() != card + 1 or intro.card()._mirrored != (card % 2 == 1):
+			_fail("intro multi: card %d did not come up on its side (%s)" % [card, intro.shown_names])
+			return false
+	duel._timer = want.size() * TitleCard.DURATION
+	await get_tree().process_frame
+	if duel.state != DuelManager.State.STANDOFF or intro.shown_names != want:
+		_fail("intro multi: the standoff should follow the last card (state %d)" % duel.state)
+		return false
+	print("AUTOTEST: intro multi ok (%s)" % ", ".join(want))
+	return true
+
+
+func _intro_toggle_ok() -> bool:
+	PlayerSettings.duel_intro_enabled = false
+	_record_intro_states()
+	GameManager.start_free_duel(0, 0)
+	var skipped := GameManager.duel.state == DuelManager.State.STANDOFF and not _intro_states.has(DuelManager.State.INTRO)
+	PlayerSettings.duel_intro_enabled = true
+	if not skipped:
+		_fail("intro: the Settings toggle off should skip the cards")
+		return false
+	print("AUTOTEST: intro toggle off ok")
+	return true
+
+
+func _intro_horde_ok() -> bool:
+	_record_intro_states()
+	GameManager.start_horde(0)
+	var started := await _wait_for_state(DuelManager.State.STANDOFF, 10.0)
+	GameManager.go_to_menu()
+	if not started or _intro_states.has(DuelManager.State.INTRO):
+		_fail("intro: Horde should have no cards (%s)" % [_intro_states])
+		return false
+	print("AUTOTEST: Horde has no intro")
+	return true
+
+
+## A new rung plays the cards and holds its progress line; a retry after a loss and Reset
+## Duel do not.
+func _intro_gauntlet_ok() -> bool:
+	var duel := GameManager.duel
+	var gauntlet := GameManager.gauntlet
+	GameManager.start_gauntlet()
+	var encounter := gauntlet.ladder.encounters[0]
+	var progress := tr("MSG_DUEL_PROGRESS") % [1, gauntlet.ladder.encounters.size(), encounter.label]
+	if duel.state != DuelManager.State.INTRO or not GameManager._held_messages.has(progress):
+		_fail("intro gauntlet: the first rung should play the cards and hold its progress line")
+		return false
+	duel.request_intro_skip()
+	if duel.state != DuelManager.State.STANDOFF or not GameManager.hud.message_label.text.contains(progress):
+		_fail("intro gauntlet: the standoff should carry the progress line ('%s')" % GameManager.hud.message_label.text)
+		return false
+	_record_intro_states()
+	gauntlet.on_duel_finished(false)
+	if duel.state != DuelManager.State.STANDOFF or _intro_states.has(DuelManager.State.INTRO) \
+			or gauntlet.encounter_index != 0:
+		_fail("intro gauntlet: a retry after a loss should skip the cards (%s)" % [_intro_states])
+		return false
+	gauntlet.on_duel_finished(true)
+	if duel.state != DuelManager.State.INTRO or gauntlet.encounter_index != 1:
+		_fail("intro gauntlet: the next rung should play the cards")
+		return false
+	duel.request_intro_skip()
+	_record_intro_states()
+	GameManager.reset_current_duel()
+	var reset_ok := duel.state == DuelManager.State.STANDOFF and not _intro_states.has(DuelManager.State.INTRO)
+	GameManager.go_to_menu()
+	if not reset_ok:
+		_fail("intro gauntlet: Reset Duel on a rung should skip the cards")
+		return false
+	print("AUTOTEST: intro gauntlet ok (new rung plays, retry and reset skip)")
+	return true
+
+
+## Empty is the device name; a name is trimmed to one line of NAME_MAX.
+func _intro_name_ok() -> bool:
+	var net := NetworkManager
+	PlayerSettings.display_name = ""
+	var fallback := net.local_player_name()
+	PlayerSettings.display_name = INTRO_NAME
+	if not net.steam_names_player() and fallback != net.device_name():
+		_fail("intro name: an empty display name should fall back to the device name ('%s')" % fallback)
+		return false
+	var long := LobbyRoster.clean_name("  %s\n" % "x".repeat(LobbyRoster.NAME_MAX + 9))
+	if long.length() != LobbyRoster.NAME_MAX or LobbyRoster.clean_name(" Doc ") != "Doc":
+		_fail("intro name: names should be trimmed to %d ('%s')" % [LobbyRoster.NAME_MAX, long])
+		return false
+	var lettering := TitleCardLettering.new()
+	lettering.set_name_text(long, false)
+	var fits := lettering.get_font_size() < TitleCardLettering.FONT_SIZE_MAX
+	lettering.free()
+	if not fits:
+		_fail("intro name: a long name should shrink to fit the card")
+		return false
+	print("AUTOTEST: intro names ok")
+	return true
+
+
+## A lobby host alone: the cards in slot order with the NPC slot, the rematch with the same
+## occupants skipping them, the waiting room always playing them, a leaver mid-intro, and a
+## 1v1 leaver ending the duel during them.
+func _intro_lobby_ok() -> bool:
+	var duel := GameManager.duel
+	var net := NetworkManager
+	if net.host_lan() != OK:
+		_fail("intro lobby: could not host LAN")
+		return false
+	if not _lobby_fill(3, {2: LOBBY_NPC_ARCHETYPE}):
+		return false
+	if not net.host_start() or duel.state != DuelManager.State.INTRO:
+		_fail("intro lobby: a start from the waiting room should play the cards (state %d)" % duel.state)
+		return false
+	var want := PackedStringArray([duel.slot_name(0), LOBBY_FAKE_NAMES[0],
+			GameManager.archetype_at(LOBBY_NPC_ARCHETYPE).display_name])
+	if duel.intro.card_names() != want:
+		_fail("intro lobby: want cards %s in slot order, got %s" % [want, duel.intro.card_names()])
+		return false
+	duel._holstered.fill(true)
+	duel.request_intro_skip()
+	if duel.state != DuelManager.State.STANDOFF or duel.intro.is_active():
+		_fail("intro lobby: the host's fire should skip the cards")
+		return false
+	_record_intro_states()
+	GameManager._mp_rematch()
+	if duel.state != DuelManager.State.STANDOFF or _intro_states.has(DuelManager.State.INTRO):
+		_fail("intro lobby: a rematch with the same occupants should skip the cards (%s)" % [_intro_states])
+		return false
+	if not net.host_back_to_lobby() or not net.host_start() or duel.state != DuelManager.State.INTRO:
+		_fail("intro lobby: a waiting-room start should always play the cards")
+		return false
+	duel._holstered.fill(true)
+	net._verified_peers[LOBBY_FAKE_PEERS[0]] = LOBBY_FAKE_NAMES[0]
+	net._on_peer_disconnected(LOBBY_FAKE_PEERS[0])
+	if duel.state != DuelManager.State.INTRO or not duel.intro.is_active() or duel.slot_alive(1) \
+			or GameManager.avatars.has(1) or not GameManager._holding_messages:
+		_fail("intro lobby: a leaver mid-intro should drop out while the cards run on (state %d)" % duel.state)
+		return false
+	duel.request_intro_skip()
+	if duel.state != DuelManager.State.STANDOFF or not GameManager.hud.message_label.text.contains(LOBBY_FAKE_NAMES[0]):
+		_fail("intro lobby: the leaver's line should show at the standoff ('%s')" % GameManager.hud.message_label.text)
+		return false
+	GameManager._mp_rematch()
+	if duel.state != DuelManager.State.INTRO:
+		_fail("intro lobby: a rematch with the leaver's slot as an NPC should play the cards")
+		return false
+	if not _lobby_fill(2) or not net.host_start() or duel.state != DuelManager.State.INTRO:
+		_fail("intro lobby: the 1v1 should open on the cards")
+		return false
+	var result := _arm_duel_listener()
+	net._verified_peers[LOBBY_FAKE_PEERS[0]] = LOBBY_FAKE_NAMES[0]
+	net._on_peer_disconnected(LOBBY_FAKE_PEERS[0])
+	var camera := GameManager.local_player.get_viewport().get_camera_3d()
+	if result != [true, "MSG_OPPONENT_LEFT"] or duel.state != DuelManager.State.RESOLUTION or duel.intro.is_active() \
+			or GameManager._holding_messages or camera != (GameManager.local_player.rig as FlatRig).camera \
+			or not GameManager.hud.message_label.text.contains(tr("MSG_YOU_WIN")):
+		_fail("intro lobby: a 1v1 leaver during the cards should end the duel with the view back (%s, '%s')" % [
+				result, GameManager.hud.message_label.text])
+		return false
+	print("AUTOTEST: intro lobby ok (slot order, rematch skip, room start plays, leavers)")
+	return true
+
+
+## `introhost` / `introjoin`: a real 1v1. The joiner's fire skips the cards on both peers,
+## and an auto-rematch with the same two skips them.
+func _test_intro_host() -> void:
+	await _sleep(0.5)
+	PlayerSettings.duel_intro_enabled = true
+	PlayerSettings.display_name = INTRO_HOST_NAME
+	if NetworkManager.host_lan() != OK:
+		return _fail("introhost: could not host LAN")
+	if not await _wait_for(func() -> bool: return NetworkManager.roster.can_start(), 40.0):
+		return _fail("introhost: no peer joined")
+	await _sleep(1.0)
+	var duel := GameManager.duel
+	if not NetworkManager.host_start() or duel.state != DuelManager.State.INTRO:
+		return _fail("introhost: START should open on the cards (state %d)" % duel.state)
+	var want := PackedStringArray([duel.slot_name(0), duel.slot_name(1)])
+	if duel.intro.card_names() != want:
+		return _fail("introhost: want cards %s, got %s" % [want, duel.intro.card_names()])
+	print("AUTOTEST: introhost cards %s, waiting for the joiner's skip" % ", ".join(want))
+	if not await _wait_for_state(DuelManager.State.STANDOFF, TitleCard.DURATION * 2.0 + 5.0):
+		return _fail("introhost: the cards never ended")
+	if duel.intro.shown_names.size() != 1:
+		return _fail("introhost: the joiner's skip should end the cards on the first one (%s)" % duel.intro.shown_names)
+	print("AUTOTEST: introhost got the joiner's skip")
+	await _sleep(1.0)
+	_record_intro_states()
+	GameManager._mp_rematch()
+	if duel.state != DuelManager.State.STANDOFF or _intro_states.has(DuelManager.State.INTRO):
+		return _fail("introhost: the rematch should skip the cards (%s)" % [_intro_states])
+	await _sleep(3.0)  # let the joiner see the rematch before the link goes
+	_pass()
+
+
+func _test_intro_join() -> void:
+	await _sleep(2.0)
+	PlayerSettings.display_name = INTRO_JOIN_NAME
+	if NetworkManager.join_lan("127.0.0.1") != OK:
+		return _fail("introjoin: could not start joining")
+	if not await _wait_for(func() -> bool: return NetworkManager.is_active() and GameManager.in_mp_lobby(), 30.0):
+		return _fail("introjoin: never reached the waiting room")
+	_record_intro_states()
+	var duel := GameManager.duel
+	if not await _wait_for_state(DuelManager.State.INTRO, 30.0):
+		return _fail("introjoin: the host's START never showed the cards")
+	var want := PackedStringArray([duel.slot_name(0), duel.slot_name(1)])
+	if duel.intro.card_names() != want or not duel.intro.is_active() or duel.intro.shown_names.size() != 1:
+		return _fail("introjoin: want the first of cards %s, got %s" % [want, duel.intro.card_names()])
+	await _sleep(0.5)
+	var local := GameManager.local_player
+	local._draw_gun()
+	var rounds := local.revolver.rounds
+	local._on_trigger_changed(&"right_hand", true)
+	local._on_trigger_changed(&"right_hand", false)
+	if local.revolver.rounds != rounds:
+		return _fail("introjoin: fire during the cards should not shoot")
+	local._holster_gun()
+	if not await _wait_for_state(DuelManager.State.STANDOFF, 5.0):
+		return _fail("introjoin: the skip never came back from the host")
+	if duel.intro.is_active() or duel.intro.shown_names.size() != 1:
+		return _fail("introjoin: the host's skip should end the cards here too")
+	print("AUTOTEST: introjoin skipped the cards for both")
+	var rematched := func() -> bool:
+		return _intro_states.count(DuelManager.State.STANDOFF) >= 2
+	if not await _wait_for(rematched, 20.0):
+		return _fail("introjoin: no rematch arrived (%s)" % [_intro_states])
+	if _intro_states.count(DuelManager.State.INTRO) != 1:
+		return _fail("introjoin: the rematch should skip the cards (%s)" % [_intro_states])
+	print("AUTOTEST: introjoin rematch skipped the cards")
+	_pass()
+
+
 # -- Helpers ---------------------------------------------------------------------
 
 func _wait_for_state(state: int, timeout: float) -> bool:
@@ -8183,12 +8682,14 @@ func _fail(message: String) -> void:
 	print("AUTOTEST FAIL: %s" % message)
 	_apply_lobby_snapshot(_saved_lobby_setup)
 	_restore_offhand_item()
+	_restore_intro_settings()
 	get_tree().quit(1)
 
 
 func _pass() -> void:
 	_apply_lobby_snapshot(_saved_lobby_setup)
 	_restore_offhand_item()
+	_restore_intro_settings()
 	print("AUTOTEST PASS")
 	get_tree().quit(0)
 

@@ -9,7 +9,7 @@ extends RefCounted
 ##   impact_flesh.ogg, flesh_chunk.ogg, impact_world.ogg, ricochet.ogg, hurt.ogg,
 ##   near_miss_whoosh.ogg, shell_eject.ogg, chamber.ogg, duel_end.wav,
 ##   glass_break.ogg, slot_pull.ogg, slot_stop.ogg, slot_win.ogg,
-##   wind_bed.ogg (loop), wind_gust.ogg
+##   wind_bed.ogg (loop), wind_gust.ogg, title_whoosh.ogg, title_sting.ogg
 
 const DUEL_END := preload("res://assets/audio/duel_end.wav")
 
@@ -18,7 +18,7 @@ const WARMUP_CUES: Array[StringName] = [
 	&"impact_flesh", &"flesh_chunk", &"impact_world", &"ricochet", &"hurt",
 	&"near_miss_whoosh", &"shell_eject", &"chamber", &"duel_end",
 	&"glass_break", &"slot_pull", &"slot_stop", &"slot_win",
-	&"wind_bed", &"wind_gust",
+	&"wind_bed", &"wind_gust", &"title_whoosh", &"title_sting",
 ]
 
 ## Optional: StringName cue → AudioStream. Checked before placeholders.
@@ -75,6 +75,10 @@ static func get_stream(cue: StringName) -> AudioStream:
 			return PlaceholderAudio.wind_bed()
 		"wind_gust":
 			return PlaceholderAudio.wind_gust()
+		"title_whoosh":
+			return PlaceholderAudio.title_whoosh()
+		"title_sting":
+			return PlaceholderAudio.title_sting()
 		_:
 			push_warning("AudioCatalog: unknown cue '%s'" % cue)
 			return PlaceholderAudio.click()

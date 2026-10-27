@@ -6,6 +6,9 @@ extends Resource
 enum MoveStyle { STAND, STRAFE }
 
 @export var display_name := "Duelist"
+## Baked duel title-card name (`DuelIntro`): a 480x270 transparent PNG on the card canvas.
+## Empty letters `display_name` at runtime.
+@export var title_card_name: Texture2D
 ## Seconds after the bell before the AI starts drawing.
 @export_range(0.05, 2.0, 0.01) var reaction_time := 0.45
 @export_range(0.0, 1.0, 0.01) var reaction_variance := 0.15

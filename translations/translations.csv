@@ -96,6 +96,10 @@ SETTINGS_DEVICE_HINT,"Output device applies to all game audio, not just voice."
 SETTINGS_HOLSTER_SIDE,Holster Side
 SETTINGS_GORE,Gore
 SETTINGS_SCREEN_EFFECTS,Screen effects
+SETTINGS_DUEL_INTRO,Duel intro
+SETTINGS_DISPLAY_NAME,Your Name
+SETTINGS_NAME_DEVICE,Device name (%s)
+SETTINGS_NAME_STEAM,"Steam is running, so duels use your Steam name: %s"
 SETTINGS_HEIGHT,Height
 SETTINGS_STANDING_HEIGHT,Standing Height
 SETTINGS_UNIT_FT,ft

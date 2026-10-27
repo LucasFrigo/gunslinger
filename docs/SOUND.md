@@ -58,6 +58,8 @@ Flesh vs world is the only material split today. Head/torso/arm/leg share `impac
 |---|---|---|---|
 | [ ] | `bell` | `bell.ogg` | Draw signal (`DuelManager._ring_bell`) |
 | [x] | `duel_end` | `duel_end.wav` | Lethal hit / kill-cam start (`notify_kill_shot`). Not on fouls. Pitch stays concert under slow-mo |
+| [ ] | `title_whoosh` | `title_whoosh.ogg` | A duel title card's layers slide in, once per card (`gauntlet/duel_intro.gd` `show_card`, 2D) |
+| [ ] | `title_sting` | `title_sting.ogg` | The card's name lands, once per card (`TitleCard.landed`, 2D) |
 
 `duel_end` is the only real file in the folder. Revisit if the sting should change with a full mix pass.
 

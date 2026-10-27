@@ -208,6 +208,11 @@ func set_slots(slots: String) -> void:
 		_steam.call("setLobbyData", lobby_id, LOBBY_KEY_SLOTS, slots)
 
 
+## The Steam client is running and the API came up.
+func is_ready() -> bool:
+	return _steam != null and _init_ok
+
+
 func persona_name() -> String:
 	if _steam == null:
 		return ""

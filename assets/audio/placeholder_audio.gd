@@ -95,6 +95,18 @@ static func slot_win() -> AudioStreamWAV:
 		return _tone(1320.0, 0.9, 0.45, 3.0))
 
 
+## Duel title card: the layers slide in.
+static func title_whoosh() -> AudioStreamWAV:
+	return _cached("title_whoosh", func() -> AudioStreamWAV:
+		return _noise_burst(0.3, 0.45, 9.0, 900.0))
+
+
+## Duel title card: the name lands.
+static func title_sting() -> AudioStreamWAV:
+	return _cached("title_sting", func() -> AudioStreamWAV:
+		return _tone(660.0, 0.45, 0.4, 7.0))
+
+
 ## Seamless looping wind: low-passed noise whose level swells on whole cycles of the loop.
 static func wind_bed() -> AudioStreamWAV:
 	return _cached("wind_bed", func() -> AudioStreamWAV:

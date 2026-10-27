@@ -269,6 +269,9 @@ var _lobby_ring := 0
 var _lobby_humans := {}
 ## The join announcement the host's "everyone is here" line carries with it.
 var _join_line := ""
+## While the title cards play: `show_message` lines wait here for the standoff.
+var _holding_messages := false
+var _held_messages: PackedStringArray = []
 var _mesh_lab_open := false
 var _mesh_lab_puppet: MeshLabPuppet
 var _mesh_lab_flycam: MeshLabFlycam
@@ -513,7 +516,7 @@ func start_free_duel(scenario_index: int, archetype_index: int, count := 1) -> v
 	hud.hide_menu()
 	_remove_vr_menu_panel()
 	current_lineup = _roll_lineup(archetype_index, count)
-	_begin_ai_duel(scenario_index, current_lineup, 1.0)
+	_begin_ai_duel(scenario_index, current_lineup, 1.0, duel.intro_enabled())
 
 
 func _roll_lineup(archetype_index: int, count: int) -> Array[AIArchetype]:
@@ -588,12 +591,18 @@ func reset_current_duel() -> void:
 			show_message(tr("MSG_NO_ACTIVE_DUEL"), 1.5)
 
 
-## Called by the gauntlet controller for each rung of the ladder.
-func begin_gauntlet_encounter(encounter: DuelEncounter) -> void:
-	_begin_ai_duel(encounter.scenario_index, encounter.lineup(), encounter.health_mult)
+## Called by the gauntlet controller for each rung of the ladder. `play_intro` for a new
+## rung; a retry after a loss and Reset Duel go straight to the standoff.
+func begin_gauntlet_encounter(encounter: DuelEncounter, play_intro := false) -> void:
+	_begin_ai_duel(encounter.scenario_index, encounter.lineup(), encounter.health_mult, play_intro)
 
 
-func _begin_ai_duel(scenario_index: int, lineup: Array[AIArchetype], health_mult: float) -> void:
+## `play_intro`: the title cards first (a free duel from the menu, a new gauntlet rung).
+## Their messages wait for the standoff.
+func _begin_ai_duel(scenario_index: int, lineup: Array[AIArchetype], health_mult: float,
+		play_intro := false) -> void:
+	if play_intro:
+		hold_messages()
 	_clear_combatants()
 	_load_scenario(scenario_index)
 	_place_local_player(current_scenario.get_player_spawn())
@@ -606,7 +615,7 @@ func _begin_ai_duel(scenario_index: int, lineup: Array[AIArchetype], health_mult
 		current_ais[0].set_target(local_player)
 	var text := lineup_text(lineup)
 	show_message(text, 2.0)
-	duel.start_ai_duel(current_ais, text if lineup.size() >= 2 else "")
+	duel.start_ai_duel(current_ais, text if lineup.size() >= 2 else "", true, play_intro)
 
 
 ## Spawns `lineup` on `spawns` (actor ids, tint shades for repeated archetypes,
@@ -767,6 +776,7 @@ func _on_peer_left(peer_id: int) -> void:
 
 
 func _on_session_ended(reason: String) -> void:
+	drop_held_messages()
 	_lobby_humans.clear()
 	_join_line = ""
 	if is_instance_valid(local_player):
@@ -812,6 +822,11 @@ func setup_mp_lobby(scenario_index: int, time_of_day: float) -> void:
 ## (the waiting room).
 func _mp_roster() -> LobbyRoster:
 	return duel.snapshot if duel.snapshot != null else NetworkManager.roster
+
+
+## Slot -> spawn on the loaded arena for a duel on `roster` (the title-card cameras).
+func slot_spawns(roster: LobbyRoster) -> Dictionary:
+	return _mp_spawns(roster)
 
 
 ## Slot -> spawn on the loaded arena. A duel hands the ring points (`get_duel_spawns`) out
@@ -1118,6 +1133,7 @@ func _after_delay(seconds: float, callable: Callable) -> void:
 
 func _bump_action_generation() -> void:
 	_action_generation += 1
+	drop_held_messages()
 
 
 func _set_mode(new_mode: int) -> void:
@@ -1190,9 +1206,31 @@ func _remove_vr_menu_panel() -> void:
 
 
 func show_message(text: String, duration := 2.5) -> void:
+	if _holding_messages:
+		if not _held_messages.has(text):
+			_held_messages.append(text)
+		return
 	hud.show_message(text, duration)
 	if is_vr and is_instance_valid(local_player):
 		local_player.show_vr_message(text, duration)
+
+
+## Title cards ahead: `show_message` keeps its lines for the standoff line
+## (`DuelManager._show_standoff_message`) instead of showing them over the cards.
+func hold_messages() -> void:
+	_holding_messages = true
+
+
+## The held lines, oldest first; showing resumes.
+func take_held_messages() -> PackedStringArray:
+	var lines := _held_messages
+	drop_held_messages()
+	return lines
+
+
+func drop_held_messages() -> void:
+	_holding_messages = false
+	_held_messages = PackedStringArray()
 
 
 # -- Tuning -------------------------------------------------------------------

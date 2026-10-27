@@ -85,6 +85,9 @@ func _ready() -> void:
 	global_position = _spawn_origin
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.mesh = ensure_mesh()
+	# The boot warmup draws the slug without shadows; a casting slug would compile the
+	# shadow-pass variant on the first shot and redraw the sun's shadow maps all flight.
+	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mesh_instance)
 
 	_trail = BulletTrail.new()

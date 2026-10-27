@@ -4,13 +4,13 @@
 [ext_resource type="PackedScene" uid="uid://dn0el7qivd0v1" path="res://assets/models/scenarios/train_rooftop/train_rooftop.glb" id="2"]
 [ext_resource type="PackedScene" uid="uid://bakqgn6ekd6uh" path="res://assets/models/scenarios/main_street/env_terrain.glb" id="3"]
 [ext_resource type="Script" uid="uid://c2k2mqdp2f4mh" path="res://scenarios/train_rooftop/scenery_belt.gd" id="4"]
-[ext_resource type="PackedScene" path="res://assets/models/scenarios/train_rooftop/train_car_coach.glb" id="5"]
-[ext_resource type="PackedScene" path="res://assets/models/scenarios/train_rooftop/train_coupler.glb" id="6"]
-[ext_resource type="PackedScene" path="res://assets/models/scenarios/train_rooftop/train_engine.glb" id="7"]
-[ext_resource type="PackedScene" path="res://assets/models/scenarios/train_rooftop/train_car_baggage.glb" id="8"]
-[ext_resource type="PackedScene" path="res://assets/models/scenarios/train_rooftop/train_car_business.glb" id="9"]
-[ext_resource type="Shader" path="res://scenarios/sky_western.gdshader" id="sky_shader"]
-[ext_resource type="Texture2D" path="res://scenarios/sky_clouds.tres" id="sky_clouds"]
+[ext_resource type="PackedScene" uid="uid://brm1n6egkhcxb" path="res://assets/models/scenarios/train_rooftop/train_car_coach.glb" id="5"]
+[ext_resource type="PackedScene" uid="uid://yqh7nt8xglhu" path="res://assets/models/scenarios/train_rooftop/train_coupler.glb" id="6"]
+[ext_resource type="PackedScene" uid="uid://dfrqqb0xwcjnn" path="res://assets/models/scenarios/train_rooftop/train_engine.glb" id="7"]
+[ext_resource type="PackedScene" uid="uid://coajp1iurmd6m" path="res://assets/models/scenarios/train_rooftop/train_car_baggage.glb" id="8"]
+[ext_resource type="PackedScene" uid="uid://cbci2qjcxppav" path="res://assets/models/scenarios/train_rooftop/train_car_business.glb" id="9"]
+[ext_resource type="Texture2D" uid="uid://c40uprmu5h0e" path="res://scenarios/sky_clouds.tres" id="sky_clouds"]
+[ext_resource type="Shader" uid="uid://chmp7xrt74w0j" path="res://scenarios/sky_western.gdshader" id="sky_shader"]
 
 [sub_resource type="ShaderMaterial" id="sky_mat"]
 shader = ExtResource("sky_shader")
@@ -56,23 +56,23 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 10)
 [node name="EnemySpawn" type="Marker3D" parent="." unique_id=769817657]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 3.2, -10)
 
-[node name="EnemySpawns2" type="Node3D" parent="."]
+[node name="EnemySpawns2" type="Node3D" parent="." unique_id=894257433]
 
-[node name="A" type="Marker3D" parent="EnemySpawns2"]
+[node name="A" type="Marker3D" parent="EnemySpawns2" unique_id=1071992597]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, 3.2, -10)
 
-[node name="B" type="Marker3D" parent="EnemySpawns2"]
+[node name="B" type="Marker3D" parent="EnemySpawns2" unique_id=114850615]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 3.2, -3.5)
 
-[node name="EnemySpawns3" type="Node3D" parent="."]
+[node name="EnemySpawns3" type="Node3D" parent="." unique_id=1981781756]
 
-[node name="A" type="Marker3D" parent="EnemySpawns3"]
+[node name="A" type="Marker3D" parent="EnemySpawns3" unique_id=78992982]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 3.2, -11)
 
-[node name="B" type="Marker3D" parent="EnemySpawns3"]
+[node name="B" type="Marker3D" parent="EnemySpawns3" unique_id=1114922567]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, 3.2, -5)
 
-[node name="C" type="Marker3D" parent="EnemySpawns3"]
+[node name="C" type="Marker3D" parent="EnemySpawns3" unique_id=785670127]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 3.2, 3.5)
 
 [node name="Sun" type="DirectionalLight3D" parent="." unique_id=298167983]
@@ -86,43 +86,42 @@ environment = SubResource("env")
 
 [node name="Train" parent="." unique_id=634539408 instance=ExtResource("2")]
 
-[node name="CarRearB" parent="." instance=ExtResource("9")]
+[node name="CarRearB" parent="." unique_id=798424545 instance=ExtResource("9")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 33)
 
-[node name="CarRearA" parent="." instance=ExtResource("5")]
+[node name="CarRearA" parent="." unique_id=73881412 instance=ExtResource("5")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 19.8)
 
-[node name="CarA" parent="." instance=ExtResource("5")]
+[node name="CarA" parent="." unique_id=206539300 instance=ExtResource("5")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6.6)
 
-[node name="CarB" parent="." instance=ExtResource("5")]
+[node name="CarB" parent="." unique_id=99725212 instance=ExtResource("5")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -6.6)
 
-[node name="CarFrontA" parent="." instance=ExtResource("5")]
+[node name="CarFrontA" parent="." unique_id=488812045 instance=ExtResource("5")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -19.8)
 
-[node name="CarFrontB" parent="." instance=ExtResource("8")]
+[node name="CarFrontB" parent="." unique_id=654267100 instance=ExtResource("8")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -33)
 
-[node name="Engine" parent="." instance=ExtResource("7")]
+[node name="Engine" parent="." unique_id=1894723986 instance=ExtResource("7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -40.2)
 
-[node name="Coupler0" parent="." instance=ExtResource("6")]
+[node name="Coupler0" parent="." unique_id=2012076143 instance=ExtResource("6")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 26.4)
 
-[node name="Coupler1" parent="." instance=ExtResource("6")]
+[node name="Coupler1" parent="." unique_id=1250748011 instance=ExtResource("6")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 13.2)
 
-[node name="Coupler2" parent="." instance=ExtResource("6")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+[node name="Coupler2" parent="." unique_id=730402023 instance=ExtResource("6")]
 
-[node name="Coupler3" parent="." instance=ExtResource("6")]
+[node name="Coupler3" parent="." unique_id=218063131 instance=ExtResource("6")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -13.2)
 
-[node name="Coupler4" parent="." instance=ExtResource("6")]
+[node name="Coupler4" parent="." unique_id=626942997 instance=ExtResource("6")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -26.4)
 
-[node name="Coupler5" parent="." instance=ExtResource("6")]
+[node name="Coupler5" parent="." unique_id=807120234 instance=ExtResource("6")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -39.6)
 
 [node name="Scenery" type="Node3D" parent="." unique_id=1293527590]

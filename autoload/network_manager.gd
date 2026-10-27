@@ -134,14 +134,27 @@ func transport_kind() -> String:
 	return transport.kind() if transport != null else "none"
 
 
-## Steam persona on the Steam transport, the device name on LAN.
+## The Steam persona whenever Steam is up (any transport, single player too), else the
+## Settings display name, else the device name.
 func local_player_name() -> String:
 	var player_name := ""
-	if _steam != null and transport == _steam:
+	if _steam != null and _steam.is_ready():
 		player_name = _steam.persona_name()
-	if player_name.is_empty():
+	if player_name.strip_edges().is_empty():
+		player_name = PlayerSettings.display_name
+	if player_name.strip_edges().is_empty():
 		player_name = _local_host_name()
 	return _clean_name(player_name)
+
+
+## True when the Steam client is up, so its persona names this player everywhere.
+func steam_names_player() -> bool:
+	return _steam != null and _steam.is_ready() and not _steam.persona_name().strip_edges().is_empty()
+
+
+## What an empty display name falls back to.
+func device_name() -> String:
+	return _clean_name(_local_host_name())
 
 
 ## Human slots a new player could take right now. None while a duel runs: the
@@ -181,7 +194,7 @@ func host_lan() -> Error:
 		network_error.emit(tr("NET_HOST_FAILED") % hint)
 		transport = null
 		return err
-	discovery.start_beacon(_local_host_name(), game_version())
+	discovery.start_beacon(local_player_name(), game_version())
 	_begin_session(true)
 	return OK
 
@@ -465,7 +478,7 @@ func _refuse(peer_id: int, reason_key: String) -> void:
 
 
 func _clean_name(player_name: String) -> String:
-	return player_name.strip_escapes().strip_edges().left(LobbyRoster.NAME_MAX)
+	return LobbyRoster.clean_name(player_name)
 
 
 @rpc("any_peer", "call_remote", "reliable")

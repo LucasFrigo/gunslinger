@@ -94,6 +94,8 @@ var _wrist_synced: Dictionary = {}
 var _wrist_lock: Dictionary = {}
 var _wrist_from_local: Dictionary = {}
 var _wrist_blend: Dictionary = {}
+## The title cards hold the camera (`set_intro_view`).
+var _intro_view := false
 var _mesh_lab_parked := false
 var _mesh_lab_head_held := false
 var _mesh_lab_body_yaw := 0.0
@@ -293,6 +295,20 @@ func _mesh_lab_hand_source(hand_name: StringName, vr: VRRig) -> Node3D:
 	if held_gun_hand() == hand_name and revolver != null and not revolver.is_spin_active():
 		return revolver
 	return vr.get_hand_node(hand_name)
+
+
+## Duel title cards (`DuelIntro`): an outside camera sees the whole body, head included,
+## and none of the head-locked labels. Off puts first person back.
+func set_intro_view(enabled: bool) -> void:
+	_intro_view = enabled
+	if _dummy != null and alive:
+		_dummy.set_body_shelved(use_vr and not enabled)
+		_dummy.set_head_hidden(not enabled)
+		_dummy.set_first_person_clip(not enabled)
+	if _vr_reload_label != null:
+		_vr_reload_label.visible = not enabled
+	if enabled and _vr_message != null:
+		_vr_message.visible = false
 
 
 ## Flat mesh lab parks this body so the fly camera owns WASD and the view.
@@ -933,13 +949,18 @@ func _update_jam_clear(delta: float) -> void:
 		_refresh_reload_status()
 
 
-## Flat only. A twirl flourish needs a drawn gun after the bell, or the practice hub.
+## Flat only. A twirl flourish needs a drawn gun after the bell, the winner's gun once the
+## replay lets go (`_combat_blocked` covers the fly-along and the clip), or the practice hub.
 func twirl_allowed() -> bool:
 	if use_vr or not alive or not revolver.held or revolver.gate_open or revolver.jammed \
 			or _combat_blocked():
 		return false
-	return GameManager.in_practice() \
-			or (GameManager.duel != null and GameManager.duel.state == DuelManager.State.DRAW)
+	if GameManager.in_practice():
+		return true
+	if GameManager.duel == null:
+		return false
+	return GameManager.duel.state == DuelManager.State.DRAW \
+			or GameManager.duel.state == DuelManager.State.RESOLUTION
 
 
 ## Hold the twirl bind: the blaster turns. Release or any gate closing eases it out.
@@ -1013,6 +1034,11 @@ func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
 		DeathCam.cycle_spectate()
 		return
 	if DeathCam.blocks_combat():
+		return
+	# Fire is locked under the title cards; a press skips them instead.
+	if GameManager.duel != null and GameManager.duel.intro_playing() and not GameManager.is_pause_open():
+		if pressed:
+			GameManager.duel.request_intro_skip()
 		return
 	# VR: the off-hand trigger throws the equipped prop instead of firing.
 	if use_vr and hand == off_hand_name() and props.has_prop():
@@ -1523,6 +1549,18 @@ func _build_reload_status_text() -> String:
 	return "\n".join(lines)
 
 
+## Every fixed line `_build_reload_status_text` can print, for the VR label's glyph warm-up.
+func _reload_status_phrases() -> PackedStringArray:
+	var phrases := PackedStringArray()
+	for key in [
+			"RELOAD_AMMO_EMPTY", "RELOAD_GATE_OPEN", "RELOAD_GATE_CLOSED", "RELOAD_HAND_ROUND",
+			"RELOAD_HAND_EMPTY", "RELOAD_READY", "RELOAD_JAMMED", "RELOAD_HOLSTERED",
+			"RELOAD_IN_AIR_VR", "RELOAD_RELOADING_VR", "RELOAD_EMPTY_VR"]:
+		phrases.append(tr(key))
+	phrases.append(tr("RELOAD_AMMO") % [0, 0])
+	return phrases
+
+
 func _refresh_reload_status() -> void:
 	var text := _build_reload_status_text()
 	if GameManager.hud != null:
@@ -1542,13 +1580,16 @@ func _update_vr_reload_label(text: String) -> void:
 		_vr_reload_label.font_size = 42
 		_vr_reload_label.pixel_size = 0.0018
 		_vr_reload_label.outline_size = 12
+		# Every shot rewrites this label (ammo count). Render its glyphs now, not on a shot.
+		UiFonts.warm_glyphs(UiFonts.BOLD, _vr_reload_label.font_size, _vr_reload_label.outline_size,
+				PackedStringArray([text]) + _reload_status_phrases())
 		_vr_reload_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_vr_reload_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 		_vr_reload_label.no_depth_test = true
 		_vr_reload_label.position = Vector3(-0.55, -0.25, -1.4)
 		camera.add_child(_vr_reload_label)
 	_vr_reload_label.text = text
-	_vr_reload_label.visible = true
+	_vr_reload_label.visible = not _intro_view
 
 
 # -- Multiplayer pose broadcast ------------------------------------------------------

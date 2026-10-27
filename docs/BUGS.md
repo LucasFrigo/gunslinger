@@ -11,6 +11,48 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
+### BUG-034 — NPCs start duels with the gun already drawn, not holstered on the hip
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `minor` |
+| Filed | 2026-10-27 |
+| Platforms | Seen in a Canyon duel (`The Drunk`); platform not recorded. |
+| Areas | `ai/duelist_ai.gd`, `weapons/weapon_base.gd`, `gauntlet/duel_manager.gd` |
+
+**What:** At the start of a duel the NPC already holds the gun in its hand, pointed forward, instead of having it holstered on its hip until the draw.
+
+**Repro:**
+1. Start a duel against an NPC (The Drunk on Canyon seen; other archetypes untested).
+2. Look at the NPC during the countdown, before the draw signal.
+3. The gun is in its hand, not on its hip.
+
+**Notes:** Not yet investigated. Check whether this is the same for every archetype and arena, and whether it relates to BUG-028 (holstered gun rotation) or BUG-029 (replay NPC draw animation).
+
+---
+
+### BUG-033 — Train Rooftop: bullets hit the invisible walls
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `minor` |
+| Filed | 2026-10-27 |
+| Platforms | Train Rooftop; platform not recorded. |
+| Areas | `scenarios/scenario_base.gd` (`Guard*` collision boxes), `scenarios/train_rooftop/train_rooftop.tscn` |
+
+**What:** Bullets stop against the invisible `Guard*` walls around the rooftop instead of flying on.
+
+**Repro:**
+1. Free duel on Train Rooftop.
+2. Shoot toward a side or end of the roof, or at an angle that crosses a guard box.
+3. The bullet hits the invisible wall.
+
+**Notes:** Not yet investigated. BUG-019 left bullets colliding with the `Guard*` boxes on purpose (only ragdolls ignore them), so the bullet's collision mask likely needs the same exception, or the guards should leave the bullet layer. Walkers and props should still be blocked.
+
+---
+
 ### BUG-030 — Replay: off-hand props can be misplaced (cigarette floats ahead of the hand)
 
 | | |
@@ -33,6 +75,27 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 ---
 
 ## Fixed
+
+### BUG-032 — Flat: the gun twirl is dead after a win, once the replay ends or is skipped
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-26 |
+| Fixed | 2026-10-26 |
+| Platforms | Flat (the twirl is flat-only). VR hinge spin was checked and is not affected. |
+| Areas | `player/player.gd` (`twirl_allowed`) |
+
+**What:** After winning a duel, holding the twirl bind (T) did nothing once the replay finished or was skipped, although the gun was back in hand.
+
+**Repro:**
+1. Flat run, free duel, draw and shoot the NPC.
+2. Let the replay play out (or skip it with fire), then hold the twirl bind.
+
+**Cause:** `twirl_allowed()` only allowed `DuelManager.State.DRAW` (or the practice hub). A kill moves the duel to `RESOLUTION`, so the twirl stayed refused for the rest of the round. `_combat_blocked()` already keeps the fly-along and the clip itself locked.
+
+**Fix:** `twirl_allowed()` also allows `RESOLUTION` while the player is alive and `DeathCam.blocks_combat()` is false. A loser is dead and the fly-along and replay still block. `--autotest=duel` (`_spin_after_replay_ok`) holds the bind right after a win's replay, checks that a dead player may not twirl, and checks spin and twirl in the next duel. It failed before the fix. Roadmap 1.4.
 
 ### BUG-031 — Canyon: the desert plain draws a line behind the enemy instead of fading into the fog
 

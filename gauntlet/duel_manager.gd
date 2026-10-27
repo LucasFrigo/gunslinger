@@ -1,6 +1,7 @@
 class_name DuelManager
 extends Node
-## Duel state machine: Standoff -> WaitSignal -> Draw -> Resolution -> Reset.
+## Duel state machine: [Intro] -> Standoff -> WaitSignal -> Draw -> Resolution -> Reset.
+## Intro plays the title cards (`DuelIntro`) on a new matchup; fire skips it.
 ## Lives as a child of the GameManager autoload so its node path is stable on
 ## every peer, which lets it own the multiplayer duel RPCs directly.
 ## Works both vs AI (single-player, host runs everything) and in a lobby (2-4
@@ -12,7 +13,7 @@ signal duel_finished(local_player_won: bool, reason: String)
 ## Kill-cam hook: world-space points of the winning bullet's trajectory.
 signal kill_cam_requested(trail_points: PackedVector3Array)
 
-enum State { IDLE, STANDOFF, WAIT_SIGNAL, DRAW, RESOLUTION }
+enum State { IDLE, INTRO, STANDOFF, WAIT_SIGNAL, DRAW, RESOLUTION }
 ## Why a slot dropped out of an MP duel before it ended (`_mp_down`).
 enum Cause { KILLED, FOUL, LEFT }
 
@@ -21,9 +22,15 @@ const SIGNAL_DELAY_MAX := 5.0
 ## Fouls by one slot in one duel that put it out when 3-4 duel. Each one before that
 ## voids the standoff.
 const FOULS_OUT := 2
+## Seconds the standoff line stays up when it carries lines the title cards held back.
+const HELD_MESSAGE_SECONDS := 3.0
 
 var state: int = State.IDLE
 var is_mp := false
+## Title cards before the standoff (INTRO).
+var intro: DuelIntro
+## Autotest: the older suites run with no intro. Never saved.
+var skip_intros := false
 ## MP: the roster this duel runs on, taken at its start (`_mp_begin`). Slot index =
 ## ReplayBuffer actor id = shooter id. Null outside an MP duel. Edits to the live roster
 ## apply from the next duel.
@@ -33,6 +40,12 @@ var _timer := 0.0
 var _wait_duration := 0.0
 var _ais: Array[DuelistAI] = []
 var _lineup_text := ""
+## INTRO: the card on screen and how many there are. The host (or single player) runs the
+## clock, whether or not this peer still watches (`on_intro_paused`).
+var _intro_card := 0
+var _intro_cards := 0
+## Client: this intro's skip has gone to the host.
+var _intro_skip_sent := false
 ## A loss with two or more NPCs left: they fight on after the replay.
 var _survivors_fight := false
 var _bell_player: AudioStreamPlayer
@@ -58,11 +71,15 @@ func _ready() -> void:
 	_end_player.bus = "Master"
 	add_child(_end_player)
 	TimeManager.scale_changed.connect(_sync_end_pitch)
+	intro = DuelIntro.new()
+	intro.name = "DuelIntro"
+	add_child(intro)
 
 
 # -- Public API ---------------------------------------------------------------
 
-func start_ai_duel(ais: Array[DuelistAI], lineup_text := "", replay_win := true) -> void:
+## `play_intro` shows the title cards first: each NPC in lineup order, then the player.
+func start_ai_duel(ais: Array[DuelistAI], lineup_text := "", replay_win := true, play_intro := false) -> void:
 	stop()
 	is_mp = false
 	_ais = ais.duplicate()
@@ -71,12 +88,44 @@ func start_ai_duel(ais: Array[DuelistAI], lineup_text := "", replay_win := true)
 	for ai in _ais:
 		ai.died.connect(_on_enemy_died.bind(ai))
 	_bind_player()
-	_enter(State.STANDOFF)
+	_enter(State.INTRO if play_intro and is_instance_valid(GameManager.local_player) else State.STANDOFF)
 
 
+## This machine's Settings allow the title cards. In multiplayer only the host's counts.
+func intro_enabled() -> bool:
+	return PlayerSettings.duel_intro_enabled and not skip_intros
+
+
+## Host: a start from the waiting room always plays the intro. A rematch or a restart skips
+## it when every slot keeps its occupant (the same peer, or the same NPC archetype after the
+## Mixed roll) on the same arena.
 func host_start_mp_duel(scenario_index: int) -> void:
+	var previous := snapshot if state != State.IDLE else null
+	var previous_arena := GameManager.current_scenario_index
 	stop()
-	_mp_begin.rpc(scenario_index, randf(), _roll_snapshot())
+	var rolled := _roll_snapshot()
+	var play_intro := intro_enabled() and not (previous_arena == scenario_index
+			and _same_occupants(previous, rolled))
+	_mp_begin.rpc(scenario_index, randf(), rolled, play_intro)
+
+
+## `previous` held the same duelists, slot for slot, as the packed roster `rolled`.
+static func _same_occupants(previous: LobbyRoster, rolled: Dictionary) -> bool:
+	if previous == null:
+		return false
+	var next := LobbyRoster.new()
+	if not next.unpack(rolled) or next.slots.size() != previous.slots.size():
+		return false
+	for slot in next.slots.size():
+		var was := previous.slots[slot]
+		var now := next.slots[slot]
+		if was["kind"] != now["kind"]:
+			return false
+		if now["kind"] == LobbyRoster.Kind.HUMAN and was["peer_id"] != now["peer_id"]:
+			return false
+		if now["kind"] == LobbyRoster.Kind.NPC and was["archetype"] != now["archetype"]:
+			return false
+	return true
 
 
 ## Host: the live roster packed for this duel, with every NPC slot settled so each peer
@@ -108,6 +157,7 @@ func host_open_lobby(peer_id := 0) -> void:
 
 func stop() -> void:
 	state = State.IDLE
+	intro.finish()
 	_ais = []
 	_survivors_fight = false
 	_replay_win = true
@@ -308,6 +358,16 @@ func _process(delta: float) -> void:
 
 	_timer += delta
 	match state:
+		State.INTRO:
+			var card := int(_timer / TitleCard.DURATION)
+			if card >= _intro_cards:
+				_enter(State.STANDOFF)
+			elif card != _intro_card:
+				_intro_card = card
+				if is_mp:
+					_mp_intro_card.rpc(card)
+				else:
+					intro.show_card(card)
 		State.STANDOFF:
 			if _everyone_holstered():
 				if _timer >= 1.5:
@@ -334,12 +394,20 @@ func _enter(new_state: int) -> void:
 
 func _apply_state() -> void:
 	_foul_reported = false
+	if state != State.INTRO:
+		intro.finish()
 	state_changed.emit(state)
 	match state:
+		State.INTRO:
+			_intro_card = 0
+			_intro_skip_sent = false
+			var entries := _intro_entries()
+			_intro_cards = entries.size()
+			intro.begin(entries)
+			intro.show_card(0)
 		State.STANDOFF:
 			ReplayBuffer.begin()
-			var holster := tr("MSG_HOLSTER")
-			GameManager.show_message("%s\n%s" % [_lineup_text, holster] if not _lineup_text.is_empty() else holster, 2.0)
+			_show_standoff_message()
 		State.WAIT_SIGNAL:
 			GameManager.show_message(tr("MSG_WAIT_BELL"), 2.0)
 		State.DRAW:
@@ -348,6 +416,83 @@ func _apply_state() -> void:
 			for ai in _ais:
 				if is_instance_valid(ai):
 					ai.begin_draw()
+
+
+## The lineup and HOLSTER line, after whatever the title cards held back (a gauntlet's
+## progress, a leaver), each once.
+func _show_standoff_message() -> void:
+	var lines := PackedStringArray()
+	for text in GameManager.take_held_messages():
+		if text != _lineup_text and not lines.has(text):
+			lines.append(text)
+	var held := lines.size()
+	if not _lineup_text.is_empty():
+		lines.append(_lineup_text)
+	lines.append(tr("MSG_HOLSTER"))
+	GameManager.show_message("\n".join(lines), HELD_MESSAGE_SECONDS if held > 0 else 2.0)
+
+
+# -- Title cards ----------------------------------------------------------------
+
+func intro_playing() -> bool:
+	return state == State.INTRO
+
+
+## Fire during the cards: straight to the standoff. A client asks the host, which skips
+## for everyone.
+func request_intro_skip() -> void:
+	if state != State.INTRO:
+		return
+	if not is_mp or NetworkManager.is_host():
+		_enter(State.STANDOFF)
+	elif not _intro_skip_sent and _in_mp_duel():
+		_intro_skip_sent = true
+		_mp_request_intro_skip.rpc_id(1)
+
+
+## The pause menu opened over the cards. Single player skips to the standoff (the paused
+## tree holds it there); multiplayer gives this peer its own view back while the host's
+## clock runs on.
+func on_intro_paused() -> void:
+	if not is_mp:
+		request_intro_skip()
+	else:
+		intro.finish()
+
+
+## One entry per card: SP, each NPC in lineup order, then the player; MP, slot order with
+## the NPC slots, each on its spawn.
+func _intro_entries() -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	if is_mp:
+		var spawns := GameManager.slot_spawns(snapshot)
+		for slot in snapshot.slots.size():
+			var baked: Texture2D = null
+			if snapshot.slots[slot]["kind"] == LobbyRoster.Kind.NPC:
+				baked = GameManager.archetype_at(snapshot.slots[slot]["archetype"]).title_card_name
+			entries.append(_intro_entry(slot_name(slot), baked,
+					spawns.get(slot, GameManager.current_scenario.get_player_spawn())))
+		return entries
+	for ai in _ais:
+		if is_instance_valid(ai) and ai.archetype != null:
+			entries.append(_intro_entry(ai.archetype.display_name, ai.archetype.title_card_name,
+					ai.global_transform))
+	var player := GameManager.local_player
+	if is_instance_valid(player):
+		entries.append(_intro_entry(NetworkManager.local_player_name(), null, player.global_transform))
+	return entries
+
+
+static func _intro_entry(display_name: String, baked: Texture2D, spawn: Transform3D) -> Dictionary:
+	return {"name": display_name, "texture": baked, "spawn": spawn}
+
+
+## A duel that ends during the cards (a leaver in a 1v1): the view goes back, and the lines
+## the cards held are dropped so the result shows.
+func _cut_intro() -> void:
+	if state == State.INTRO:
+		intro.finish()
+		GameManager.drop_held_messages()
 
 
 func _ring_bell() -> void:
@@ -463,6 +608,7 @@ func _on_player_died(trail_points: PackedVector3Array) -> void:
 func _finish_sp(local_won: bool, reason: String) -> void:
 	if state == State.RESOLUTION:
 		return
+	_cut_intro()
 	state = State.RESOLUTION
 	if not _survivors_fight:
 		for ai in _ais:
@@ -491,9 +637,10 @@ func _in_mp_duel() -> bool:
 
 
 ## `snapshot_data` is the roster this duel runs on (`LobbyRoster.pack()`): mode, and per
-## slot kind / peer / name / side / archetype (an NPC's rolled one) / wins.
+## slot kind / peer / name / side / archetype (an NPC's rolled one) / wins. `play_intro` is
+## the host's call: the title cards first, in slot order.
 @rpc("authority", "call_local", "reliable")
-func _mp_begin(scenario_index: int, time_of_day: float, snapshot_data: Dictionary) -> void:
+func _mp_begin(scenario_index: int, time_of_day: float, snapshot_data: Dictionary, play_intro: bool) -> void:
 	if not NetworkManager.is_active():
 		return  # still mid-handshake: the host has not given this peer a slot
 	var roster := LobbyRoster.new()
@@ -516,12 +663,14 @@ func _mp_begin(scenario_index: int, time_of_day: float, snapshot_data: Dictionar
 	# Bind before setup: reset_for_duel emits holstered_changed, which the
 	# client must relay to the host.
 	_bind_player()
+	if play_intro:
+		GameManager.hold_messages()
 	GameManager.setup_mp_duel(scenario_index, time_of_day)
 	# The host runs the NPC slots; a client has none.
 	_ais = GameManager.current_ais.duplicate()
 	for ai in _ais:
 		ai.died.connect(_on_enemy_died.bind(ai))
-	state = State.STANDOFF
+	state = State.INTRO if play_intro else State.STANDOFF
 	_timer = 0.0
 	_apply_state()
 
@@ -532,6 +681,21 @@ func _mp_set_state(new_state: int) -> void:
 		return
 	state = new_state
 	_apply_state()
+
+
+## Host: card `card` of the running intro, on every peer at once.
+@rpc("authority", "call_local", "reliable")
+func _mp_intro_card(card: int) -> void:
+	if _in_mp_duel() and state == State.INTRO:
+		intro.show_card(card)
+
+
+## A client fired during the cards. The host skips for everyone (`_mp_set_state`).
+@rpc("any_peer", "call_remote", "reliable")
+func _mp_request_intro_skip() -> void:
+	if NetworkManager.is_host() and _in_mp_duel() and state == State.INTRO \
+			and snapshot.slot_of_peer(multiplayer.get_remote_sender_id()) >= 0:
+		_enter(State.STANDOFF)
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -641,6 +805,7 @@ func _mp_finish(winning_side: int, reason: String, trail_points: PackedVector3Ar
 		killer_slot: int, victim_slot: int) -> void:
 	if not _in_mp_duel() or state == State.RESOLUTION:
 		return
+	_cut_intro()
 	state = State.RESOLUTION
 	var local := snapshot.local_slot()
 	var local_won := snapshot.side_of(local) == winning_side

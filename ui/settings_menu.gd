@@ -1,6 +1,6 @@
 class_name SettingsMenu
 extends VBoxContainer
-## Player-facing knobs: volume, holster, VR height, VR aim steady, VR turn,
+## Player-facing knobs: volume, holster, duel intro, display name, VR height, VR aim steady, VR turn,
 ## mouse sensitivity, flat video, and combat button remapping. Not the F3 debug panel.
 ## Persist immediately via PlayerSettings / MovementConfig / tuning.
 
@@ -43,6 +43,12 @@ func _ready() -> void:
 	PlayerSettings.gore_changed.connect(_refresh_gore)
 	%ScreenEffectsCheck.toggled.connect(_on_screen_effects_toggled)
 	PlayerSettings.screen_effects_changed.connect(_refresh_screen_effects)
+	%DuelIntroCheck.toggled.connect(_on_duel_intro_toggled)
+	%NameEdit.max_length = LobbyRoster.NAME_MAX
+	%NameEdit.text_changed.connect(_on_name_edited)
+	%NamePrevButton.pressed.connect(_step_name_preset.bind(-1))
+	%NameNextButton.pressed.connect(_step_name_preset.bind(1))
+	PlayerSettings.display_name_changed.connect(_refresh_name_row)
 	%TurnModeOption.item_selected.connect(_on_turn_mode_selected)
 	%SmoothTurnSlider.value_changed.connect(_on_smooth_turn_changed)
 	%SnapTurnSlider.value_changed.connect(_on_snap_turn_changed)
@@ -124,6 +130,8 @@ func refresh() -> void:
 	%HolsterOption.selected = int(GameManager.tuning.get("holster_side", 0))
 	_refresh_gore()
 	_refresh_screen_effects()
+	%DuelIntroCheck.button_pressed = PlayerSettings.duel_intro_enabled
+	_refresh_name_row()
 	%TurnModeOption.selected = MovementConfig.turn_mode
 	%SmoothTurnSlider.value = MovementConfig.smooth_turn_speed
 	%SmoothTurnValue.text = tr("SETTINGS_DEG_PER_SEC") % int(round(MovementConfig.smooth_turn_speed))
@@ -303,6 +311,11 @@ func _apply_platform_rows() -> void:
 	%SmoothTurnRow.visible = vr and MovementConfig.turn_mode == MovementConfig.TurnMode.SMOOTH
 	%SnapTurnRow.visible = vr and MovementConfig.turn_mode == MovementConfig.TurnMode.SNAP
 	%MouseRow.visible = not vr
+	# A headset has no keyboard to hand: VR steps through preset names instead.
+	%NameEdit.visible = not vr
+	%NamePrevButton.visible = vr
+	%NameValue.visible = vr
+	%NameNextButton.visible = vr
 	%WindowModeRow.visible = not vr
 	%ResolutionRow.visible = not vr
 	%ApplyVideoButton.visible = not vr
@@ -348,6 +361,43 @@ func _on_screen_effects_toggled(pressed: bool) -> void:
 	if _refreshing:
 		return
 	PlayerSettings.set_screen_effects_enabled(pressed)
+
+
+func _on_duel_intro_toggled(pressed: bool) -> void:
+	if _refreshing:
+		return
+	PlayerSettings.set_duel_intro_enabled(pressed)
+
+
+## The text field keeps what is typed; only the saved name is trimmed.
+func _refresh_name_row() -> void:
+	var was_refreshing := _refreshing
+	_refreshing = true
+	var device := tr("SETTINGS_NAME_DEVICE") % NetworkManager.device_name()
+	if LobbyRoster.clean_name(%NameEdit.text) != PlayerSettings.display_name:
+		%NameEdit.text = PlayerSettings.display_name
+	%NameEdit.placeholder_text = device
+	%NameValue.text = PlayerSettings.display_name if not PlayerSettings.display_name.is_empty() else device
+	var steam := NetworkManager.steam_names_player()
+	%NameHint.visible = steam
+	if steam:
+		%NameHint.text = tr("SETTINGS_NAME_STEAM") % NetworkManager.local_player_name()
+	_refreshing = was_refreshing
+
+
+func _on_name_edited(text: String) -> void:
+	if _refreshing:
+		return
+	PlayerSettings.set_display_name(text)
+
+
+## VR: the next or previous preset. A typed name not on the list steps from the start.
+func _step_name_preset(step: int) -> void:
+	var presets := PlayerSettings.DISPLAY_NAME_PRESETS
+	var at := presets.find(PlayerSettings.display_name)
+	var next := posmod(at + step, presets.size()) if at >= 0 else (0 if step > 0 else presets.size() - 1)
+	PlayerSettings.set_display_name(presets[next])
+	_refresh_name_row()
 
 
 func _on_voice_gate_changed(value: float) -> void:

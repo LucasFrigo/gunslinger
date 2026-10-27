@@ -15,6 +15,14 @@ signal audio_devices_changed
 signal eye_height_changed
 signal gore_changed
 signal screen_effects_changed
+signal display_name_changed
+
+## VR display-name picker: "" (the device name) first, then western names. Proper names,
+## not translated.
+const DISPLAY_NAME_PRESETS: Array[String] = [
+	"", "Doc", "Kid", "Slim", "Dusty", "Hank", "Belle", "Jesse", "Calamity", "Wyatt",
+	"Ringo", "Sundance", "Butch", "Annie", "Laredo", "Tex",
+]
 
 ## Name AudioServer uses for "follow the OS default".
 const DEFAULT_DEVICE := "Default"
@@ -120,6 +128,11 @@ var window_height := 720
 var gore_enabled := true
 ## Iris wipe on the kill cam and the red hurt vignette (`ScreenOverlay`). Off is a hard cut.
 var screen_effects_enabled := true
+## Duel title cards before the standoff (`DuelIntro`). In multiplayer the host's value decides.
+var duel_intro_enabled := true
+## The single-player card and the LAN lobby name. Empty is the device name; a running Steam
+## client's persona wins over both (`NetworkManager.local_player_name`).
+var display_name := ""
 
 ## Headset height above the player root, in centimeters. Not stature.
 ## `eye_height_set` stays false until Calibrate or an edit, so a fresh install
@@ -367,6 +380,22 @@ func set_screen_effects_enabled(value: bool) -> void:
 	screen_effects_enabled = value
 	_save_config()
 	screen_effects_changed.emit()
+
+
+func set_duel_intro_enabled(value: bool) -> void:
+	if duel_intro_enabled == value:
+		return
+	duel_intro_enabled = value
+	_save_config()
+
+
+func set_display_name(value: String) -> void:
+	var cleaned := LobbyRoster.clean_name(value)
+	if display_name == cleaned:
+		return
+	display_name = cleaned
+	_save_config()
+	display_name_changed.emit()
 
 
 func set_voice_gate_cutoff(value: float) -> void:
@@ -822,6 +851,8 @@ func _save_config(path := CONFIG_PATH) -> void:
 		cfg.set_value("general", "language", language)
 	cfg.set_value("general", "gore", gore_enabled)
 	cfg.set_value("general", "screen_effects", screen_effects_enabled)
+	cfg.set_value("general", "duel_intro", duel_intro_enabled)
+	cfg.set_value("general", "display_name", display_name)
 	cfg.set_value("audio", "master_volume", master_volume)
 	cfg.set_value("audio", "voice_volume", voice_volume)
 	cfg.set_value("audio", "voice_muted", voice_muted)
@@ -870,6 +901,8 @@ func _load_config(path := CONFIG_PATH) -> void:
 		TranslationServer.set_locale(language)
 	gore_enabled = bool(cfg.get_value("general", "gore", gore_enabled))
 	screen_effects_enabled = bool(cfg.get_value("general", "screen_effects", screen_effects_enabled))
+	duel_intro_enabled = bool(cfg.get_value("general", "duel_intro", duel_intro_enabled))
+	display_name = LobbyRoster.clean_name(str(cfg.get_value("general", "display_name", display_name)))
 	master_volume = clampf(float(cfg.get_value("audio", "master_volume", master_volume)), 0.0, 1.0)
 	voice_volume = clampf(float(cfg.get_value("audio", "voice_volume", voice_volume)), 0.0, 1.0)
 	voice_muted = bool(cfg.get_value("audio", "voice_muted", voice_muted))

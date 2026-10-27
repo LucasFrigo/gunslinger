@@ -130,6 +130,14 @@ func show_message(text: String, duration := 2.5) -> void:
 			message_label.visible = false)
 
 
+## Duel title cards: the play labels fade out without touching who shows them (each keeps
+## its own `visible`), and come back as they are.
+func set_intro_hidden(hidden: bool) -> void:
+	for node: Control in [message_label, reload_status, health_status, practice_status, horde_status,
+			replay_tag, spectate_tag, prop_radial]:
+		node.modulate.a = 0.0 if hidden else 1.0
+
+
 ## Corner badge while the duel clip is playing.
 func set_replay_tag(on: bool) -> void:
 	replay_tag.visible = on

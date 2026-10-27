@@ -10,6 +10,15 @@
         "DISABLE_TELEMETRY": "true",
         "UV_PYTHON_PREFERENCE": "only-managed"
       }
+    },
+    "photocraft": {
+      "type": "stdio",
+      "command": "C:\\Program Files\\PhotoCraft\\photocraft-cli.exe",
+      "args": [
+        "mcp",
+        "--automation-read-root", "E:\\Projetos\\gunslinger",
+        "--automation-write-root", "E:\\Projetos\\gunslinger\\assets"
+      ]
     }
   }
 }
