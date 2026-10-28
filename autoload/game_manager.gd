@@ -229,6 +229,9 @@ var tuning := {
 	"grain_scale_mult": 1.0,
 	"sheet_mix": 1.0,
 	"sway_scale": 1.0,
+	## Train Rooftop engine smoke: 1 is the default plume, 0 turns it off, 3 is thrice the
+	## particles. Length, speed, and puff size do not change.
+	"engine_smoke_density": 1.0,
 	## Skin silhouette rim: strength and falloff exponent (hands get none).
 	"edge_strength": 0.35,
 	"edge_power": 3.0,

@@ -331,7 +331,7 @@ Signature details, cut from the bottom:
 9. **The tender**: blue sides raised to the deck (Found 2) under a bone rim, a plank walk on the deck's rear half, two trucks with vermilion wheels.
 10. Wear: the stack leans 2° back; a 10 cm flat on the sand dome; one cab window frame racked 2°.
 
-The planned engine smoke (F13, Roadmap) leaves the stack's crown at (0, 4.40, −54.25); keep the crown's centre there.
+The engine smoke (F13, `EngineSmoke` in `train_rooftop.tscn`) leaves the stack's crown at (0, 4.40, −54.25); keep the crown's centre there.
 
 - **Wear in geometry:** the leaning stack, the flat, the racked frame.
 - **Base Color:** `M_Car` Company blue (jacket, cab walls, tender sides). `M_Iron` Iron (stack, smokebox, frame, cab roof, rods, handrails, cylinders). `M_Brass` Brass (domes, bell, bands, whistle, headlight). `M_Red` Engine vermilion (drivers, pilot, pilot and tender wheels). `M_Trim` Bone (window frames, tender rim). `M_Glass` Ink (cab panes). `M_Plank` Raw wood (wood heap, tender walk). `M_LampGlass` (headlight glass). Eight objects.
@@ -578,7 +578,7 @@ Answered on 2026-10-23 in five rounds, plus two rounds on the engine smoke. Ever
 | 10 | Wheel arrangement | A 4-4-0 | Two pairs of drivers 1.52 m across |
 | 11 | Fuel and stack | A wood-burner: diamond stack, cordwood heap | The stack's crown stays at 4.40; the heap fills `Engine_Fuel` |
 | 12 | Engine livery | Blue, vermilion, and gold after the Jupiter | `M_Red` (the Canyon's vermilion under a new name) on wheels and pilot |
-| 13 | Engine smoke | None in this build; a Roadmap item (section 2) | Its spec: silver-grey dithered puffs from the stack's crown, full size from the root (accepted behind the enemy's head from `PlayerSpawn`), bending off the left side within about 20 m; same in flat and VR; always on with an F3 density knob; local cosmetic. Plan and build on Sonnet 5.5 `high` |
+| 13 | Engine smoke | Shipped after this build as Roadmap 2.2 (`assets/vfx/engine_smoke.tscn`, `scenarios/train_rooftop/engine_smoke.gd`, `EngineSmoke` in `train_rooftop.tscn`) | Its spec, as built (plus a wind gust that leans the plume further left, F3 `engine_smoke_density` scaling particle count only, and it plays on the menu backdrop): silver-grey dithered puffs from the stack's crown, full size from the root (accepted behind the enemy's head from `PlayerSpawn`), bending off the left side within about 20 m; same in flat and VR; always on with an F3 density knob; local cosmetic. Plan and build on Sonnet 5.5 `high` |
 | 14 | Lore mark | None | The coach hatch stays plain |
 | 15 | Span ends | Closed: each span steps down to its skirt | No belt code; `HORIZON_SPAN` stays 48 |
 | 16 | Passing shadows at dawn and dusk | Keep, judged in the hero's flat run | D14 |

@@ -6269,6 +6269,9 @@ func _test_load_all() -> void:
 				var count := 0 if scenery == null else scenery.get_child_count()
 				instance.queue_free()
 				return _fail("train rooftop scenery belt built %d pieces" % count)
+			if not _engine_smoke_ok(instance):
+				instance.queue_free()
+				return
 		instance.queue_free()
 		print("AUTOTEST: loaded %s" % path)
 	if not _spin_fx_ok() or not await _twirl_remote_ok() or not _bullet_trail_ok():
@@ -6314,6 +6317,8 @@ func _test_load_all() -> void:
 	if not _time_of_day_ok():
 		return
 	if not await _wind_ok():
+		return
+	if not await _shot_pool_ok():
 		return
 	if not await _vr_rig_ok():
 		return
@@ -6727,7 +6732,7 @@ func _puff_cues_ok() -> bool:
 	if shader == null:
 		_fail("puff.gdshader failed to load")
 		return false
-	for cue in [&"muzzle_smoke", &"world_dust", &"barrel_smoke"]:
+	for cue in [&"muzzle_smoke", &"world_dust", &"barrel_smoke", &"engine_smoke"]:
 		var node := (load("res://assets/vfx/%s.tscn" % cue) as PackedScene).instantiate() as GPUParticles3D
 		var mesh := node.draw_pass_1 as QuadMesh
 		var mat := mesh.material as ShaderMaterial if mesh != null else null
@@ -6737,6 +6742,74 @@ func _puff_cues_ok() -> bool:
 		if not ok:
 			_fail("%s does not draw puff.gdshader on a quad with a spin range" % cue)
 			return false
+	return true
+
+
+## Train Rooftop's stack plume (Roadmap 2.2): a looping, non-casting `puff.gdshader` emitter on the
+## crown, with a process material of its own and F3 `engine_smoke_density` driving the count only.
+func _engine_smoke_ok(arena: Node) -> bool:
+	var smoke := arena.get_node_or_null("EngineSmoke") as GPUParticles3D
+	if smoke == null:
+		_fail("train rooftop has no EngineSmoke")
+		return false
+	var mesh := smoke.draw_pass_1 as QuadMesh
+	var mat := mesh.material as ShaderMaterial if mesh != null else null
+	var shader := load("res://assets/vfx/puff.gdshader") as Shader
+	if smoke.one_shot or not smoke.emitting or mat == null or mat.shader != shader \
+			or smoke.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+		_fail("EngineSmoke is not a looping, non-casting puff.gdshader emitter")
+		return false
+	if smoke.position.distance_to(Vector3(0.0, 4.40, -54.25)) > 0.05:
+		_fail("EngineSmoke sits at %s, not on the stack crown" % smoke.position)
+		return false
+	var plain := (load("res://assets/vfx/engine_smoke.tscn") as PackedScene).instantiate() as GPUParticles3D
+	var shared := plain.process_material == smoke.process_material
+	plain.free()
+	if shared:
+		_fail("EngineSmoke shares its process material across instances")
+		return false
+	var saved: float = GameManager.tuning["engine_smoke_density"]
+	var results: Array[float] = []
+	var emitting: Array[bool] = []
+	for density in [0.0, 3.0, saved]:
+		GameManager.set_tuning("engine_smoke_density", density)
+		results.append(smoke.amount_ratio)
+		emitting.append(smoke.emitting)
+	if not is_zero_approx(results[0]) or emitting[0] or not is_equal_approx(results[1], 1.0) \
+			or not emitting[1] or not is_equal_approx(results[2], saved / 3.0) or not emitting[2]:
+		_fail("engine_smoke_density does not drive the plume count (ratios %s, emitting %s)" % [results, emitting])
+		return false
+	return true
+
+
+## Per-shot cues must not allocate GPU nodes mid-duel (Roadmap 1.3): a finished
+## `muzzle_smoke` / `barrel_smoke` parks and the next shot reuses that node, and a
+## revolver builds its muzzle light once and only hides it between shots.
+func _shot_pool_ok() -> bool:
+	for cue in [&"muzzle_smoke", &"barrel_smoke"]:
+		var first := VfxCatalog.spawn(cue, self, Vector3.ZERO) as OneShotParticles
+		var base_lifetime := first.lifetime
+		# The finish signal may not fire headless; the node's own safety timer parks it.
+		await get_tree().create_timer(base_lifetime * 2.0 + 1.0, true, false, true).timeout
+		if first.get_parent() != VfxCatalog._pool_root:
+			_fail("%s did not park after its burst" % cue)
+			return false
+		var second := VfxCatalog.spawn(cue, self, Vector3.ZERO, Vector3.UP, 1.0, 2.0) as OneShotParticles
+		var reused := second == first and is_equal_approx(second.lifetime, base_lifetime * 2.0)
+		second.free()
+		if not reused:
+			_fail("%s: the next shot instanced a new node instead of reusing the parked one" % cue)
+			return false
+	var gun := (load("res://weapons/revolver/revolver.tscn") as PackedScene).instantiate() as WeaponBase
+	add_child(gun)
+	gun._muzzle_flash()
+	var light := gun._flash_light
+	gun._muzzle_flash()
+	var one_light := light != null and light == gun._flash_light and gun.find_children("*", "OmniLight3D", true, false).size() == 1
+	gun.free()
+	if not one_light:
+		_fail("muzzle flash builds a new light per shot")
+		return false
 	return true
 
 
@@ -6773,9 +6846,17 @@ func _wind_ok() -> bool:
 				_fail("%s sway_scale does not scale the ambient wind" % res.display_name)
 				return false
 			var before := instance.get_child_count()
+			var smoke := instance.get_node_or_null("EngineSmoke") as GPUParticles3D
+			var calm_gravity := (smoke.process_material as ParticleProcessMaterial).gravity if smoke != null else Vector3.ZERO
 			instance.fire_gust()
 			await get_tree().process_frame
 			await get_tree().process_frame
+			if smoke != null:
+				var shoved := (smoke.process_material as ParticleProcessMaterial).gravity
+				if shoved.x >= calm_gravity.x or not is_equal_approx(shoved.y, calm_gravity.y):
+					instance.queue_free()
+					_fail("%s gust did not shove the engine smoke toward -X" % res.display_name)
+					return false
 			if instance.get_wind_gust() <= 0.0:
 				instance.queue_free()
 				_fail("%s gust did not pulse wind_gust" % res.display_name)

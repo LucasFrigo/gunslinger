@@ -307,7 +307,7 @@ void fragment() {
 }
 ```
 
-- **Wire:** `muzzle_smoke.tscn`, `world_dust.tscn`, and `barrel_smoke.tscn` swap the `SphereMesh` draw pass for a `QuadMesh` of size 1 with this material, so the process material's `scale_min`/`scale_max` is the puff diameter in metres. A `scale_curve` takes it from 0.6 to 1.0 of that size over life, and `angle_min`/`angle_max` 0–360 vary `spin`. Leave the chip, shard, and coin cues as meshes.
+- **Wire:** `muzzle_smoke.tscn`, `world_dust.tscn`, `barrel_smoke.tscn`, and `engine_smoke.tscn` swap the `SphereMesh` draw pass for a `QuadMesh` of size 1 with this material, so the process material's `scale_min`/`scale_max` is the puff diameter in metres. A `scale_curve` takes it from 0.6 to 1.0 of that size over life, and `angle_min`/`angle_max` 0–360 vary `spin`. `engine_smoke.tscn` is the looping one: world-space, no shadow, `preprocess` = `lifetime`. Leave the chip, shard, and coin cues as meshes.
 - **Warmup:** covered. `VfxCatalog.spawn_for_compile` draws every cue.
 - **Shipped:** the shader is the one above, used as written. Diameters in metres: muzzle smoke 0.06–0.12, world dust 0.04–0.08, barrel wisp 0.06–0.14, each on the 0.6 → 1.0 curve; `lumps` and `lump_depth` keep their defaults. The VR fallback below is not wired; the Quest look is on `RELEASE_TODOS`.
 - **Watch:** the dither is fixed to each eye's pixels, so the two eyes get unrelated patterns. In a headset that can read as sparkle. This is the one shader here most likely to need a VR fallback: if it sparkles, keep the lumpy shape and write `ALPHA = density` in place of the `discard`.

@@ -57,9 +57,9 @@ The tell is the colour of the gun that comes up. No stat values are set, and no 
 
 ## Where
 
-The **Oil-field train** idea in [`Roadmap.md`](../../../Roadmap.md): a train crosses the lane through open desert, pumpjacks on both sides of the track, flame columns on the horizon. The oil is under his squares and the train is his. The flames are the only colour in his fight.
+The **Oil-field Train** map in [`Roadmap.md`](../../../Roadmap.md) (section 3, planned): the Train Rooftop train stopped in an oil field at dusk into night, pumpjacks on both sides of the track, burning wells on the horizon. The oil is under his squares and the train is his. The flames are the only colour in his fight.
 
-This page adds nothing to that idea. It depends on the crossing train (**Train Map Concept**), which is also still an idea.
+This page adds nothing to that map. It does not wait for the crossing train (**Train Map Concept**, still an idea). Until he ships, the map is a temporary final gauntlet rung.
 
 ## References
 
@@ -67,4 +67,4 @@ This page adds nothing to that idea. It depends on the crossing train (**Train M
 - Board #09 (Araki sketch): a hat with pieces cut out of it.
 - Board #27: a rider firing a pistol from each hand.
 - Checkerboard land grants: the Pacific Railway Act of 1862 gave the railroad the odd-numbered square-mile sections beside the track, five per mile on each side, and the 1864 amendment doubled it to ten within twenty miles. The even sections stayed public, so company land and public land alternated like a board. <https://www.govinfo.gov/content/pkg/CRPT-108srpt305/html/CRPT-108srpt305.htm> · <https://www.law.cornell.edu/supremecourt/text/440/668>
-- Game facts: the railroad as the power behind the Sheriff, Ghost, and Drunk pages; the Oil-field train and Train Map Concept entries in `Roadmap.md`.
+- Game facts: the railroad as the power behind the Sheriff, Ghost, and Drunk pages; the Oil-field Train (section 3) and Train Map Concept (Ideas) entries in `Roadmap.md`.

@@ -9,6 +9,8 @@
 [ext_resource type="PackedScene" uid="uid://dfrqqb0xwcjnn" path="res://assets/models/scenarios/train_rooftop/train_engine.glb" id="7"]
 [ext_resource type="PackedScene" uid="uid://coajp1iurmd6m" path="res://assets/models/scenarios/train_rooftop/train_car_baggage.glb" id="8"]
 [ext_resource type="PackedScene" uid="uid://cbci2qjcxppav" path="res://assets/models/scenarios/train_rooftop/train_car_business.glb" id="9"]
+[ext_resource type="PackedScene" path="res://assets/vfx/engine_smoke.tscn" id="10"]
+[ext_resource type="Script" path="res://scenarios/train_rooftop/engine_smoke.gd" id="11"]
 [ext_resource type="Texture2D" uid="uid://c40uprmu5h0e" path="res://scenarios/sky_clouds.tres" id="sky_clouds"]
 [ext_resource type="Shader" uid="uid://chmp7xrt74w0j" path="res://scenarios/sky_western.gdshader" id="sky_shader"]
 
@@ -106,6 +108,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -33)
 
 [node name="Engine" parent="." unique_id=1894723986 instance=ExtResource("7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -40.2)
+
+[node name="EngineSmoke" parent="." instance=ExtResource("10")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, -54.25)
+script = ExtResource("11")
 
 [node name="Coupler0" parent="." unique_id=2012076143 instance=ExtResource("6")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 26.4)

@@ -58,6 +58,7 @@ const WORLD_SLIDERS := {
 	"grain_scale_mult": [0.25, 4.0, 0.05],
 	"sheet_mix": [0.0, 1.0, 0.05],
 	"sway_scale": [0.0, 3.0, 0.05],
+	"engine_smoke_density": [0.0, 3.0, 0.1],
 }
 
 ## Meters. Panel faces the headset (+Z), so -Z is away from the head.

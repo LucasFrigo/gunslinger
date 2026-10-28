@@ -91,6 +91,9 @@ var _steady_raw_basis := Basis.IDENTITY
 var _steady_drop_frame := false
 var _steady_last_usec := 0
 var _steady_integrate_frame := -1
+var _flash_light: OmniLight3D
+var _flash_quad: MeshInstance3D
+var _flash_tween: Tween
 
 @onready var _shot_audio: AudioStreamPlayer3D = _make_audio()
 
@@ -778,24 +781,36 @@ func _on_gate_changed() -> void:
 	pass
 
 
+## The light and quad are built on the first shot and only hidden between shots, so a
+## shot allocates no GPU nodes or materials.
 func _muzzle_flash() -> void:
-	var light := OmniLight3D.new()
-	light.light_color = Color(1.0, 0.8, 0.4)
-	light.light_energy = 3.0
-	light.omni_range = 3.0
-	add_child(light)
-	light.position = get_muzzle().position
-	var quad := make_muzzle_flash_quad()
-	add_child(quad)
-	quad.position = get_muzzle().position
-	var mat := quad.material_override as ShaderMaterial
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(light, "light_energy", 0.0, 0.08)
-	tween.tween_method(func(v: float) -> void: mat.set_shader_parameter("life", v),
+	if _flash_light == null:
+		_flash_light = OmniLight3D.new()
+		_flash_light.light_color = Color(1.0, 0.8, 0.4)
+		_flash_light.omni_range = 3.0
+		add_child(_flash_light)
+		_flash_quad = make_muzzle_flash_quad()
+		add_child(_flash_quad)
+	_flash_light.position = get_muzzle().position
+	_flash_quad.position = get_muzzle().position
+	_flash_light.light_energy = 3.0
+	_flash_light.visible = true
+	_flash_quad.visible = true
+	var mat := _flash_quad.material_override as ShaderMaterial
+	mat.set_shader_parameter("seed", randf() * TAU)
+	if _flash_tween != null:
+		_flash_tween.kill()
+	_flash_tween = create_tween()
+	_flash_tween.set_parallel(true)
+	_flash_tween.tween_property(_flash_light, "light_energy", 0.0, 0.08)
+	_flash_tween.tween_method(func(v: float) -> void: mat.set_shader_parameter("life", v),
 			1.0, 0.0, 0.08)
-	tween.chain().tween_callback(light.queue_free)
-	tween.tween_callback(quad.queue_free)
+	_flash_tween.chain().tween_callback(_end_muzzle_flash)
+
+
+func _end_muzzle_flash() -> void:
+	_flash_light.visible = false
+	_flash_quad.visible = false
 
 
 ## Billboarded star quad for the muzzle flash. Shared with the boot warmup.
