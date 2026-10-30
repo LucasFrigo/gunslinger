@@ -12,7 +12,7 @@ the custom property `uv_lock` are skipped. See `docs/TEXTURING.md`.
 
 Run:
     & "C:\\Program Files\\Blender Foundation\\Blender 5.1\\blender.exe" -b --python dev/unwrap_scenery_blender.py
-    ... -- --map saloon            one map (main_street, saloon, train_rooftop, practice_hub, canyon)
+    ... -- --map saloon            one map (main_street, saloon, train_rooftop, practice_hub, canyon, oilfield_train)
     ... -- --dry                   unwrap and check in memory; save and export nothing
 """
 from __future__ import annotations
@@ -33,6 +33,7 @@ MAPS = {
     "train_rooftop": "train_rooftop/train_rooftop.blend",
     "practice_hub": "practice_hub/practice_hub.blend",
     "canyon": "canyon/canyon.blend",
+    "oilfield_train": "oilfield_train/oilfield_train.blend",
 }
 # Parked beside the train in the .blend so it is browsable; exported from the origin.
 PARKED_CHILDREN = {"horizon_ridge"}

@@ -24,7 +24,7 @@ Two things follow from this:
 
 **Status: `partial`. The unwrap, the materials, the image hookup, the export, and the importer are built and tested; no image has been painted, so every GLB is flat colour and grain in game.** This replaced the shared trim sheet ([paused](#trim-sheet-on-scenery-paused)): you texture one GLB at a time, by hand, and the rest stay flat until you get to them.
 
-Each exported scenario GLB (29 of them) has **one 256×256 image**. Every mesh in that GLB samples it. You open the map's `.blend`, look at the GLB's unwrap, make an image for it (ripped textures arranged to fit the UV islands, or painted straight over the exported layout), save it under `tex/`, and run one command.
+Each exported scenario GLB (39 of them) has **one 256×256 image**. Every mesh in that GLB samples it. You open the map's `.blend`, look at the GLB's unwrap, make an image for it (ripped textures arranged to fit the UV islands, or painted straight over the exported layout), save it under `tex/`, and run one command.
 
 ### Decisions
 
@@ -42,7 +42,7 @@ Each exported scenario GLB (29 of them) has **one 256×256 image**. Every mesh i
 | In game | A material with an image becomes `world_surface.gdshader` with the image as `albedo_tex` (`use_albedo_tex`): nearest filter with mipmaps, clamped, banded light, outline, and wind sway kept, grain off. The `load` autotest accepts it |
 | Trim sheet | Off in game. The code and files stay; one switch (`USE_TRIM_SHEET` in `assets/shaders/world_surface_import.gd`, false) brings it back |
 
-### The 29 GLBs
+### The 39 GLBs
 
 Each row is one image. The path is relative to `assets/models/scenarios/`. A GLB with nothing in its layout (all ground or rock) has no image to paint. The same list with mesh counts and a done box is in [`TEXTURE_LIST.md`](TEXTURE_LIST.md).
 
@@ -66,6 +66,16 @@ Each row is one image. The path is relative to `assets/models/scenarios/`. A GLB
 | `train_rooftop/train_rooftop.blend` | `train_car_business` (final) | `train_rooftop/tex/train_car_business.png` |
 | `train_rooftop/train_rooftop.blend` | `train_rooftop` (the guard walls only: nothing to paint) | none |
 | `train_rooftop/train_rooftop.blend` | `horizon_ridge` (all rock: nothing to paint) | none |
+| `oilfield_train/oilfield_train.blend` | `oil_pumpjack` (module, 32 copies share one image) | `oilfield_train/tex/oil_pumpjack.png` |
+| `oilfield_train/oilfield_train.blend` | `oil_wellhead` (module, 16 copies share one image) | `oilfield_train/tex/oil_wellhead.png` |
+| `oilfield_train/oilfield_train.blend` | `oil_sump` (module, 16 copies share one image) | `oilfield_train/tex/oil_sump.png` |
+| `oilfield_train/oilfield_train.blend` | `oil_pipe_run` (module, 24 copies share one image) | `oilfield_train/tex/oil_pipe_run.png` |
+| `oilfield_train/oilfield_train.blend` | `oil_derrick` (module, 10 copies share one image) | `oilfield_train/tex/oil_derrick.png` |
+| `oilfield_train/oilfield_train.blend` | `oil_tank` (module, 8 copies share one image) | `oilfield_train/tex/oil_tank.png` |
+| `oilfield_train/oilfield_train.blend` | `oil_pylon` (module, 8 copies share one image) | `oilfield_train/tex/oil_pylon.png` |
+| `oilfield_train/oilfield_train.blend` | `oil_burning_well` (module, both copies share one image) | `oilfield_train/tex/oil_burning_well.png` |
+| `oilfield_train/oilfield_train.blend` | `oilfield_horizon` (tile, 32 copies share one image; the two glowing objects only) | `oilfield_train/tex/oilfield_horizon.png` |
+| `oilfield_train/oilfield_train.blend` | `oilfield_terrain` (all ground: nothing to paint) | none |
 | `practice_hub/practice_hub.blend` | `practice_hub` | `practice_hub/tex/practice_hub.png` |
 | `canyon/canyon.blend` | `canyon` | `canyon/tex/canyon.png` |
 
@@ -148,6 +158,16 @@ Texel density is pixels per metre at 256 px. It is set by the GLB's total surfac
 | `train_car_baggage` | 5 | 426 | 13.3 | 1 | 61% | 0 |
 | `train_car_business` | 7 | 567 | 11.9 | 1 | 58% | 0 |
 | `train_rooftop` | 0 | 0 | | | | guard walls only |
+| `oil_pumpjack` | 3 | 133 | 17.5 | 2 | 58% | 0 |
+| `oil_wellhead` | 1 | 27 | 112.5 | 2 | 70% | 0 |
+| `oil_sump` | 1 | 6 | 37.9 | 2 | 68% | 0 |
+| `oil_pipe_run` | 2 | 53 | 16.1 | 2 | 9% | 0 |
+| `oil_derrick` | 2 | 254 | 4.1 | 1 | 68% | 0 |
+| `oil_tank` | 3 | 77 | 9.4 | 2 | 75% | 0 |
+| `oil_pylon` | 1 | 166 | 2.5 | 2 | 23% | 0 |
+| `oil_burning_well` | 3 | 15 | 25.1 | 2 | 83% | 0 |
+| `oilfield_horizon` | 2 | 21 | 12.4 | 2 | 77% | 0 |
+| `oilfield_terrain` | 0 | 0 | | | | all ground |
 | `practice_hub` | 181 | 858 | 7.4 | 1 | 41% | 3 |
 | `canyon` | 25 | 1091 | 13.7 | 0 | 86% | 0 |
 | `env_terrain`, `horizon_ridge` | 0 | 0 | | | | all ground or rock |

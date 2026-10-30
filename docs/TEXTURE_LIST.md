@@ -1,6 +1,6 @@
 # Texture list
 
-One hand-painted 256×256 image per exported scenario GLB, 29 GLBs. Workflow and rules: [`TEXTURING.md`](TEXTURING.md#hand-painted-texture-per-glb). Source for ripper output and photos: `assets/texture_src/` (credit each photo in `SOURCES.md`; that folder is not imported by Godot).
+One hand-painted 256×256 image per exported scenario GLB, 39 GLBs. Workflow and rules: [`TEXTURING.md`](TEXTURING.md#hand-painted-texture-per-glb). Source for ripper output and photos: `assets/texture_src/` (credit each photo in `SOURCES.md`; that folder is not imported by Godot).
 
 Nothing is painted yet. Every GLB is still flat colour and grain. A box is checked when `tex/<glb>.png` is saved, linked (`dev/unwrap_per_glb_blender.py -- --link --glb <glb>`), and looks right in game.
 
@@ -59,6 +59,23 @@ Nothing is painted yet. Every GLB is still flat colour and grain. A box is check
 | n/a | `train_rooftop` | none (the four invisible guard walls only) | 0 | | 0 |
 | n/a | `horizon_ridge` | none | 0 | | 11 (all tiling rock, all final: `Canyon_*` and `Mesa_*`, four each; `Butte_Rock`, `Butte_RockDark`, `Butte_Cap`) |
 
+## Oil-field Train (`oilfield_train/oilfield_train.blend`)
+
+| Done | GLB | PNG | Meshes | Density | Left alone |
+|---|---|---|---|---|---|
+| [ ] | `oil_pumpjack` | `oilfield_train/tex/oil_pumpjack.png` | 3 (one image for all 32 copies; `WalkingBeam` is its own object) | 17.5 px/m | 0 |
+| [ ] | `oil_wellhead` | `oilfield_train/tex/oil_wellhead.png` | 1 (one image for all 16 copies) | 112.5 px/m | 1 tiling mesh (`Wellhead_Dirt`, the pad) |
+| [ ] | `oil_sump` | `oilfield_train/tex/oil_sump.png` | 1 (`Sump_Glass`, three faces; one image for all 16 copies) | 37.9 px/m | 1 tiling mesh (`Sump_Dirt`, the berm) |
+| [ ] | `oil_pipe_run` | `oilfield_train/tex/oil_pipe_run.png` | 2 (one image for all 24 copies) | 16.1 px/m | 0 |
+| [ ] | `oil_derrick` | `oilfield_train/tex/oil_derrick.png` | 2 (one image for all 10 copies) | 4.1 px/m | 0 |
+| [ ] | `oil_tank` | `oilfield_train/tex/oil_tank.png` | 3 (one image for all 8 copies) | 9.4 px/m | 0 |
+| [ ] | `oil_pylon` | `oilfield_train/tex/oil_pylon.png` | 1 (one image for all 8 copies) | 2.5 px/m | 0 |
+| [ ] | `oil_burning_well` | `oilfield_train/tex/oil_burning_well.png` | 3 (`Well_Iron`, `Well_Flame`, `Well_LampGlass`; both copies share one image) | 25.1 px/m | 2 tiling meshes (`Well_Rock`, `Well_Dirt`) |
+| [ ] | `oilfield_horizon` | `oilfield_train/tex/oilfield_horizon.png` | 2 (`Horizon_Flame`, `Horizon_LampGlass`; all 32 tiles share one image) | 12.4 px/m | 2 tiling meshes (`Horizon_Rock`, `Horizon_RockDark`) |
+| n/a | `oilfield_terrain` | none | 0 | | 1 (`Oilfield_Ground`) |
+
+Most of these are seen as silhouettes under orange light, so paint only what the key reaches (`docs/design/scenarios/oilfield_train.md` G16).
+
 ## Practice Hub (`practice_hub/practice_hub.blend`)
 
 | Done | GLB | PNG | Meshes | Density | Left alone |
@@ -81,6 +98,7 @@ Ground and rock keep their tiling UVs (one tile per 8 m), flat colour, and grain
 |---|---|
 | Main Street | `TerrainFlat`, `Track_Ballast` (the GLB `env_terrain`, and the ballast in `env_rail_track_8m`) |
 | Train Rooftop | 11 rock objects (`horizon_ridge`: `Canyon_Rock`, `Canyon_RockDark`, `Canyon_CapDark`, `Canyon_Cap`, the same four `Mesa_*`, and `Butte_Rock`, `Butte_RockDark`, `Butte_Cap`) |
+| Oil-field Train | `Oilfield_Ground` (the GLB `oilfield_terrain`), `Horizon_Rock` and `Horizon_RockDark` (`oilfield_horizon`), `Well_Rock` and `Well_Dirt` (`oil_burning_well`), `Wellhead_Dirt` (`oil_wellhead`), `Sump_Dirt` (`oil_sump`) |
 | Practice Hub | `Lot`, `Desert`, `Berm`, 6 `Mesa*` |
 | Canyon | The 4 cliff objects (`Cliffs_*`), the 2 cover objects (`Cover_*`), the floor (`Floor_Sand`), the 4 rim objects (`Rim_*`), and the horizon's plain, butte, and mesas (`Horizon_Desert`, `Horizon_CapDark`, `Horizon_RockDark`, `Horizon_Cap`, `Horizon_Rock`) |
 

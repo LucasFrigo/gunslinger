@@ -92,8 +92,8 @@ Status vocabulary: `done` | `partial` | `planned`. Full detail: [`FEATURES.md`](
 | Polish | Shorter bullet trails, real SFX, barrel smoke, wind |
 | Medium | Duel title cards; duel vs up to 3 NPCs; ragdoll and dismemberment |
 | Hard | Horde |
-| Very hard | Campaign; mod support |
-| Ideas (not ready) | Airborne trick shots; more props and NPCs; train that crosses the lane; oil-field train; horseback duel; Mexican standoff (3 humans); 4-player MP; ranking / leaderboards (Steam only) |
+| Very hard | Oil-field train |
+| Ideas (not ready) | Campaign; mod support; more props and NPCs; train that crosses the lane; horseback duel; Mexican standoff (3 humans); 4-player MP; ranking / leaderboards (Steam only) |
 
 ### Content depth implication for pricing
 

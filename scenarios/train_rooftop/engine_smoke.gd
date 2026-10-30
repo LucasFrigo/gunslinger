@@ -7,6 +7,9 @@ const GUST_SHOVE := 3.0
 ## `amount` holds this many times the default count, so the knob never restarts the system.
 const DENSITY_MAX := 3.0
 
+## Puff tint (unshaded). The default is `engine_smoke.tscn`'s silver; a night arena sets a dark one.
+@export var puff_color := Color(0.561, 0.549, 0.525)
+
 var _base_gravity := Vector3.ZERO
 var _material: ParticleProcessMaterial
 var _arena: ScenarioBase
@@ -16,6 +19,7 @@ func _ready() -> void:
 	# The sub-resource is shared by every instance, and a swapped arena briefly outlives the new one.
 	_material = (process_material as ParticleProcessMaterial).duplicate() as ParticleProcessMaterial
 	process_material = _material
+	_material.color = puff_color
 	_base_gravity = _material.gravity
 	_arena = get_parent() as ScenarioBase
 	_apply_density()

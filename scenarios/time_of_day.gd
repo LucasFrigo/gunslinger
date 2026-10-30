@@ -1,17 +1,24 @@
 class_name TimeOfDay
 extends RefCounted
-## Dawn-to-dusk samples for outdoor arenas. A load picks t in [0, 1] once.
+## Dawn-to-dusk samples for outdoor arenas. A load rolls t in [0, 1) once. Past dusk,
+## t blends into [constant NIGHT_T], a fixed point no roll reaches: an arena opts in with
+## `ScenarioResource.fixed_time_of_day` (the oil field), and F3 can scrub into it.
 ## Only colors, sun elevation, and fog sun-scatter change. Fog distances,
 ## sky/ground curves, and shadow fade stay on the scene so a recolor cannot
 ## draw the canyon's 6 km edge or pop the train belt out of the fog.
 ## The sky is a ShaderMaterial (`sky_western.gdshader`); its gradient uniforms share the
 ## keyframe key names. fog_light_color is always copied from `ground_horizon` after the lerp,
-## and `cloud_color` is `light_color` pulled toward white.
+## and `cloud_color` is `light_color` pulled toward white unless a keyframe sets its own.
 
 const DAWN_ELEVATION_DEG := 8.0
 const NOON_ELEVATION_DEG := 70.0
 const AFTERNOON_ELEVATION_DEG := 32.0
 const DUSK_ELEVATION_DEG := 12.0
+## Dusk into night: the sun just set, the fire key 1 degree under the horizon.
+const NIGHT_ELEVATION_DEG := -1.0
+## The night point's t, and the top of every clamp on t.
+const NIGHT_T := 1.25
+const T_MAX := NIGHT_T
 const CLOUD_WHITE_MIX := 0.4
 
 ## Silhouette rim color (`edge_light` global in `body_skin.gdshader`) where no sun sets it.
@@ -66,6 +73,21 @@ const KEYFRAMES: Array = [
 		"fog_sun_scatter": 0.4,
 		"trail_solid": 0.15,
 	},
+	# Oil-field Train's fire-lit night (docs/design/scenarios/oilfield_train.md A). Its dark
+	# smoke ceiling would turn pale peach as the light pulled toward white, so it sets its own.
+	{
+		"t": NIGHT_T,
+		"elevation_deg": NIGHT_ELEVATION_DEG,
+		"light_color": Color(1.0, 0.4784, 0.2),
+		"light_energy": 1.0,
+		"sky_top": Color(0.1098, 0.0706, 0.149),
+		"sky_horizon": Color(0.851, 0.4, 0.1686),
+		"ground_bottom": Color(0.1647, 0.0863, 0.0627),
+		"ground_horizon": Color(0.27, 0.1, 0.045),
+		"cloud_color": Color(0.173, 0.095, 0.13),
+		"fog_sun_scatter": 0.2,
+		"trail_solid": 0.15,
+	},
 ]
 
 
@@ -89,8 +111,7 @@ static func apply(root: Node3D, t: float, sun_yaw: float) -> void:
 		return
 	for key in [&"sky_top", &"sky_horizon", &"ground_bottom", &"ground_horizon"]:
 		mat.set_shader_parameter(key, sample[key])
-	mat.set_shader_parameter(&"cloud_color",
-			(sample["light_color"] as Color).lerp(Color.WHITE, CLOUD_WHITE_MIX))
+	mat.set_shader_parameter(&"cloud_color", _cloud_color(sample))
 	# The opaque fog must be the sky ground, or the distant plain draws a line.
 	world.environment.fog_light_color = sample["ground_horizon"]
 	world.environment.fog_sun_scatter = float(sample["fog_sun_scatter"])
@@ -102,7 +123,7 @@ static func set_edge(color: Color) -> void:
 
 
 static func _sample(t: float) -> Dictionary:
-	var time := clampf(t, 0.0, 1.0)
+	var time := clampf(t, 0.0, T_MAX)
 	var last: Dictionary = KEYFRAMES[KEYFRAMES.size() - 1]
 	if time >= float(last["t"]):
 		return last
@@ -112,6 +133,9 @@ static func _sample(t: float) -> Dictionary:
 		var b_t := float(b["t"])
 		if time > b_t:
 			continue
+		# Dusk (t 1) stays the keyframe itself, as when it was the last one.
+		if time == b_t:
+			return b
 		var span := b_t - float(a["t"])
 		var u := 0.0 if span <= 0.0 else (time - float(a["t"])) / span
 		return _lerp_frame(a, b, u)
@@ -119,7 +143,7 @@ static func _sample(t: float) -> Dictionary:
 
 
 static func _lerp_frame(a: Dictionary, b: Dictionary, u: float) -> Dictionary:
-	return {
+	var frame := {
 		"elevation_deg": lerpf(float(a["elevation_deg"]), float(b["elevation_deg"]), u),
 		"light_color": (a["light_color"] as Color).lerp(b["light_color"], u),
 		"light_energy": lerpf(float(a["light_energy"]), float(b["light_energy"]), u),
@@ -130,6 +154,15 @@ static func _lerp_frame(a: Dictionary, b: Dictionary, u: float) -> Dictionary:
 		"fog_sun_scatter": lerpf(float(a["fog_sun_scatter"]), float(b["fog_sun_scatter"]), u),
 		"trail_solid": lerpf(float(a["trail_solid"]), float(b["trail_solid"]), u),
 	}
+	if a.has("cloud_color") or b.has("cloud_color"):
+		frame["cloud_color"] = _cloud_color(a).lerp(_cloud_color(b), u)
+	return frame
+
+
+static func _cloud_color(frame: Dictionary) -> Color:
+	if frame.has("cloud_color"):
+		return frame["cloud_color"]
+	return (frame["light_color"] as Color).lerp(Color.WHITE, CLOUD_WHITE_MIX)
 
 
 ## DirectionalLight3D shines along -Z, so +Z points at the sun.

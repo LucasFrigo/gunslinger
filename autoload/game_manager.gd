@@ -22,6 +22,7 @@ const SCENARIOS: Array[String] = [
 	"res://scenarios/saloon/saloon.tres",
 	"res://scenarios/train_rooftop/train_rooftop.tres",
 	"res://scenarios/canyon/canyon.tres",
+	"res://scenarios/oilfield_train/oilfield_train.tres",
 ]
 
 ## Local warmup lot. Deliberately not in SCENARIOS, so no menu offers it as a duel.
@@ -232,6 +233,9 @@ var tuning := {
 	## Train Rooftop engine smoke: 1 is the default plume, 0 turns it off, 3 is thrice the
 	## particles. Length, speed, and puff size do not change.
 	"engine_smoke_density": 1.0,
+	## Oil field flame columns (`FlameColumn`): 1 shows them, 0 hides every one. The dark
+	## plume meshes stay.
+	"flame_columns": 1.0,
 	## Skin silhouette rim: strength and falloff exponent (hands get none).
 	"edge_strength": 0.35,
 	"edge_power": 3.0,
@@ -1146,6 +1150,12 @@ func _set_mode(new_mode: int) -> void:
 
 # -- Scenario / player helpers -------------------------------------------------
 
+## The t the MP host sends for a fresh load of arena `index`: its fixed time, or a roll.
+func roll_time_of_day(index: int) -> float:
+	var resource := load(SCENARIOS[clampi(index, 0, SCENARIOS.size() - 1)]) as ScenarioResource
+	return resource.roll_time_of_day()
+
+
 func _load_scenario(index: int, time_of_day := -1.0) -> void:
 	current_scenario_index = clampi(index, 0, SCENARIOS.size() - 1)
 	_instance_scenario(load(SCENARIOS[current_scenario_index]), time_of_day)
@@ -1159,10 +1169,10 @@ func _instance_scenario(resource: ScenarioResource, time_of_day := -1.0) -> void
 		current_scenario = null
 	current_scenario = resource.scene.instantiate()
 	current_scenario.scenario_resource = resource
-	# Negative means this load picks its own time (SP, menu, host waiting).
-	# MP passes the host's roll so the client does not roll again.
+	# Negative means this load picks its own time (SP, menu, host waiting): the arena's
+	# fixed one, or a roll. MP passes the host's pick so the client does not roll again.
 	if time_of_day < 0.0:
-		time_of_day = randf()
+		time_of_day = resource.roll_time_of_day()
 	current_scenario.time_of_day = time_of_day
 	world_root.add_child(current_scenario)
 

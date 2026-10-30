@@ -59,6 +59,7 @@ const WORLD_SLIDERS := {
 	"sheet_mix": [0.0, 1.0, 0.05],
 	"sway_scale": [0.0, 3.0, 0.05],
 	"engine_smoke_density": [0.0, 3.0, 0.1],
+	"flame_columns": [0.0, 1.0, 1.0],
 }
 
 ## Meters. Panel faces the headset (+Z), so -Z is away from the head.
@@ -668,7 +669,8 @@ func _set_wind_value(key: String, value: float) -> void:
 
 func _build_session_section(root: Control) -> void:
 	_add_header(root, "Time of day")
-	_time_slider_widgets = _add_slider(root, "time_of_day", 0.0, 1.0, 0.01, 0.0,
+	# Past 1 the dusk blends into the night point (the oil field's fixed time).
+	_time_slider_widgets = _add_slider(root, "time_of_day", 0.0, TimeOfDay.T_MAX, 0.01, 0.0,
 			func(value: float) -> void:
 				if _refreshing:
 					return

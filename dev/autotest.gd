@@ -7,9 +7,10 @@ extends Node
 ##   gauntlet - clears two gauntlet rungs by force-killing the AI;
 ##              first rung also checks the pain-jerk toss
 ##   host     - hosts a LAN game, waits for a peer in the waiting room, presses
-##              START (NetworkManager.host_start), wins the MP duel; slot tints
+##              START (NetworkManager.host_start), wins the MP duel; slot tints.
+##              `--arena=N` first moves the waiting room to SCENARIOS[N]
 ##   join     - joins 127.0.0.1, stands in the waiting room on slot 1, expects to
-##              lose the MP duel; slot tints
+##              lose the MP duel; slot tints; the arena's time of day as the host sent it
 ##   lobbyhost - hosts 4 slots (the last an NPC), waits for two `lobbyjoin` peers, checks
 ##              an avatar per joiner on its ring point and no NPC before START, starts,
 ##              has the slowed NPC draw and fire, kills it mid-duel ("3 left"), then slot
@@ -73,13 +74,23 @@ extends Node
 ## Prints AUTOTEST PASS / AUTOTEST FAIL and sets the exit code.
 
 var mode := "duel"
+## `--arena=N`: the `host` suite moves its waiting room to SCENARIOS[N] before the joiner
+## arrives (the oil field's fixed time over the wire). -1 keeps the host's arena.
+var arena_arg := -1
+## Unscaled game seconds since start. Timeouts and duration checks read this, not the wall
+## clock, so `--fixed-fps` (game time faster than real time) changes nothing but speed.
+var _clock := 0.0
 
 
 func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--autotest="):
 			mode = arg.get_slice("=", 1)
+		elif arg.begins_with("--arena="):
+			arena_arg = int(arg.get_slice("=", 1))
 	print("AUTOTEST: mode=%s" % mode)
+	get_tree().process_frame.connect(func() -> void:
+		_clock += get_process_delta_time() / maxf(Engine.time_scale, 0.001))
 	# The processes drive the roster with no player at the menu: the host's Lobby page stays
 	# shut unless a test is about it (`_lobby_page_ok`).
 	GameManager.hud.pause_menu.auto_open_lobby = false
@@ -171,8 +182,10 @@ func _npc_replay_hand_steps() -> bool:
 		_fail("replay hand: the duel never reached DRAW")
 		return false
 	var ai: DuelistAI = GameManager.current_ais[0]
-	if not await _wait_for(func() -> bool: return ai.state == DuelistAI.AIState.DRAWING and ai._draw_progress > 0.5, 30.0):
-		_fail("replay hand: the NPC never got mid-draw (state %d)" % ai.state)
+	# At MULTI_AI_SPEED the random reaction alone runs 12-24 s before the draw starts.
+	if not await _wait_for(func() -> bool: return ai.state == DuelistAI.AIState.DRAWING and ai._draw_progress > 0.5, 60.0):
+		_fail("replay hand: the NPC never got mid-draw (state %d, progress %.2f, time scale %.2f, clock %.1f)" % [
+				ai.state, ai._draw_progress, Engine.time_scale, _clock])
 		return false
 	var dummy := ai.corpse_body()
 	ai.take_bullet_hit(99.0, PackedVector3Array(), CombatRules.REGION_HEAD, false, true, 0)
@@ -411,7 +424,68 @@ func _test_gauntlet() -> void:
 		return _fail("gauntlet did not advance")
 	if not _gauntlet_record_ok():
 		return
+	if not await _gauntlet_oilfield_rung_ok():
+		return
 	_pass()
+
+
+## The temporary final rung (Roadmap, Oil-field Train): rung 8 repeats rung 7's Ghost + Sheriff + Drunk finale on
+## the oil field, the last `SCENARIOS` entry. The ladder has 8 rungs and the menu counts them (the blurb and the
+## "Best: duel N / 8" line); the rung spawns three NPCs on the oil field and a win over all three ends it. The
+## controller is stopped first, so no pending rung callback records a run or leaves for the menu.
+func _gauntlet_oilfield_rung_ok() -> bool:
+	var gauntlet := GameManager.gauntlet
+	gauntlet.stop()
+	var ladder: GauntletLadder = gauntlet.ladder
+	var last := ladder.encounters.size() - 1
+	var oil := GameManager.SCENARIOS.find(OILFIELD_TRES)
+	var trio := ladder.encounters[last - 1]
+	var rung := ladder.encounters[last]
+	if last != 7 or oil != GameManager.SCENARIOS.size() - 1 or trio.scenario_index != 0 or rung.scenario_index != oil:
+		return _fail_false("gauntlet: rung 8 should be the oil field after rung 7 on Main Street (%d rungs, scenario %d)" % [
+				last + 1, rung.scenario_index])
+	var before := trio.lineup()
+	var after := rung.lineup()
+	if after.size() != 3 or before.size() != 3 or rung.health_mult != trio.health_mult or rung.score_reward < trio.score_reward:
+		return _fail_false("gauntlet: rung 8 is not rung 7's three-way (%d NPCs)" % after.size())
+	for i in 3:
+		if after[i].resource_path != before[i].resource_path:
+			return _fail_false("gauntlet: rung 8's NPC %d is %s, rung 7's is %s" % [i, after[i].resource_path, before[i].resource_path])
+	for earlier in ladder.encounters.slice(0, 6):
+		if earlier.scenario_index == oil:
+			return _fail_false("gauntlet: only the last rung should be on the oil field")
+	var saved := [PlayerSettings.gauntlet_best_rung, PlayerSettings.gauntlet_best_score, PlayerSettings.gauntlet_cleared]
+	PlayerSettings.gauntlet_best_rung = 7
+	PlayerSettings.gauntlet_best_score = 4200
+	PlayerSettings.gauntlet_cleared = false
+	var menu: MainMenu = (load("res://ui/main_menu.tscn") as PackedScene).instantiate()
+	add_child(menu)
+	var blurb: String = menu.get_node("%GauntletBlurb").text
+	var best: String = menu.gauntlet_best_label.text
+	menu.queue_free()
+	PlayerSettings.gauntlet_best_rung = saved[0]
+	PlayerSettings.gauntlet_best_score = saved[1]
+	PlayerSettings.gauntlet_cleared = saved[2]
+	if blurb != tr("MENU_GAUNTLET_BLURB") % [8, ladder.lives] or best != tr("MENU_GAUNTLET_BEST") % [7, 8, 4200]:
+		return _fail_false("gauntlet: the menu does not count 8 rungs ('%s', '%s')" % [blurb, best])
+	gauntlet.encounter_index = last
+	GameManager.begin_gauntlet_encounter(rung)
+	await get_tree().process_frame
+	if GameManager.current_scenario_index != oil or GameManager.current_ais.size() != 3:
+		return _fail_false("gauntlet: rung 8 loaded scenario %d with %d NPCs" % [GameManager.current_scenario_index, GameManager.current_ais.size()])
+	for ai in GameManager.current_ais:
+		if ai.revolver.shooting_hand != &"":
+			return _fail_false("gauntlet: rung 8's NPC %d would buzz a controller" % ai.actor_id)
+	if not await _wait_for_state(DuelManager.State.DRAW, 25.0):
+		return _fail_false("gauntlet: rung 8 never reached DRAW")
+	var result := _arm_duel_listener()
+	for ai in GameManager.current_ais.duplicate():
+		ai.take_bullet_hit(99.0, PackedVector3Array())
+	await _await_result(result, 10.0)
+	if result.is_empty() or result[0] != true:
+		return _fail_false("gauntlet: rung 8 did not resolve as a win")
+	print("AUTOTEST: gauntlet rung 8: the Ghost, Sheriff, and Drunk on the oil field (scenario %d), the menu counts 8 rungs, a win over all three resolves" % oil)
+	return true
 
 
 ## Best rung / score / cleared each keep their maximum. Restores the real record.
@@ -783,12 +857,12 @@ func _multi_loss_ok() -> bool:
 	return true
 
 
-## Part D: rung 7 is the three-way on Main Street, NPC revolvers carry no haptic hand
-## (BUG-017), and the menu offers Mixed, the opponent count, and the remembered pick.
+## Part D: rung 7 is the three-way on Main Street (rung 8 repeats it on the oil field), NPC revolvers carry no
+## haptic hand (BUG-017), and the menu offers Mixed, the opponent count, and the remembered pick.
 func _multi_ladder_menu_ok() -> bool:
 	var ladder: GauntletLadder = load(GameManager.GAUNTLET_LADDER)
-	var finale := ladder.encounters[ladder.encounters.size() - 1]
-	if ladder.encounters.size() != 7 or finale.lineup().size() != 3 or finale.scenario_index != 0:
+	var finale := ladder.encounters[6]
+	if ladder.encounters.size() != 8 or finale.lineup().size() != 3 or finale.scenario_index != 0:
 		_fail("rung 7 is not a three-way on Main Street")
 		return false
 	for encounter in ladder.encounters.slice(0, 6):
@@ -859,6 +933,8 @@ func _spawn_floors_ok() -> bool:
 		await get_tree().physics_frame
 		await get_tree().physics_frame
 		var scenario := GameManager.current_scenario
+		if not _arena_time_ok("single-player arena %d" % arena):
+			return false
 		var markers: Array[Marker3D] = [scenario.get_node("PlayerSpawn"), scenario.get_node("EnemySpawn")]
 		for group in scenario.get_children():
 			if String(group.name).begins_with("EnemySpawns"):
@@ -1327,8 +1403,8 @@ func _test_ragdoll() -> void:
 	var knee_range := Vector2(INF, -INF)
 	var elbow_range := Vector2(INF, -INF)
 	var max_time := float(GameManager.tuning["ragdoll_max_time"])
-	var deadline := Time.get_ticks_msec() + int((max_time + 1.0) * 1000.0)
-	while dummy.corpse_state() == BodyRagdoll.State.SIMULATING and Time.get_ticks_msec() < deadline:
+	var deadline := _clock_msec() + int((max_time + 1.0) * 1000.0)
+	while dummy.corpse_state() == BodyRagdoll.State.SIMULATING and _clock_msec() < deadline:
 		await get_tree().physics_frame
 		for i in joints.size():
 			var bend := _hinge_angle(dummy, joints[i][0], joints[i][1], joints[i][2]) - rest_bend[i]
@@ -1469,8 +1545,8 @@ func _ragdoll_npc_floor_ok() -> bool:
 	if not dummy.has_corpse():
 		_fail("ragdoll: the NPC collapse made no corpse")
 		return false
-	var deadline := Time.get_ticks_msec() + int((float(GameManager.tuning["ragdoll_max_time"]) + 1.0) * 1000.0)
-	while dummy.corpse_state() == BodyRagdoll.State.SIMULATING and Time.get_ticks_msec() < deadline:
+	var deadline := _clock_msec() + int((float(GameManager.tuning["ragdoll_max_time"]) + 1.0) * 1000.0)
+	while dummy.corpse_state() == BodyRagdoll.State.SIMULATING and _clock_msec() < deadline:
 		await get_tree().physics_frame
 		peak = maxf(peak, dummy.bone_global(&"Hips").origin.y - start)
 	print("AUTOTEST: NPC ragdoll on Main Street, hips peak rise %.3f m" % peak)
@@ -2164,6 +2240,11 @@ func _test_host() -> void:
 		return _fail("host: hosting did not open a waiting room with one open slot")
 	if NetworkManager.host_start():
 		return _fail("host: START worked with a slot still open")
+	if arena_arg >= 0:
+		if not NetworkManager.host_set_scenario(arena_arg) or GameManager.current_scenario_index != arena_arg:
+			return _fail("host: could not move the waiting room to --arena=%d" % arena_arg)
+		if not _arena_time_ok("host waiting room"):
+			return
 	print("AUTOTEST: hosting, waiting for peer...")
 	if not await _wait_for(func() -> bool: return NetworkManager.roster.can_start(), 40.0):
 		return _fail("no peer joined")
@@ -2252,6 +2333,8 @@ func _test_join() -> void:
 		return _fail("client: bad roster in the waiting room: %s" % roster.pack())
 	if not _lobby_tints_ok("client waiting room", 2):
 		return
+	if not _arena_time_ok("client waiting room"):
+		return
 	if not _client_page_ok("client"):
 		return
 	if NetworkManager.host_start():
@@ -2266,6 +2349,8 @@ func _test_join() -> void:
 	if not coin_seen:
 		return _fail("client: the host's avatar never drew the coin the host carries")
 	print("AUTOTEST: client sees the host's carried coin")
+	if not _arena_time_ok("client duel"):
+		return
 	await _await_result(result, 60.0)
 	if result.is_empty():
 		return _fail("client never saw the duel resolve")
@@ -3486,6 +3571,8 @@ func _lobby_spawns_ok() -> bool:
 		if not NetworkManager.host_set_scenario(arena) or GameManager.current_scenario_index != arena:
 			_fail("lobby: could not move the waiting room to arena %d" % arena)
 			return false
+		if not _arena_time_ok("lobby waiting room, arena %d" % arena):
+			return false
 		var scenario := GameManager.current_scenario
 		for count in [2, 3, 4]:
 			var spawns := scenario.get_duel_spawns(count)
@@ -4097,7 +4184,7 @@ func _lobby_spectate_kill_ok() -> bool:
 		_fail("lobby spectate: a 4-slot duel should record 4 actors with nobody watching yet")
 		return false
 	var head := local.get_head_position()
-	var died_at := Time.get_ticks_msec()
+	var died_at := _clock_msec()
 	local.take_bullet_hit(99.0, PackedVector3Array([head - Vector3.FORWARD, head]), CombatRules.REGION_HEAD,
 			false, false, 2)
 	if not result.is_empty() or duel.live_slots() != [1, 2, 3] or local.alive or KillCam.is_playing:
@@ -4115,7 +4202,7 @@ func _lobby_spectate_kill_ok() -> bool:
 	if not await _wait_for(func() -> bool: return DeathCam.spectate_target() != 0, LOBBY_SPECTATE_HOLD + 3.0):
 		_fail("lobby spectate: the hold on the own corpse never ended")
 		return false
-	var held := (Time.get_ticks_msec() - died_at) / 1000.0
+	var held := (_clock_msec() - died_at) / 1000.0
 	if held < LOBBY_SPECTATE_HOLD - 0.15 or not _watching(2) or not _orbit_on(DeathCam._chest(2)):
 		_fail("lobby spectate: after %.2f s the camera is on slot %d, not on the killer (slot 2) after the hold" % [
 				held, DeathCam.spectate_target()])
@@ -6253,6 +6340,7 @@ func _test_load_all() -> void:
 		"res://scenarios/saloon/saloon.tscn",
 		"res://scenarios/train_rooftop/train_rooftop.tscn",
 		"res://scenarios/canyon/canyon.tscn",
+		OILFIELD_SCENE,
 		"res://scenarios/practice_hub/practice_hub.tscn",
 		"res://practice/practice_bottle.tscn",
 		"res://practice/slot_machine.tscn",
@@ -6269,7 +6357,11 @@ func _test_load_all() -> void:
 				var count := 0 if scenery == null else scenery.get_child_count()
 				instance.queue_free()
 				return _fail("train rooftop scenery belt built %d pieces" % count)
-			if not _engine_smoke_ok(instance):
+			if not _engine_smoke_ok(instance, ENGINE_SMOKE_SILVER):
+				instance.queue_free()
+				return
+		if path == OILFIELD_SCENE:
+			if not _oilfield_belt_ok(instance) or not _engine_smoke_ok(instance, OILFIELD_SMOKE):
 				instance.queue_free()
 				return
 		instance.queue_free()
@@ -6294,8 +6386,8 @@ func _test_load_all() -> void:
 			return _fail("resource failed to load: %s" % path)
 		print("AUTOTEST: loaded %s" % path)
 	var ladder: GauntletLadder = load(GameManager.GAUNTLET_LADDER)
-	if ladder.encounters.size() != 7:
-		return _fail("ladder has %d encounters, expected 7" % ladder.encounters.size())
+	if ladder.encounters.size() != 8:
+		return _fail("ladder has %d encounters, expected 8" % ladder.encounters.size())
 	if not _main_menu_split_ok():
 		return
 	if not _lobby_settings_ok() or not _lobby_setup_ok():
@@ -6314,7 +6406,7 @@ func _test_load_all() -> void:
 		return
 	if not _leave_rejoin_ok():
 		return
-	if not _time_of_day_ok():
+	if not _time_of_day_ok() or not _fixed_time_ok():
 		return
 	if not await _wind_ok():
 		return
@@ -6564,7 +6656,7 @@ func _bullet_trail_ok() -> bool:
 func _world_globals_ok() -> bool:
 	# `global_shader_parameter_get_list` is editor-only on GLES3, so read the project setting.
 	for key in ["band_low", "band_soft", "grain_strength_mult", "grain_scale_mult",
-			"sheet_mix", "wind_ambient", "wind_gust"]:
+			"sheet_mix", "wind_ambient", "wind_gust", "smoke_fog_near", "smoke_fog_far", "smoke_fog_color"]:
 		if not ProjectSettings.has_setting("shader_globals/" + key):
 			_fail("shader global %s is not declared in project.godot" % key)
 			return false
@@ -6577,6 +6669,11 @@ func _world_globals_ok() -> bool:
 	GameManager.set_tuning("band_low", saved_low)
 	if pushed != null and not is_equal_approx(float(pushed), 0.4):
 		_fail("band_low tuning did not reach the shader global (%s)" % pushed)
+		return false
+	var ramp: Array[float] = [float(ProjectSettings.get_setting("shader_globals/smoke_fog_near")["value"]),
+			float(ProjectSettings.get_setting("shader_globals/smoke_fog_far")["value"])]
+	if ramp != [150.0, 300.0]:
+		_fail("the smoke / flame fog ramp is %s, expected [150, 300] (F11)" % [ramp])
 		return false
 	print("AUTOTEST: world shader globals declared; band tuning drives them")
 	return true
@@ -6604,6 +6701,12 @@ func _world_surface_ok() -> bool:
 	const SHEET_SURFACES_MIN := 1500
 	var plants := ["M_Yucca", "M_Scrub", "M_ScrubDry", "M_Hay"]
 	var glow_names := ["M_Flame", "M_LampGlass"]
+	var smoke_shader := load("res://assets/shaders/world_smoke.gdshader") as Shader
+	var importer_smoke: Variant = importer.get_script_constant_map().get("SMOKE") if importer != null else null
+	if importer_smoke == null or (importer_smoke as Array).map(func(n: StringName) -> String: return String(n)) != ["M_Smoke"]:
+		_fail("world_surface_import.gd SMOKE is %s, expected [M_Smoke]" % [importer_smoke])
+		return false
+	var smoky := 0
 	var importer_glow: Variant = importer.get_script_constant_map().get("SELF_LIT") if importer != null else null
 	if importer_glow == null or (importer_glow as Array).map(func(n: StringName) -> String: return String(n)) != glow_names:
 		_fail("world_surface_import.gd SELF_LIT is %s, expected %s" % [importer_glow, glow_names])
@@ -6618,22 +6721,34 @@ func _world_surface_ok() -> bool:
 		"res://scenarios/saloon/saloon.tscn",
 		"res://scenarios/train_rooftop/train_rooftop.tscn",
 		"res://scenarios/canyon/canyon.tscn",
+		OILFIELD_SCENE,
 		"res://scenarios/practice_hub/practice_hub.tscn",
 	]:
 		var instance := (load(path) as PackedScene).instantiate()
 		add_child(instance)
 		for node in instance.find_children("*", "MeshInstance3D", true, false):
 			var mi := node as MeshInstance3D
-			if mi.mesh == null or not _in_scenario_glb(mi):
+			# A flame column rides a GLB's anchor but wears its own shader (flame_column.gdshader).
+			if mi.mesh == null or mi is FlameColumn or not _in_scenario_glb(mi):
 				continue
 			var lit_surfaces := 0
 			var self_lit_surfaces := 0
+			var smoke_surfaces := 0
 			for surface in mi.mesh.get_surface_count():
 				var mat := mi.get_active_material(surface)
 				if mat == null:
 					continue
-				surfaces += 1
 				var label := "%s %s surface %d" % [path.get_file(), mi.name, surface]
+				# M_Smoke wears its own shader (fog_disabled is static: the ramp cannot live in the world shader).
+				var is_smoke := mat is ShaderMaterial and String(mat.resource_name).get_slice("__", 0) == "M_Smoke"
+				if is_smoke:
+					if (mat as ShaderMaterial).shader != smoke_shader:
+						_fail("%s is M_Smoke but not on world_smoke.gdshader" % label)
+						return false
+					smoke_surfaces += 1
+					smoky += 1
+					continue
+				surfaces += 1
 				if not (mat is ShaderMaterial and (mat as ShaderMaterial).shader == shader):
 					_fail("%s is not on world_surface.gdshader (reimport the GLBs?)" % label)
 					return false
@@ -6657,7 +6772,8 @@ func _world_surface_ok() -> bool:
 					return false
 				if swaying:
 					swayed += 1
-					if path.ends_with("train_rooftop.tscn") and instance.get_node("Scenery").is_ancestor_of(mi):
+					var on_belt: bool = path.ends_with("train_rooftop.tscn") or path == OILFIELD_SCENE
+					if on_belt and instance.get_node("Scenery").is_ancestor_of(mi):
 						_fail("%s: a belt piece sways" % label)
 						return false
 				var hinge: Variant = sm.get_shader_parameter("hinge_amount")
@@ -6691,7 +6807,7 @@ func _world_surface_ok() -> bool:
 						_fail("%s sheet_tex is not trim_sheet.png" % label)
 						return false
 			# A mesh that is all glow casts no shadow; every other mesh still does.
-			var all_glow := self_lit_surfaces > 0 and lit_surfaces == 0
+			var all_glow := self_lit_surfaces + smoke_surfaces > 0 and lit_surfaces == 0
 			var no_shadow := mi.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			if all_glow != no_shadow:
 				_fail("%s %s: %d self-lit and %d lit surfaces, cast_shadow %d" % [
@@ -6702,6 +6818,10 @@ func _world_surface_ok() -> bool:
 				_fail("%s collision proxy %s grew a mesh" % [path.get_file(), body.name])
 				return false
 		instance.queue_free()
+	# The plumes are gone (Roadmap Ideas parks them): the M_Smoke path stays, with no surface on it.
+	if smoky != 0:
+		_fail("world surface: %d M_Smoke surfaces, but the oil field's plumes were removed" % smoky)
+		return false
 	if surfaces < 500 or swayed == 0 or glowing == 0 or hinged.size() != slabs.size():
 		_fail("world surface: %d surfaces, %d swaying, %d self-lit, hinges on %s" % [
 				surfaces, swayed, glowing, hinged.keys()])
@@ -6709,8 +6829,8 @@ func _world_surface_ok() -> bool:
 	if trim_on and sheeted < SHEET_SURFACES_MIN:
 		_fail("world surface: only %d surfaces take the trim sheet" % sheeted)
 		return false
-	print("AUTOTEST: %d scenario surfaces wear world_surface.gdshader (%d sway, %d self-lit, %d hand-painted, %d on the trim sheet (%s), hinges %s)" % [
-			surfaces, swayed, glowing, painted, sheeted, "on" if trim_on else "paused", hinged.keys()])
+	print("AUTOTEST: %d scenario surfaces wear world_surface.gdshader (%d sway, %d self-lit, %d hand-painted, %d on the trim sheet (%s), hinges %s); %d M_Smoke surfaces (the plumes are removed; the smoke path stays)" % [
+			surfaces, swayed, glowing, painted, sheeted, "on" if trim_on else "paused", hinged.keys(), smoky])
 	return true
 
 
@@ -6745,12 +6865,17 @@ func _puff_cues_ok() -> bool:
 	return true
 
 
-## Train Rooftop's stack plume (Roadmap 2.2): a looping, non-casting `puff.gdshader` emitter on the
-## crown, with a process material of its own and F3 `engine_smoke_density` driving the count only.
-func _engine_smoke_ok(arena: Node) -> bool:
+## The stack plume on both trains (Roadmap 2.2): a looping, non-casting `puff.gdshader` emitter on
+## the crown, with a process material of its own tinted `tint` (silver on Train Rooftop, dark on
+## the oil field, sheet F8), and F3 `engine_smoke_density` driving the count only.
+func _engine_smoke_ok(arena: Node, tint: Color) -> bool:
 	var smoke := arena.get_node_or_null("EngineSmoke") as GPUParticles3D
 	if smoke == null:
-		_fail("train rooftop has no EngineSmoke")
+		_fail("%s has no EngineSmoke" % arena.name)
+		return false
+	if not (smoke.process_material as ParticleProcessMaterial).color.is_equal_approx(tint):
+		_fail("%s EngineSmoke puffs are %s, expected %s" % [arena.name,
+				(smoke.process_material as ParticleProcessMaterial).color, tint])
 		return false
 	var mesh := smoke.draw_pass_1 as QuadMesh
 	var mat := mesh.material as ShaderMaterial if mesh != null else null
@@ -6895,7 +7020,7 @@ func _vr_rig_ok() -> bool:
 
 
 func _vr_rig_checks(arena: ScenarioBase, body: Node3D, rig: VRRig) -> bool:
-	# EnemySpawn is yawed 180°: the joiner's facing must survive the recentre too.
+	# EnemySpawn is yawed 180Â°: the joiner's facing must survive the recentre too.
 	for spawn: Transform3D in [arena.get_enemy_spawn(), arena.get_player_spawn()]:
 		body.global_transform = spawn
 		rig.camera.position = Vector3(1.8, 1.6, 0.9)
@@ -7098,6 +7223,539 @@ func _saloon_time_ok() -> bool:
 	return true
 
 
+const OILFIELD_TRES := "res://scenarios/oilfield_train/oilfield_train.tres"
+const OILFIELD_SCENE := "res://scenarios/oilfield_train/oilfield_train.tscn"
+## The plume tints (sheet F8): `engine_smoke.tscn`'s silver, and the oil field's dark smoke.
+const ENGINE_SMOKE_SILVER := Color(0.561, 0.549, 0.525)
+const OILFIELD_SMOKE := Color(0.2275, 0.1725, 0.149)
+## Belt copies: 90 tracks, 20 near and 12 mid pumpjacks, 32 horizon tiles, 2 burning wells, 10 derricks, 8 tanks,
+## 8 pylons, 24 pipe runs, 16 wellheads, 16 sumps (sheet B, The belt; C steps 1, 3, 4, 5, 6, and 7).
+const OILFIELD_BELT_PIECES := 238
+const OILFIELD_WELLHEADS := 16
+const OILFIELD_SUMPS := 16
+const OILFIELD_PYLONS := 8
+const OILFIELD_PIPE_RUNS := 24
+const OILFIELD_DERRICKS := 10
+const OILFIELD_TANKS := 8
+const OILFIELD_PUMPJACKS := 32
+const OILFIELD_TILES := 32
+const OILFIELD_WELLS := 2
+
+
+## The live arena's t: the resource's fixed one where it has one (the oil field), else a roll
+## in [0, 1). Every load path ends here: single player, the host's waiting room through its
+## call_local RPC, and a joiner applying the host's value.
+func _arena_time_ok(label: String) -> bool:
+	var res := load(GameManager.SCENARIOS[GameManager.current_scenario_index]) as ScenarioResource
+	var t := GameManager.current_scenario.time_of_day
+	var fixed := res.fixed_time_of_day
+	if (fixed >= 0.0 and not is_equal_approx(t, fixed)) or (fixed < 0.0 and (t < 0.0 or t >= 1.0)):
+		_fail("%s: %s time of day %.3f (fixed %.2f)" % [label, res.display_name, t, fixed])
+		return false
+	print("AUTOTEST: %s: %s at time of day %.2f" % [label, res.display_name, t])
+	return true
+
+
+## Oil-field Train's fixed night (Roadmap 3.3). Only it fixes t, at `TimeOfDay.NIGHT_T`; the
+## value an MP host sends is that t on every pick while the other arenas roll in [0, 1); a
+## load given that value (the client's path) keeps it, with the night point's sun, sky, fog,
+## and own cloud colour; the clouds stay as authored; and t 1 is still exactly dusk.
+func _fixed_time_ok() -> bool:
+	var oil := GameManager.SCENARIOS.find(OILFIELD_TRES)
+	if oil != GameManager.SCENARIOS.size() - 1:
+		_fail("the oil field should be the last SCENARIOS entry (index %d)" % oil)
+		return false
+	for i in GameManager.SCENARIOS.size():
+		var arena_res := load(GameManager.SCENARIOS[i]) as ScenarioResource
+		if (i == oil) != (arena_res.fixed_time_of_day >= 0.0):
+			_fail("%s fixed_time_of_day is %.2f" % [arena_res.display_name, arena_res.fixed_time_of_day])
+			return false
+		for n in 16:
+			var t := GameManager.roll_time_of_day(i)
+			var bad := not is_equal_approx(t, TimeOfDay.NIGHT_T) if i == oil else (t < 0.0 or t >= 1.0)
+			if bad:
+				_fail("%s: the host would send time of day %.3f" % [arena_res.display_name, t])
+				return false
+	var dusk: Dictionary = TimeOfDay.KEYFRAMES[3]
+	if TimeOfDay._sample(1.0) != dusk or TimeOfDay._sample(0.5).has("cloud_color"):
+		_fail("time of day: t 1 is no longer exactly dusk, or a day sample sets its own cloud colour")
+		return false
+	var night: Dictionary = TimeOfDay.KEYFRAMES[TimeOfDay.KEYFRAMES.size() - 1]
+	var res := load(OILFIELD_TRES) as ScenarioResource
+	var instance := res.scene.instantiate() as ScenarioBase
+	instance.scenario_resource = res
+	instance.time_of_day = GameManager.roll_time_of_day(oil)
+	add_child(instance)
+	var problem := _night_problem(instance, night)
+	if problem.is_empty():
+		# F3 scrubs past the night point clamp to it, never back into dawn to dusk.
+		instance.apply_time(9.0)
+		if not is_equal_approx(instance.time_of_day, TimeOfDay.T_MAX):
+			problem = "an F3 scrub to 9 left t at %.2f" % instance.time_of_day
+	instance.queue_free()
+	if not problem.is_empty():
+		_fail("oil field night: " + problem)
+		return false
+	print("AUTOTEST: oil field holds its fixed night (t %.2f); every other arena rolls in [0, 1)" % TimeOfDay.NIGHT_T)
+	return true
+
+
+func _night_problem(instance: ScenarioBase, night: Dictionary) -> String:
+	if not is_equal_approx(instance.time_of_day, TimeOfDay.NIGHT_T):
+		return "t %.3f after load" % instance.time_of_day
+	var sun := instance.get_node("Sun") as DirectionalLight3D
+	var toward := sun.global_transform.basis.z
+	var elev := rad_to_deg(asin(clampf(toward.y, -1.0, 1.0)))
+	if absf(elev - TimeOfDay.NIGHT_ELEVATION_DEG) > 0.05 or toward.x > -0.99:
+		return "the key sits at elevation %.2f toward %s, not 1 degree under the -x horizon" % [elev, toward]
+	if sun.shadow_enabled or not sun.light_color.is_equal_approx(night["light_color"]) \
+			or not is_equal_approx(sun.light_energy, night["light_energy"]):
+		return "the key is %s at %.2f, shadows %s" % [sun.light_color, sun.light_energy, sun.shadow_enabled]
+	if not is_equal_approx(BulletTrail.solid, night["trail_solid"]):
+		return "trail_solid %.2f" % BulletTrail.solid
+	var mat := _sky_shader(instance)
+	var env := (instance.get_node("WorldEnvironment") as WorldEnvironment).environment
+	for key: StringName in [&"sky_top", &"sky_horizon", &"ground_bottom", &"ground_horizon", &"cloud_color"]:
+		if not (mat.get_shader_parameter(key) as Color).is_equal_approx(night[key]):
+			return "sky %s is %s" % [key, mat.get_shader_parameter(key)]
+	if not env.fog_light_color.is_equal_approx(night["ground_horizon"]) \
+			or not is_equal_approx(env.fog_sun_scatter, night["fog_sun_scatter"]):
+		return "fog %s scatter %.2f" % [env.fog_light_color, env.fog_sun_scatter]
+	if not is_equal_approx(env.fog_density, 0.006):
+		return "fog density %.4f, not the thin 0.006 of the light tuning" % env.fog_density
+	if not is_equal_approx(float(mat.get_shader_parameter(&"cloud_cover")), 0.4) \
+			or not (mat.get_shader_parameter(&"cloud_offset") as Vector2).is_equal_approx(Vector2(0.37, 0.61)):
+		return "the clouds rolled (cover %.2f, offset %s)" % [
+				mat.get_shader_parameter(&"cloud_cover"), mat.get_shader_parameter(&"cloud_offset")]
+	return ""
+
+
+## The oil field's belt (sheet B, The belt; C step 1): every copy built, every pumpjack with
+## its own `WalkingBeam` at the bearing, no collision left on a copy, and the beam clock
+## rocking them in three phase groups within 12 degrees.
+func _oilfield_belt_ok(arena: Node) -> bool:
+	var belt := arena.get_node_or_null("Scenery")
+	if belt == null or belt.get_child_count() != OILFIELD_BELT_PIECES:
+		_fail("oil field belt built %d pieces, expected %d" % [
+				0 if belt == null else belt.get_child_count(), OILFIELD_BELT_PIECES])
+		return false
+	var beams: Array[Node3D] = []
+	var tiles := 0
+	# The plumes were removed (Roadmap Ideas parks them): no tile or well carries a Plume node.
+	if not belt.find_children("Plume_*", "", true, false).is_empty():
+		_fail("oil field: the belt still carries a Plume node")
+		return false
+	for piece in belt.get_children():
+		if piece.find_child("Flame_1", true, false) != null:
+			tiles += 1
+			for anchor_name in ["Flame_1", "Flame_2", "Flame_3"]:
+				var anchor := piece.find_child(anchor_name, true, false) as Node3D
+				if anchor == null or anchor.get_child_count() > 1 or not anchor.scale.is_equal_approx(Vector3.ONE) 						or anchor.position.y <= 0.0 or anchor.position.y > 6.0:
+					_fail("oil field: horizon tile %s has a bad %s" % [piece.name, anchor_name])
+					return false
+			for part in ["Horizon_Rock", "Horizon_RockDark", "Horizon_Flame", "Horizon_LampGlass"]:
+				if piece.find_child(part, true, false) == null:
+					_fail("oil field: horizon tile %s lacks %s" % [piece.name, part])
+					return false
+		var beam := piece.find_child("WalkingBeam", true, false) as Node3D
+		if beam != null:
+			if not beam.position.is_equal_approx(Vector3(0.0, 4.0, 0.0)):
+				_fail("oil field: %s WalkingBeam sits at %s, not the bearing" % [piece.name, beam.position])
+				return false
+			beams.append(beam)
+		for body in piece.find_children("*", "CollisionObject3D", true, false):
+			if (body as CollisionObject3D).collision_layer != 0:
+				_fail("oil field: belt piece %s keeps collision on %s" % [piece.name, body.name])
+				return false
+	if beams.size() != OILFIELD_PUMPJACKS:
+		_fail("oil field belt has %d walking beams, expected %d" % [beams.size(), OILFIELD_PUMPJACKS])
+		return false
+	# At the cycle's start the groups stand at sin 0, 120 and 240 degrees of the swing.
+	belt.call(&"set_beams", 0.0)
+	var swing := deg_to_rad(12.0)
+	var lift := swing * sin(TAU / 3.0)
+	var angles: Array[float] = [beams[0].rotation.z, beams[1].rotation.z, beams[2].rotation.z]
+	if not is_zero_approx(angles[0]) or absf(angles[1] - lift) > 0.0001 or absf(angles[2] + lift) > 0.0001 \
+			or not is_equal_approx(beams[3].rotation.z, angles[0]):
+		_fail("oil field beams do not nod in three phase groups: %s" % [angles])
+		return false
+	for beam in beams:
+		if absf(beam.rotation.z) > swing + 0.001:
+			_fail("oil field beam %s swings %.1f degrees" % [beam.get_path(), rad_to_deg(beam.rotation.z)])
+			return false
+	if tiles != OILFIELD_TILES:
+		_fail("oil field belt has %d horizon tiles, expected %d" % [tiles, OILFIELD_TILES])
+		return false
+	# The wells check moves the wells, so the mid band is measured first.
+	if not _flame_cues_ok(belt) or not _mid_rigs_ok(belt) or not _wrap_rows_ok(belt) or not _near_dressing_ok(belt):
+		return false
+	if not _burning_wells_ok(arena, belt):
+		return false
+	print("AUTOTEST: oil field belt: %d pieces, %d nodding pumpjacks, %d horizon tiles" % [
+			belt.get_child_count(), beams.size(), tiles])
+	return true
+
+
+## The horizon's flame columns (sheet H, Flame cue and smoke): 12 lit anchors (8 on the left, 4 on the
+## right) each carry one `FlameColumn` of their anchor's size, F3 `flame_columns` 0 hides every column
+## (and 1 brings them back), and the cue is in `VfxCatalog` (so the boot warmup compiles it). The two
+## burning wells' columns are checked in `_burning_wells_ok`.
+func _flame_cues_ok(belt: Node) -> bool:
+	const SIZES := {"Flame_1": Vector2(18.0, 60.0), "Flame_2": Vector2(11.2, 35.0), "Flame_3": Vector2(6.2, 15.0)}
+	var columns: Array[FlameColumn] = []
+	var left := 0
+	var right := 0
+	for piece in belt.get_children():
+		if piece.find_child("Flame_1", true, false) == null:
+			continue
+		var lit := 0
+		for anchor_name: String in SIZES:
+			var anchor := piece.find_child(anchor_name, true, false) as Node3D
+			var cues := anchor.find_children("*", "MeshInstance3D", false, false).filter(func(c: Node) -> bool: return c is FlameColumn)
+			if cues.size() > 1:
+				_fail("oil field: %s %s has %d columns" % [piece.name, anchor_name, cues.size()])
+				return false
+			if cues.size() == 1:
+				var cue := cues[0] as FlameColumn
+				var want: Vector2 = SIZES[anchor_name]
+				if not cue.scale.is_equal_approx(Vector3(want.x * FlameColumn.WIDTH_SLACK, want.y, 1.0)) or cue.position != Vector3.ZERO:
+					_fail("oil field: %s column on %s is scaled %s, wanted %s" % [piece.name, anchor_name, cue.scale, want])
+					return false
+				lit += 1
+				columns.append(cue)
+				if piece.position.x < 0.0:
+					left += 1
+				else:
+					right += 1
+		if lit > 1:
+			_fail("oil field: tile %s burns %d anchors" % [piece.name, lit])
+			return false
+	if columns.size() != 12 or left != 8 or right != 4:
+		_fail("oil field: %d horizon columns (%d left, %d right); expected 12 (8, 4)" % [columns.size(), left, right])
+		return false
+	var saved: float = GameManager.tuning["flame_columns"]
+	GameManager.set_tuning("flame_columns", 0.0)
+	var hidden := columns.all(func(c: FlameColumn) -> bool: return not c.is_visible_in_tree())
+	GameManager.set_tuning("flame_columns", 1.0)
+	var shown := columns.all(func(c: FlameColumn) -> bool: return c.visible)
+	GameManager.set_tuning("flame_columns", saved)
+	if not hidden or not shown:
+		_fail("F3 flame_columns does not hide and show every column (hidden %s, shown %s)" % [hidden, shown])
+		return false
+	var warm := Node3D.new()
+	add_child(warm)
+	VfxCatalog.spawn_for_compile(warm)
+	var warmed := warm.get_children().any(func(c: Node) -> bool: return c is FlameColumn)
+	warm.queue_free()
+	if not VfxCatalog.cues().has(&"flame_column") or not warmed:
+		_fail("flame_column is not in the VfxCatalog warmup")
+		return false
+	print("AUTOTEST: oil field flames: %d horizon columns (%d left, %d right), F3 flame_columns hides them all, in the warmup" % [
+			columns.size(), left, right])
+	return true
+
+
+## The mid belt's derricks and tanks (sheet B; batch 5): 10 derricks (`Derrick_Plank` and `Derrick_Iron`) and
+## 8 tanks (`Tank_Sheet`, `Tank_Iron`, `Tank_Plank`), rolled to x 26 to 45 and 30 to 45 on the right; on the left
+## the whole mid band stays at x 28 or beyond (the pylon line stands at 22). One piece a slot: on each side no
+## two mid pieces (derricks, tanks, pumpjacks, wells) stand closer than 40 m along the 768 m loop, and none of
+## them carries a flame cue but the wells.
+func _mid_rigs_ok(belt: Node) -> bool:
+	var derricks := 0
+	var tanks := 0
+	var mid: Array[Node3D] = []
+	for piece: Node3D in belt.get_children():
+		var is_derrick := piece.find_child("Derrick_Plank", true, false) != null
+		var is_tank := piece.find_child("Tank_Sheet", true, false) != null
+		var is_well := piece.find_child("Flame_Near", true, false) != null
+		var is_mid_jack := piece.find_child("WalkingBeam", true, false) != null and absf(piece.position.x) > 20.0
+		if is_derrick:
+			derricks += 1
+			if piece.find_child("Derrick_Iron", true, false) == null:
+				_fail("oil field: derrick %s lacks Derrick_Iron" % piece.name)
+				return false
+		if is_tank:
+			tanks += 1
+			for part in ["Tank_Iron", "Tank_Plank"]:
+				if piece.find_child(part, true, false) == null:
+					_fail("oil field: tank %s lacks %s" % [piece.name, part])
+					return false
+		if is_derrick or is_tank:
+			var side := signf(piece.position.x)
+			var out := absf(piece.position.x)
+			var lo := 26.0 if is_derrick else 30.0
+			if out < lo or out > 45.0 or (side < 0.0 and out < 28.0):
+				_fail("oil field: %s stands at x %.2f, outside its mid-belt range" % [piece.name, piece.position.x])
+				return false
+			if piece.find_child("Flame_*", true, false) != null:
+				_fail("oil field: %s carries a flame anchor" % piece.name)
+				return false
+		if is_derrick or is_tank or is_well or is_mid_jack:
+			mid.append(piece)
+	if derricks != OILFIELD_DERRICKS or tanks != OILFIELD_TANKS:
+		_fail("oil field belt has %d derricks and %d tanks, expected %d and %d" % [
+				derricks, tanks, OILFIELD_DERRICKS, OILFIELD_TANKS])
+		return false
+	var loop := 48.0 * 16.0
+	for i in mid.size():
+		for j in range(i + 1, mid.size()):
+			if signf(mid[i].position.x) != signf(mid[j].position.x):
+				continue
+			var gap := posmod(mid[i].position.z - mid[j].position.z, loop)
+			gap = minf(gap, loop - gap)
+			if gap < 40.0:
+				_fail("oil field: mid pieces %s and %s stand %.1f m apart along the loop" % [mid[i].name, mid[j].name, gap])
+				return false
+	print("AUTOTEST: oil field mid rigs: %d derricks and %d tanks on free slots, left side at x 28 or beyond, no two mid pieces closer than 40 m" % [
+			derricks, tanks])
+	return true
+
+
+## The pylon line, the pipe runs, and the wrap grow (sheet H, batch 6). Eight towers at x -22 on an exact 96 m
+## pitch, each mesh reaching its wires 96 m along the track; 24 pipe runs 3.6 to 5.0 m out, 12 a side; nothing
+## on the belt that reaches inside x 6 stands over 1.5 m; and the grow: a piece's scale follows `grow_at` of its
+## distance inside the wrap (the tracks stay at 1), a piece out of the ramp is exactly 1 again, and a pumpjack's
+## beam and a well's anchor scale with their piece.
+func _wrap_rows_ok(belt: Node) -> bool:
+	var pylons: Array[Node3D] = []
+	var pipes: Array[Node3D] = []
+	for piece: Node3D in belt.get_children():
+		if piece.find_child("Pylon_Iron", true, false) != null:
+			pylons.append(piece)
+		elif piece.find_child("Pipe_Iron", true, false) != null:
+			pipes.append(piece)
+	if pylons.size() != OILFIELD_PYLONS or pipes.size() != OILFIELD_PIPE_RUNS:
+		return _fail_false("oil field belt has %d pylons and %d pipe runs, expected %d and %d" % [
+				pylons.size(), pipes.size(), OILFIELD_PYLONS, OILFIELD_PIPE_RUNS])
+	var loop := 48.0 * 16.0
+	var zs: Array[float] = []
+	for pylon in pylons:
+		var tower := pylon.find_child("Pylon_Iron", true, false) as MeshInstance3D
+		var reach := tower.get_aabb().end.z
+		if absf(pylon.position.x + 22.0) > 0.0001 or not pylon.rotation.is_zero_approx() or absf(reach - 96.0) > 0.01:
+			return _fail_false("oil field pylon %s at x %.4f, turned %s, wires reach %.3f m: not x -22, unrolled, 96 m" % [
+					pylon.name, pylon.position.x, pylon.rotation, reach])
+		zs.append(pylon.position.z)
+	zs.sort()
+	for i in zs.size():
+		var gap: float = (zs[(i + 1) % zs.size()] - zs[i]) if i < zs.size() - 1 else (zs[0] + loop - zs[i])
+		if absf(gap - 96.0) > 0.01:
+			return _fail_false("oil field pylons stand %.3f m apart, not 96 (the wires would miss the next arms)" % gap)
+	var sides := {-1.0: 0, 1.0: 0}
+	for pipe in pipes:
+		var out := absf(pipe.position.x)
+		if out < 3.6 - 0.0001 or out > 5.0 + 0.0001 or not pipe.rotation.is_zero_approx():
+			return _fail_false("oil field pipe run %s at x %.3f, turned %s" % [pipe.name, pipe.position.x, pipe.rotation])
+		sides[signf(pipe.position.x)] += 1
+	if sides[-1.0] != 12 or sides[1.0] != 12:
+		return _fail_false("oil field pipe runs: %d left, %d right, expected 12 and 12" % [sides[-1.0], sides[1.0]])
+	# Nothing whose body reaches inside x 6 stands over 1.5 m (the death cam swings through that strip).
+	for piece: Node3D in belt.get_children():
+		for mesh: MeshInstance3D in piece.find_children("*", "MeshInstance3D", true, false):
+			var box := mesh.global_transform * mesh.get_aabb()
+			if box.position.x < 6.0 and box.end.x > -6.0 and box.end.y > 1.5:
+				return _fail_false("oil field: %s reaches x %.1f..%.1f and %.2f m high inside the death cam's strip" % [
+						piece.name, box.position.x, box.end.x, box.end.y])
+	return _belt_grow_ok(belt)
+
+
+## The near dressing (sheet B, oil_wellhead and oil_sump; H batch 7): 16 wellheads at x 6 to 12 and 16 sumps at
+## x 7 to 16, 8 a side, unturned, and every near piece's footprint (its meshes' extent in x and z, taken from the
+## piece's home, not the clock) at least 3 m from every other near footprint that overlaps it in x: the wellheads
+## and sumps clear of the pumpjacks, the pipe runs, and each other, across the 720 m wrap too.
+func _near_dressing_ok(belt: Node) -> bool:
+	var nodes: Array = belt.get("_nodes")
+	var homes: PackedFloat32Array = belt.get("_home_z")
+	var loops: PackedFloat32Array = belt.get("_loops")
+	var heads := {-1.0: 0, 1.0: 0}
+	var sumps := {-1.0: 0, 1.0: 0}
+	var feet: Array[Dictionary] = []
+	for i in nodes.size():
+		var piece: Node3D = nodes[i]
+		if loops[i] != 720.0 or piece.scene_file_path.ends_with("env_rail_track_8m.glb"):
+			continue
+		var lo := Vector2(INF, INF)
+		var hi := Vector2(-INF, -INF)
+		for mesh: MeshInstance3D in piece.find_children("*", "MeshInstance3D", true, false):
+			var box := (piece.global_transform.affine_inverse() * mesh.global_transform) * mesh.get_aabb()
+			lo = Vector2(minf(lo.x, box.position.x), minf(lo.y, box.position.z))
+			hi = Vector2(maxf(hi.x, box.end.x), maxf(hi.y, box.end.z))
+		var side := signf(piece.position.x)
+		var out := absf(piece.position.x)
+		if piece.find_child("Wellhead_Iron", true, false) != null:
+			heads[side] += 1
+			if out < 6.0 - 0.0001 or out > 12.0 + 0.0001 or not piece.rotation.is_zero_approx():
+				return _fail_false("oil field wellhead %s at x %.3f, turned %s: not x 6 to 12, unturned" % [piece.name, piece.position.x, piece.rotation])
+			if hi.y - lo.y > 4.2:
+				return _fail_false("oil field wellhead %s is %.2f m along z, expected about 4" % [piece.name, hi.y - lo.y])
+		elif piece.find_child("Sump_Dirt", true, false) != null:
+			sumps[side] += 1
+			if out < 7.0 - 0.0001 or out > 16.0 + 0.0001 or not piece.rotation.is_zero_approx():
+				return _fail_false("oil field sump %s at x %.3f, turned %s: not x 7 to 16, unturned" % [piece.name, piece.position.x, piece.rotation])
+		feet.append({"name": piece.name, "x0": piece.position.x + lo.x, "x1": piece.position.x + hi.x,
+				"z0": homes[i] + lo.y, "z1": homes[i] + hi.y})
+	if heads[-1.0] != 8 or heads[1.0] != 8 or sumps[-1.0] != 8 or sumps[1.0] != 8:
+		return _fail_false("oil field near dressing: wellheads %s, sumps %s, expected 8 a side" % [heads, sumps])
+	var worst := INF
+	for a in feet.size():
+		for b in range(a + 1, feet.size()):
+			var fa: Dictionary = feet[a]
+			var fb: Dictionary = feet[b]
+			if fa["x0"] > fb["x1"] or fb["x0"] > fa["x1"]:
+				continue
+			for shift in [-720.0, 0.0, 720.0]:
+				var gap := maxf(float(fb["z0"]) + shift - float(fa["z1"]), float(fa["z0"]) - float(fb["z1"]) - shift)
+				worst = minf(worst, gap)
+				if gap < 3.0:
+					return _fail_false("oil field near footprints %s and %s are %.2f m apart along z (3 m wanted)" % [fa["name"], fb["name"], gap])
+	print("AUTOTEST: oil field near dressing: %d wellheads and %d sumps, 8 a side, every near footprint at least %.1f m from the next along z" % [
+			OILFIELD_WELLHEADS, OILFIELD_SUMPS, worst])
+	return true
+
+
+func _belt_grow_ok(belt: Node) -> bool:
+	if absf(float(belt.call(&"grow_at", 0.0)) - 0.001) > 0.0001 or absf(float(belt.call(&"grow_at", 20.0)) - 0.5) > 0.0001 \
+			or float(belt.call(&"grow_at", 40.0)) != 1.0 or float(belt.call(&"grow_at", 400.0)) != 1.0 \
+			or float(belt.call(&"grow_at", -3.0)) > 0.0011:
+		return _fail_false("oil field wrap grow: grow_at is not 0 at the wrap, 0.5 at 20 m, and 1 from 40 m")
+	var nodes: Array = belt.get("_nodes")
+	var homes: PackedFloat32Array = belt.get("_home_z")
+	var loops: PackedFloat32Array = belt.get("_loops")
+	var kinds := {
+		"track": func(p: Node3D) -> bool: return p.scene_file_path.ends_with("env_rail_track_8m.glb"),
+		"near pumpjack": func(p: Node3D) -> bool: return p.find_child("WalkingBeam", true, false) != null and absf(p.position.x) < 20.0,
+		"mid pumpjack": func(p: Node3D) -> bool: return p.find_child("WalkingBeam", true, false) != null and absf(p.position.x) > 20.0,
+		"burning well": func(p: Node3D) -> bool: return p.find_child("Flame_Near", true, false) != null,
+		"pylon": func(p: Node3D) -> bool: return p.find_child("Pylon_Iron", true, false) != null,
+		"pipe run": func(p: Node3D) -> bool: return p.find_child("Pipe_Iron", true, false) != null,
+		"wellhead": func(p: Node3D) -> bool: return p.find_child("Wellhead_Iron", true, false) != null,
+		"sump": func(p: Node3D) -> bool: return p.find_child("Sump_Dirt", true, false) != null,
+		"derrick": func(p: Node3D) -> bool: return p.find_child("Derrick_Plank", true, false) != null,
+		"tank": func(p: Node3D) -> bool: return p.find_child("Tank_Sheet", true, false) != null,
+		"horizon tile": func(p: Node3D) -> bool: return p.find_child("Horizon_Rock", true, false) != null,
+	}
+	var picked := {}
+	for i in nodes.size():
+		for kind: String in kinds:
+			if not picked.has(kind) and (kinds[kind] as Callable).call(nodes[i]):
+				picked[kind] = i
+	for kind: String in kinds:
+		if not picked.has(kind):
+			return _fail_false("oil field wrap grow: no %s on the belt" % kind)
+	var old_speed: float = belt.get("speed_mps")
+	var moved := homes.duplicate()
+	belt.set("speed_mps", 0.0)
+	var ok := true
+	for kind: String in picked:
+		var i: int = picked[kind]
+		var piece: Node3D = nodes[i]
+		var half: float = loops[i] * 0.5
+		for entering in [true, false]:
+			for edge: float in [0.0, 10.0, 20.0, 39.0]:
+				moved[i] = -half + edge if entering else half - edge - 0.01
+				belt.set("_home_z", moved)
+				belt.call(&"_process", 0.0)
+				var want := 1.0 if kind == "track" else float(belt.call(&"grow_at", edge if entering else edge + 0.01))
+				if absf(piece.scale.x - want) > 0.0005 or not piece.scale.is_equal_approx(Vector3.ONE * piece.scale.x):
+					ok = false
+					_fail("oil field wrap grow: %s %s at %.0f m inside the wrap has scale %s, expected %.4f" % [
+							kind, "entering" if entering else "leaving", edge, piece.scale, want])
+				var beam := piece.find_child("WalkingBeam", true, false) as Node3D
+				var anchor := piece.find_child("Flame_Near", true, false) as Node3D
+				for child: Node3D in [beam, anchor]:
+					if child != null and absf(child.global_transform.basis.get_scale().x - want) > 0.0005:
+						ok = false
+						_fail("oil field wrap grow: %s's %s does not scale with its piece" % [kind, child.name])
+		moved[i] = 0.0
+		belt.set("_home_z", moved)
+		belt.call(&"_process", 0.0)
+		if piece.scale != Vector3.ONE:
+			ok = false
+			_fail("oil field wrap grow: %s is %s mid-loop, not exactly 1" % [kind, piece.scale])
+		moved[i] = homes[i]
+	belt.set("_home_z", homes)
+	belt.set("speed_mps", old_speed)
+	belt.call(&"_process", 0.0)
+	if not ok:
+		return false
+	print("AUTOTEST: oil field wrap rows: 8 pylons at x -22 on a 96 m pitch with 96 m of wire each, 24 pipe runs 12 a side, nothing over 1.5 m inside x 6; wrap grow 0 to 1 over 40 m on %d kinds, the tracks exempt, beams and anchors scale with their piece" % [
+			picked.size() - 1])
+	return true
+
+
+func _fail_false(message: String) -> bool:
+	_fail(message)
+	return false
+
+
+## The burning wells (sheet B, `oil_burning_well`; F10): two copies on the mid belt's left, 384 m apart
+## in the 768 m loop, each with its five objects and no plume, the anchor 42 to 45 m out, and
+## `Flame_Near` at the casing's top centre (unit scale, no child but its column) always burning a 35 m
+## column on an 11.2 m base. The lane glow's swell is the squared cosine of the nearer anchor's z
+## offset: 1 abeam (+60% of the light), 0 from 60 m on either side, driven by the nearer of the two.
+func _burning_wells_ok(arena: Node, belt: Node) -> bool:
+	var wells: Array[Node3D] = []
+	for piece in belt.get_children():
+		if piece.find_child("Flame_Near", true, false) != null:
+			wells.append(piece)
+	if wells.size() != OILFIELD_WELLS:
+		_fail("oil field: %d burning wells on the belt, expected %d" % [wells.size(), OILFIELD_WELLS])
+		return false
+	for well in wells:
+		if well.position.x > -42.0 or well.position.x < -45.0:
+			_fail("oil field: burning well %s stands at x %.2f, expected -42 to -45" % [well.name, well.position.x])
+			return false
+		for part in ["Well_Rock", "Well_Dirt", "Well_Iron", "Well_Flame", "Well_LampGlass"]:
+			if well.find_child(part, true, false) == null:
+				_fail("oil field: burning well %s lacks %s" % [well.name, part])
+				return false
+		var anchor := well.find_child("Flame_Near", true, false) as Node3D
+		if not anchor.position.is_equal_approx(Vector3(0.0, 3.0, 0.0)) or not anchor.scale.is_equal_approx(Vector3.ONE) \
+				or not anchor.rotation.is_zero_approx():
+			_fail("oil field: Flame_Near on %s sits at %s (scale %s)" % [well.name, anchor.position, anchor.scale])
+			return false
+		var cues := anchor.get_children().filter(func(c: Node) -> bool: return c is FlameColumn)
+		if cues.size() != 1 or anchor.get_child_count() != 1:
+			_fail("oil field: Flame_Near on %s has %d columns among %d children" % [well.name, cues.size(), anchor.get_child_count()])
+			return false
+		var cue := cues[0] as FlameColumn
+		if not cue.scale.is_equal_approx(Vector3(11.2 * FlameColumn.WIDTH_SLACK, 35.0, 1.0)) or cue.position != Vector3.ZERO:
+			_fail("oil field: the column on %s is scaled %s, wanted 11.2 x 35 m" % [well.name, cue.scale])
+			return false
+	var gap := wrapf(wells[0].position.z - wells[1].position.z, 0.0, 768.0)
+	if not is_equal_approx(gap, 384.0):
+		_fail("oil field: the burning wells stand %.1f m apart in the loop, expected 384" % gap)
+		return false
+	# The swell: a pure function of the offset, then driven from the belt by the nearer well.
+	var glow := arena.get_node("LaneGlow") as LaneGlow
+	var shape_ok := is_equal_approx(LaneGlow.swell_at(0.0), 1.0) and is_equal_approx(LaneGlow.swell_at(30.0), 0.5) \
+			and is_equal_approx(LaneGlow.swell_at(-30.0), 0.5) and LaneGlow.swell_at(60.0) == 0.0 \
+			and LaneGlow.swell_at(61.0) == 0.0 and LaneGlow.swell_at(-400.0) == 0.0 \
+			and LaneGlow.swell_at(10.0) > LaneGlow.swell_at(20.0) and LaneGlow.swell_at(20.0) > LaneGlow.swell_at(59.0)
+	if not shape_ok:
+		_fail("the lane glow's swell is not a squared cosine to 0 at 60 m")
+		return false
+	# (first well's z from the light, second well's z from the light, the swell the nearer one gives)
+	var plan := [[0.0, 192.0, 1.0], [-100.0, 20.0, LaneGlow.swell_at(20.0)], [59.0, -180.0, LaneGlow.swell_at(59.0)],
+			[-60.0, 324.0, 0.0], [90.0, -294.0, 0.0]]
+	for step: Array in plan:
+		wells[0].position.z = glow.global_position.z + float(step[0])
+		wells[1].position.z = glow.global_position.z + float(step[1])
+		belt.call(&"update_swell")
+		var want: float = step[2]
+		if absf(glow.swell - want) > 0.0001:
+			_fail("oil field: with the wells at %s the swell is %.4f, expected %.4f" % [step, glow.swell, want])
+			return false
+		glow._process(0.0)
+		var factor := 1.0 + LaneGlow.SWELL_MAX * want
+		var energy := glow.light_energy / glow.base_energy
+		if energy < factor * (1.0 - LaneGlow.FLICKER) - 0.001 or energy > factor * (1.0 + LaneGlow.FLICKER) + 0.001:
+			_fail("oil field: the lane glow's energy is %.3f of its base with a swell of %.3f" % [energy, want])
+			return false
+	print("AUTOTEST: oil field burning wells: %d copies 384 m apart at x -42 to -45, Flame_Near at (0, 3, 0) with a 35 m column each, no plumes; lane glow swell 1 abeam (+60%%), 0 from 60 m on" % wells.size())
+	return true
+
+
 func _horizon_snapshot(root: Node) -> Dictionary:
 	var env := (root.get_node("WorldEnvironment") as WorldEnvironment).environment
 	var mat := _sky_shader(root)
@@ -7139,7 +7797,7 @@ func _horizon_unchanged(root: Node, snap: Dictionary, path: String) -> bool:
 
 
 ## Proximity voice plumbing: the bus layout, the mute-X on the avatar, and the
-## codec round trip. Headless CI has no mic, so capture itself is not asserted —
+## codec round trip. Headless CI has no mic, so capture itself is not asserted â€”
 ## only that everything downstream of it is wired and that voice stays off.
 func _voice_ok() -> bool:
 	for bus_name in ["Master", "Voice", "Mic"]:
@@ -7486,7 +8144,7 @@ func _main_menu_split_ok() -> bool:
 	return true
 
 
-## Radial wedge picking plus the cigarette's hold → throw → catch cycle.
+## Radial wedge picking plus the cigarette's hold â†’ throw â†’ catch cycle.
 func _props_ok() -> bool:
 	var wheel_font: Font = preload("res://ui/theme_duello.tres").default_font
 	if wheel_font == null:
@@ -7528,7 +8186,7 @@ func _props_ok() -> bool:
 	if cig.is_flying():
 		_fail("charging should keep the cigarette in hand")
 		return false
-	var started := Time.get_ticks_msec()
+	var started := _clock_msec()
 	cig.release_charge(self, Vector3.FORWARD)
 	if not cig.is_flying():
 		_fail("cigarette did not launch on release")
@@ -7542,7 +8200,7 @@ func _props_ok() -> bool:
 		return false
 	# A tap covers `cig_min_range` but must still hover out the rest of
 	# `cig_flight_time`, so every throw reads at the same pace.
-	var tap_flight := float(Time.get_ticks_msec() - started) / 1000.0
+	var tap_flight := float(_clock_msec() - started) / 1000.0
 	var want: float = float(GameManager.tuning["cig_flight_time"])
 	if absf(tap_flight - want) > 0.3:
 		_fail("tap throw took %.2fs, expected ~%.2fs" % [tap_flight, want])
@@ -7554,12 +8212,12 @@ func _props_ok() -> bool:
 	if cig.charge_ratio() < 1.0:
 		_fail("holding past cig_charge_time did not reach full charge")
 		return false
-	started = Time.get_ticks_msec()
+	started = _clock_msec()
 	cig.release_charge(self, Vector3.FORWARD)
 	if not await _wait_for(func() -> bool: return not cig.is_flying(), 10.0):
 		_fail("charged cigarette never came back to the hand")
 		return false
-	var full_flight := float(Time.get_ticks_msec() - started) / 1000.0
+	var full_flight := float(_clock_msec() - started) / 1000.0
 	if absf(full_flight - tap_flight) > 0.25:
 		_fail("tap took %.2fs but a full throw took %.2fs" % [tap_flight, full_flight])
 		return false
@@ -7569,13 +8227,13 @@ func _props_ok() -> bool:
 	# A wall on the outbound path skips the hover and comes home early.
 	var wall := _make_prop_wall(Vector3(0.0, 1.2, -0.45))
 	await _sleep(0.05)
-	started = Time.get_ticks_msec()
+	started = _clock_msec()
 	cig.begin_charge()
 	cig.release_charge(self, Vector3.FORWARD)
 	if not await _wait_for(func() -> bool: return not cig.is_flying(), 4.0):
 		_fail("cigarette that hit a wall never came home")
 		return false
-	var wall_flight := float(Time.get_ticks_msec() - started) / 1000.0
+	var wall_flight := float(_clock_msec() - started) / 1000.0
 	if wall_flight > 0.8:
 		_fail("wall throw took %.2fs, should have skipped the hover" % wall_flight)
 		return false
@@ -8198,7 +8856,7 @@ func _test_steam() -> void:
 	_pass()
 
 
-## BUG-009: create → leave → create and join-failure recovery against a real
+## BUG-009: create â†’ leave â†’ create and join-failure recovery against a real
 ## Steam client. Every step has to work in one process; before the fix the
 ## second HOST silently never produced a lobby. No-op without Steam (CI).
 func _test_steam_cycle() -> void:
@@ -8710,12 +9368,16 @@ func _wait_for_state(state: int, timeout: float) -> bool:
 
 
 func _wait_for(predicate: Callable, timeout: float) -> bool:
-	var deadline := Time.get_ticks_msec() + int(timeout * 1000)
-	while Time.get_ticks_msec() < deadline:
+	var deadline := _clock_msec() + int(timeout * 1000)
+	while _clock_msec() < deadline:
 		if predicate.call():
 			return true
 		await get_tree().process_frame
 	return false
+
+
+func _clock_msec() -> int:
+	return int(_clock * 1000.0)
 
 
 func _wait_freed(ref: WeakRef, timeout: float) -> bool:

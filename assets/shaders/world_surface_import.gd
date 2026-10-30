@@ -8,10 +8,12 @@ extends EditorScenePostImport
 ## materials named `<base>__<glb>` (`M_Wood__bld_bank`); the suffix is dropped before every name
 ## lookup. A material with a glTF albedo image (the hand-painted texture of that GLB) becomes a
 ## `use_albedo_tex` surface. The `SELF_LIT` names draw unlit (`self_lit`) and their meshes cast no
-## shadow. The shared trim sheet is paused behind `USE_TRIM_SHEET`.
+## shadow. `M_Smoke` (the oil field's plumes) gets `world_smoke.gdshader` instead: unlit at its own
+## colour, no shadow, fogged on a distance ramp. The shared trim sheet is paused behind `USE_TRIM_SHEET`.
 
 const SHADER := "res://assets/shaders/world_surface.gdshader"
 const GRAIN_TEX := "res://assets/shaders/world_grain.tres"
+const SMOKE_SHADER := "res://assets/shaders/world_smoke.gdshader"
 const SHEET := "res://assets/textures/trim_sheet.png"
 ## Trim sheet switch. Off: the per-GLB textures replaced the strip UVs the sheet needs, so
 ## turning it on shows garbage until the UVs are rebuilt (`docs/TEXTURING.md`).
@@ -44,6 +46,9 @@ const SWAY: Array[StringName] = [&"M_Yucca", &"M_Scrub", &"M_ScrubDry", &"M_Hay"
 ## Self-lit materials: drawn exactly their color (or painted image), ignoring light. Each is a
 ## mesh of its own, and a mesh whose surfaces all glow casts no shadow.
 const SELF_LIT: Array[StringName] = [&"M_Flame", &"M_LampGlass"]
+## Unlit at their own colour and fogged on `smoke_fog_near` / `smoke_fog_far` (project.godot globals)
+## in place of the scene's exponential fog. Each is a mesh of its own, so it casts no shadow.
+const SMOKE: Array[StringName] = [&"M_Smoke"]
 ## Rigid slabs that swing about one edge, by node name. The vector points at the hinge
 ## edge in model space: up for a sign hanging from its top, toward the wall for an awning.
 const HINGES := {
@@ -104,11 +109,13 @@ func _swap(instance: MeshInstance3D) -> void:
 	_shadow(instance, mesh)
 
 
-## No shadow from a mesh whose every surface is self-lit.
+## No shadow from a mesh whose every surface is self-lit or smoke.
 func _shadow(instance: MeshInstance3D, mesh: ArrayMesh) -> void:
 	for surface in mesh.get_surface_count():
 		var material := instance.get_active_material(surface) as ShaderMaterial
-		if material == null or material.get_shader_parameter("self_lit") != true:
+		if material == null:
+			return
+		if material.shader.resource_path != SMOKE_SHADER and material.get_shader_parameter("self_lit") != true:
 			return
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
@@ -117,6 +124,10 @@ func _make(source: StandardMaterial3D, material_name: StringName, sway: bool,
 		height: float, sheet: bool, painted: Texture2D) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.resource_name = source.resource_name
+	if SMOKE.has(material_name):
+		material.shader = load(SMOKE_SHADER)
+		material.set_shader_parameter("albedo", source.albedo_color)
+		return material
 	material.shader = load(SHADER)
 	material.set_shader_parameter("albedo", source.albedo_color)
 	material.set_shader_parameter("roughness_amount", source.roughness)

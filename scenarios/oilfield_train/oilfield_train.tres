@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ScenarioResource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenarios/scenario_resource.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenarios/oilfield_train/oilfield_train.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Oil-field Train"
+description = "The same stopped train, after sundown in a burning oil field. Black rigs nod against the fire."
+scene = ExtResource("2")
+duel_distance = 20.0
+wind_volume_db = -14.0
+gust_interval_min = 6.0
+gust_interval_max = 16.0
+gust_strength = 1.4
+fixed_time_of_day = 1.25

@@ -1,0 +1,146 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" uid="uid://rqeigq13k8h7" path="res://scenarios/scenario_base.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://dn0el7qivd0v1" path="res://assets/models/scenarios/train_rooftop/train_rooftop.glb" id="2"]
+[ext_resource type="PackedScene" uid="uid://bvyk11vb3obnh" path="res://assets/models/scenarios/oilfield_train/oilfield_terrain.glb" id="3"]
+[ext_resource type="Script" path="res://scenarios/oilfield_train/scenery_belt.gd" id="4"]
+[ext_resource type="PackedScene" uid="uid://brm1n6egkhcxb" path="res://assets/models/scenarios/train_rooftop/train_car_coach.glb" id="5"]
+[ext_resource type="PackedScene" uid="uid://yqh7nt8xglhu" path="res://assets/models/scenarios/train_rooftop/train_coupler.glb" id="6"]
+[ext_resource type="PackedScene" uid="uid://dfrqqb0xwcjnn" path="res://assets/models/scenarios/train_rooftop/train_engine.glb" id="7"]
+[ext_resource type="PackedScene" uid="uid://coajp1iurmd6m" path="res://assets/models/scenarios/train_rooftop/train_car_baggage.glb" id="8"]
+[ext_resource type="PackedScene" uid="uid://cbci2qjcxppav" path="res://assets/models/scenarios/train_rooftop/train_car_business.glb" id="9"]
+[ext_resource type="PackedScene" path="res://assets/vfx/engine_smoke.tscn" id="10"]
+[ext_resource type="Script" uid="uid://dk1vfpmtvxev4" path="res://scenarios/train_rooftop/engine_smoke.gd" id="11"]
+[ext_resource type="Script" path="res://scenarios/oilfield_train/lane_glow.gd" id="12"]
+[ext_resource type="Texture2D" uid="uid://c40uprmu5h0e" path="res://scenarios/sky_clouds.tres" id="sky_clouds"]
+[ext_resource type="Shader" uid="uid://chmp7xrt74w0j" path="res://scenarios/sky_western.gdshader" id="sky_shader"]
+
+[sub_resource type="ShaderMaterial" id="sky_mat"]
+shader = ExtResource("sky_shader")
+shader_parameter/sky_top = Color(0.1098, 0.0706, 0.149, 1)
+shader_parameter/sky_horizon = Color(0.851, 0.4, 0.1686, 1)
+shader_parameter/sky_curve = 0.08
+shader_parameter/ground_bottom = Color(0.1647, 0.0863, 0.0627, 1)
+shader_parameter/ground_horizon = Color(0.27, 0.1, 0.045, 1)
+shader_parameter/ground_curve = 0.02
+shader_parameter/bands = 0.0
+shader_parameter/sun_radius = 0.0
+shader_parameter/sun_halo = 0.6
+shader_parameter/cloud_tex = ExtResource("sky_clouds")
+shader_parameter/cloud_cover = 0.4
+shader_parameter/cloud_scale = 0.25
+shader_parameter/cloud_offset = Vector2(0.37, 0.61)
+shader_parameter/cloud_color = Color(0.173, 0.095, 0.13, 1)
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_mat")
+
+[sub_resource type="Environment" id="env"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 3
+ambient_light_color = Color(0.27, 0.1, 0.045, 1)
+ambient_light_sky_contribution = 1.0
+ambient_light_energy = 0.25
+fog_enabled = true
+fog_light_color = Color(0.27, 0.1, 0.045, 1)
+fog_sun_scatter = 0.2
+fog_density = 0.006
+fog_aerial_perspective = 0.35
+fog_sky_affect = 0.1
+
+[node name="OilfieldTrain" type="Node3D"]
+script = ExtResource("1")
+strafe_half_width = 1.5
+roll_clouds = false
+cloud_speed = 0.004
+
+[node name="PlayerSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 10)
+
+[node name="EnemySpawn" type="Marker3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 3.2, -10)
+
+[node name="EnemySpawns2" type="Node3D" parent="."]
+
+[node name="A" type="Marker3D" parent="EnemySpawns2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, 3.2, -10)
+
+[node name="B" type="Marker3D" parent="EnemySpawns2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 3.2, -3.5)
+
+[node name="EnemySpawns3" type="Node3D" parent="."]
+
+[node name="A" type="Marker3D" parent="EnemySpawns3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 3.2, -11)
+
+[node name="B" type="Marker3D" parent="EnemySpawns3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, 3.2, -5)
+
+[node name="C" type="Marker3D" parent="EnemySpawns3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 3.2, 3.5)
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 0, 15, 0)
+light_color = Color(1, 0.4784, 0.2, 1)
+
+[node name="LaneGlow" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 7.5, 0)
+light_color = Color(1, 0.5412, 0.2275, 1)
+light_energy = 1.2
+omni_range = 22.0
+omni_attenuation = 0.0
+script = ExtResource("12")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="Terrain" parent="." instance=ExtResource("3")]
+
+[node name="Train" parent="." instance=ExtResource("2")]
+
+[node name="CarRearB" parent="." instance=ExtResource("9")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 33)
+
+[node name="CarRearA" parent="." instance=ExtResource("5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 19.8)
+
+[node name="CarA" parent="." instance=ExtResource("5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6.6)
+
+[node name="CarB" parent="." instance=ExtResource("5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -6.6)
+
+[node name="CarFrontA" parent="." instance=ExtResource("5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -19.8)
+
+[node name="CarFrontB" parent="." instance=ExtResource("8")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -33)
+
+[node name="Engine" parent="." instance=ExtResource("7")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -40.2)
+
+[node name="EngineSmoke" parent="." instance=ExtResource("10")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.4, -54.25)
+script = ExtResource("11")
+puff_color = Color(0.2275, 0.1725, 0.149, 1)
+
+[node name="Coupler0" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 26.4)
+
+[node name="Coupler1" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 13.2)
+
+[node name="Coupler2" parent="." instance=ExtResource("6")]
+
+[node name="Coupler3" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -13.2)
+
+[node name="Coupler4" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -26.4)
+
+[node name="Coupler5" parent="." instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -39.6)
+
+[node name="Scenery" type="Node3D" parent="."]
+script = ExtResource("4")

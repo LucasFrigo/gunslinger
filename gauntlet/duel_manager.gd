@@ -106,7 +106,7 @@ func host_start_mp_duel(scenario_index: int) -> void:
 	var rolled := _roll_snapshot()
 	var play_intro := intro_enabled() and not (previous_arena == scenario_index
 			and _same_occupants(previous, rolled))
-	_mp_begin.rpc(scenario_index, randf(), rolled, play_intro)
+	_mp_begin.rpc(scenario_index, GameManager.roll_time_of_day(scenario_index), rolled, play_intro)
 
 
 ## `previous` held the same duelists, slot for slot, as the packed roster `rolled`.
@@ -149,7 +149,8 @@ func _roll_snapshot() -> Dictionary:
 ## everyone, this peer included, to the roster's arena under a fresh sky.
 func host_open_lobby(peer_id := 0) -> void:
 	if peer_id == 0:
-		_mp_lobby.rpc(NetworkManager.roster.scenario_index, randf())
+		var arena := NetworkManager.roster.scenario_index
+		_mp_lobby.rpc(arena, GameManager.roll_time_of_day(arena))
 	else:
 		_mp_lobby.rpc_id(peer_id, GameManager.current_scenario_index,
 				GameManager.current_scenario.time_of_day)

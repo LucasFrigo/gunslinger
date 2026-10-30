@@ -197,6 +197,18 @@ wind_gust={
 "type": "float",
 "value": 0.0
 }
+smoke_fog_near={
+"type": "float",
+"value": 150.0
+}
+smoke_fog_far={
+"type": "float",
+"value": 300.0
+}
+smoke_fog_color={
+"type": "color",
+"value": Color(0.3161, 0.1475, 0.1511, 1)
+}
 
 [steam]
 

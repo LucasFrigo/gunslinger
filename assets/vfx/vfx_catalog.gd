@@ -5,7 +5,8 @@ extends RefCounted
 ##
 ## Cue names: muzzle_smoke, world_dust, wood_chip, blood_burst, near_miss_whoosh,
 ## glass_shatter, coin_burst, barrel_smoke, wind_gust, engine_smoke (a looping plume the
-## Train Rooftop instances itself, listed here so the boot warmup compiles it)
+## Train Rooftop instances itself, listed here so the boot warmup compiles it), flame_column (the
+## oil field's camera-facing flame at each lit anchor, built by its belt; listed for the same reason)
 
 const _SCENES := {
 	&"muzzle_smoke": preload("res://assets/vfx/muzzle_smoke.tscn"),
@@ -18,6 +19,7 @@ const _SCENES := {
 	&"coin_burst": preload("res://assets/vfx/coin_burst.tscn"),
 	&"wind_gust": preload("res://assets/vfx/wind_gust.tscn"),
 	&"engine_smoke": preload("res://assets/vfx/engine_smoke.tscn"),
+	&"flame_column": preload("res://assets/vfx/flame_column.tscn"),
 }
 
 ## Cues fired on every shot. A finished burst parks under `_pool_root` and the next

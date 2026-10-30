@@ -30,7 +30,8 @@ var _settle_frames := 0
 var _face := 1.0
 var _toss_face := 0.0
 var _forced_toss_face := 0.0
-var _catch_locked_until_ms := 0
+## Unscaled seconds before a loose coin may land on the palm again.
+var _catch_lock_s := 0.0
 var _pending_linear := Vector3.ZERO
 var _pending_angular := Vector3.ZERO
 var _has_pending_launch := false
@@ -177,7 +178,7 @@ func release_charge(world: Node, direction: Vector3) -> void:
 	linear_velocity = _pending_linear
 	angular_velocity = _pending_angular
 	_has_pending_launch = true
-	_catch_locked_until_ms = Time.get_ticks_msec() + 450
+	_catch_lock_s = 0.45
 	state = State.LOOSE
 	reset_physics_interpolation()
 
@@ -199,7 +200,7 @@ func drop_loose(world: Node, velocity: Vector3) -> void:
 	linear_velocity = velocity
 	angular_velocity = Vector3.ZERO
 	_has_pending_launch = false
-	_catch_locked_until_ms = Time.get_ticks_msec() + DEAD_CATCH_LOCK_MS
+	_catch_lock_s = DEAD_CATCH_LOCK_MS * 0.001
 	state = State.LOOSE
 	reset_physics_interpolation()
 
@@ -209,7 +210,8 @@ func recall() -> void:
 		hold_at(_attach)
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
+	_catch_lock_s -= delta / maxf(Engine.time_scale, 0.001)
 	if not is_instance_valid(_attach):
 		if state == State.LOOSE and global_position.y < LOST_Y:
 			queue_free()
@@ -250,7 +252,7 @@ func _drop_from_palm() -> void:
 	_release_body()
 	linear_velocity = _attach_velocity() + Vector3.DOWN * 0.4
 	angular_velocity = Vector3.ZERO
-	_catch_locked_until_ms = Time.get_ticks_msec() + 250
+	_catch_lock_s = 0.25
 	state = State.LOOSE
 
 
@@ -290,7 +292,7 @@ func _integrate_forces(physics: PhysicsDirectBodyState3D) -> void:
 func _can_catch() -> bool:
 	if not is_instance_valid(_attach):
 		return false
-	if Time.get_ticks_msec() < _catch_locked_until_ms:
+	if _catch_lock_s > 0.0:
 		return false
 	if linear_velocity.y > 0.15:
 		return false

@@ -32,14 +32,16 @@ static var _wind_owner: ScenarioBase
 
 ## Strafers clamp to +-this world X around the lane. 0 means no clamp.
 @export var strafe_half_width := 0.0
+## False pins the clouds: the sky material's authored `cloud_cover` and `cloud_offset` stay,
+## and the deck drifts along +x, instead of a roll per load.
+@export var roll_clouds := true
+## Cloud drift in deck-uv per second. Local only; 0 stops `_process`.
+@export var cloud_speed := DEFAULT_CLOUD_SPEED
 
 var scenario_resource: ScenarioResource
 
 ## Set before add_child. Negative leaves the authored sun and sky.
 var time_of_day := -1.0
-
-## Cloud drift in deck-uv per second. Local only; 0 stops `_process`.
-var cloud_speed := DEFAULT_CLOUD_SPEED
 
 var _ambience_player: AudioStreamPlayer
 var _sun_yaw := NAN
@@ -86,7 +88,7 @@ func _ready() -> void:
 ## Recolor the outdoor sun and sky. Saloon has no Sun, so this is a no-op there.
 ## Fog distances and shadow fade stay on the scene.
 func apply_time(t: float) -> void:
-	time_of_day = clampf(t, 0.0, 1.0)
+	time_of_day = clampf(t, 0.0, TimeOfDay.T_MAX)
 	var sun := get_node_or_null("Sun") as DirectionalLight3D
 	if sun == null:
 		return
@@ -126,7 +128,8 @@ func get_sky_float(param: StringName, fallback: float) -> float:
 	return float(_sky_material.get_shader_parameter(param))
 
 
-## One roll per load: cover, offset, and drift direction. F3 time scrubs do not re-roll.
+## One roll per load: cover, offset, and drift direction, unless `roll_clouds` pins them.
+## F3 time scrubs do not re-roll.
 func _roll_sky() -> void:
 	var world := get_node_or_null("WorldEnvironment") as WorldEnvironment
 	if world == null or world.environment == null or world.environment.sky == null:
@@ -134,9 +137,13 @@ func _roll_sky() -> void:
 	_sky_material = world.environment.sky.sky_material as ShaderMaterial
 	if _sky_material == null:
 		return
-	_cloud_offset = Vector2(randf(), randf())
-	_cloud_dir = Vector2.from_angle(randf() * TAU)
-	set_cloud_cover(randf_range(CLOUD_COVER_MIN, CLOUD_COVER_MAX))
+	if roll_clouds:
+		_cloud_offset = Vector2(randf(), randf())
+		_cloud_dir = Vector2.from_angle(randf() * TAU)
+		set_cloud_cover(randf_range(CLOUD_COVER_MIN, CLOUD_COVER_MAX))
+	else:
+		var authored: Variant = _sky_material.get_shader_parameter(&"cloud_offset")
+		_cloud_offset = authored if authored is Vector2 else Vector2.ZERO
 	_sky_material.set_shader_parameter(&"cloud_offset", _cloud_offset)
 	set_cloud_speed(cloud_speed)
 

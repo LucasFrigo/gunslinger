@@ -9,7 +9,7 @@ One sheet per scenery, written before any detail modeling (greybox -> final, unt
 | Canyon | `prompts/canyon.md` | `canyon.md` |
 | Train Rooftop | `prompts/train_rooftop.md` | `train_rooftop.md` |
 | Practice Hub | `prompts/practice_hub.md` | `practice_hub.md` |
-| Oil-field Train | `prompts/oilfield_train.md` | `oilfield_train.md` (not written yet) |
+| Oil-field Train | `prompts/oilfield_train.md` | `oilfield_train.md` |
 
 ## Workflow
 

@@ -14,7 +14,7 @@ A GLB whose meshes already carry `uv_role = "glb"` keeps its UVs, so hand work s
 
 Run:
     & "C:\\Program Files\\Blender Foundation\\Blender 5.1\\blender.exe" -b --python dev/unwrap_per_glb_blender.py
-    ... -- --map saloon          one map (main_street, saloon, train_rooftop, practice_hub, canyon)
+    ... -- --map saloon          one map (main_street, saloon, train_rooftop, practice_hub, canyon, oilfield_train)
     ... -- --glb bld_bank        one GLB
     ... -- --link --glb bld_bank after saving tex/bld_bank.png: link it, save, re-export (no unwrap)
     ... -- --dry                 compute and report; save and export nothing
