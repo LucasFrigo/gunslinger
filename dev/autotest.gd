@@ -5034,7 +5034,7 @@ func _lobby_page_ok() -> bool:
 		_fail("lobby page: the pause root should offer a Lobby button")
 		return false
 	pause.lobby_button.pressed.emit()
-	if not pause.is_lobby_open() or pause.pause_root.visible or not pause.is_subpage_open():
+	if not pause.is_lobby_open() or not pause.is_subpage_open():
 		_fail("lobby page: the Lobby button did not open the page")
 		return false
 	pause.close()
@@ -6364,6 +6364,10 @@ func _test_load_all() -> void:
 			if not _oilfield_belt_ok(instance) or not _engine_smoke_ok(instance, OILFIELD_SMOKE):
 				instance.queue_free()
 				return
+		if instance is ScenarioBase and GameManager.SCENARIOS.has(path.replace(".tscn", ".tres")) \
+					and (instance as ScenarioBase).get_menu_cameras().is_empty():
+				instance.queue_free()
+				return _fail("%s has no MenuCameras markers for the menu backdrop" % path)
 		instance.queue_free()
 		print("AUTOTEST: loaded %s" % path)
 	if not _spin_fx_ok() or not await _twirl_remote_ok() or not _bullet_trail_ok():
@@ -8078,7 +8082,7 @@ func _main_menu_split_ok() -> bool:
 	for mode in [["%GauntletModeButton", "%GauntletPage"], ["%DuelModeButton", "%DuelPage"],
 			["%HordeModeButton", "%HordePage"]]:
 		menu.get_node(mode[0]).pressed.emit()
-		if not menu.get_node(mode[1]).visible or menu.get_node("%SingleplayerPage").visible:
+		if not menu.get_node(mode[1]).visible:
 			menu.queue_free()
 			_fail("%s did not open %s" % mode)
 			return false

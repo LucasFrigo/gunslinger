@@ -310,6 +310,22 @@ func _on_wind_tick() -> void:
 		_roll_gust()
 
 
+## Flat main-menu backdrop eye points, each framed on the lane center (the midpoint of
+## PlayerSpawn and EnemySpawn, like `get_enemy_spawns`). Empty when the scenario has no
+## `MenuCameras` group yet; the caller falls back to PlayerSpawn.
+func get_menu_cameras() -> Array[Transform3D]:
+	var group := get_node_or_null("MenuCameras")
+	if group == null:
+		return []
+	var center := (get_player_spawn().origin + get_enemy_spawn().origin) * 0.5
+	var cameras: Array[Transform3D] = []
+	for marker in group.get_children():
+		if marker is Marker3D:
+			cameras.append(Transform3D(Basis.IDENTITY, (marker as Marker3D).global_position)
+					.looking_at(center, Vector3.UP))
+	return cameras
+
+
 func get_player_spawn() -> Transform3D:
 	return ($PlayerSpawn as Marker3D).global_transform
 

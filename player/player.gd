@@ -311,6 +311,15 @@ func set_intro_view(enabled: bool) -> void:
 		_vr_message.visible = false
 
 
+## Flat main-menu backdrop (`GameManager._show_menu_backdrop_camera`): hides the whole
+## body, hands, gun, and any held prop, and their shadows, while a separate fixed camera
+## frames the arena. The rig's own camera steps aside; the backdrop camera owns the view.
+func set_backdrop_hidden(hidden: bool) -> void:
+	visible = not hidden
+	if rig is FlatRig:
+		(rig as FlatRig).camera.current = not hidden
+
+
 ## Flat mesh lab parks this body so the fly camera owns WASD and the view.
 func set_mesh_lab_parked(parked: bool) -> void:
 	if parked == _mesh_lab_parked:
@@ -1874,7 +1883,7 @@ func _broadcast_pose(delta: float) -> void:
 func show_menu_panel(menu_control: Control) -> void:
 	hide_menu_panel()
 	_menu_panel = UIPanel3D.new()
-	_menu_panel.panel_size = Vector2(1.0, 0.8)
+	_menu_panel.panel_size = Vector2(1.5, 0.85)
 	add_child(_menu_panel)
 	var head := get_head_position()
 	var forward := -Basis(Vector3.UP, rig.get_head_transform().basis.get_euler().y).z

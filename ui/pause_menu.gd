@@ -11,13 +11,14 @@ var auto_open_lobby := true
 var _lobby_full := false
 
 @onready var pause_root: VBoxContainer = %PauseRoot
-@onready var settings_menu: SettingsMenu = $Center/Panel/Margin/SettingsMenu
+@onready var settings_menu: SettingsMenu = %SettingsMenu
 @onready var lobby_page: VBoxContainer = %LobbyPage
 @onready var lobby_panel: LobbyPanel = %LobbyPanel
 @onready var lobby_button: Button = %LobbyButton
 @onready var title_label: Label = %TitleLabel
 @onready var restart_button: Button = %RestartButton
 @onready var host_note: Label = %HostNote
+@onready var menu_dialog: MenuDialog = %MenuDialog
 
 
 func _ready() -> void:
@@ -28,15 +29,17 @@ func _ready() -> void:
 	%ResumeButton.pressed.connect(close)
 	%SettingsButton.pressed.connect(_show_settings)
 	lobby_button.pressed.connect(show_lobby)
-	%LobbyBackButton.pressed.connect(show_pause_root)
 	lobby_panel.started.connect(close)
 	%InviteButton.pressed.connect(_on_invite)
-	settings_menu.back_pressed.connect(show_pause_root)
+	menu_dialog.back_pressed.connect(show_pause_root)
 	NetworkManager.session_started.connect(_on_session_started)
 	NetworkManager.session_ended.connect(_on_session_ended)
 	NetworkManager.roster_changed.connect(_on_roster_changed)
 	restart_button.pressed.connect(_on_restart)
 	%QuitButton.pressed.connect(_on_quit)
+	for b: Button in find_children("*", "Button", true, false):
+		if b.theme_type_variation == &"MenuListButton":
+			MenuSfx.wire(b, self)
 
 
 func is_settings_open() -> bool:
@@ -56,20 +59,21 @@ func show_pause_root() -> void:
 	pause_root.visible = true
 	settings_menu.visible = false
 	lobby_page.visible = false
+	menu_dialog.close()
 
 
 ## Multiplayer: the lobby roster, its host controls, and the player's own side.
 func show_lobby() -> void:
-	pause_root.visible = false
 	settings_menu.visible = false
 	lobby_page.visible = true
+	menu_dialog.open(tr("LOBBY_TITLE"))
 	lobby_panel.refresh()
 
 
 func _show_settings() -> void:
-	pause_root.visible = false
 	lobby_page.visible = false
 	settings_menu.visible = true
+	menu_dialog.open(tr("MENU_SETTINGS"))
 	settings_menu.refresh()
 
 

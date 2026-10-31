@@ -51,6 +51,12 @@ border_width_right = 2
 border_width_bottom = 2
 border_color = Color(0.55, 0.28, 0.14, 1)
 
+[sub_resource type="StyleBoxEmpty" id="list_empty"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+
 [sub_resource type="StyleBoxFlat" id="panel"]
 content_margin_left = 12.0
 content_margin_top = 10.0
@@ -65,7 +71,7 @@ border_color = Color(0.78, 0.62, 0.28, 1)
 
 [resource]
 default_font = ExtResource("1_body")
-default_font_size = 16
+default_font_size = 18
 Button/colors/font_color = Color(0.93, 0.86, 0.72, 1)
 Button/colors/font_focus_color = Color(0.98, 0.94, 0.84, 1)
 Button/colors/font_hover_color = Color(0.98, 0.94, 0.84, 1)
@@ -84,6 +90,18 @@ HSlider/styles/grabber_area = SubResource("track")
 HSlider/styles/grabber_area_highlight = SubResource("hover")
 HSlider/styles/slider = SubResource("track")
 Label/colors/font_color = Color(0.93, 0.86, 0.72, 1)
+MenuListButton/base_type = &"Button"
+MenuListButton/colors/font_color = Color(0.93, 0.86, 0.72, 1)
+MenuListButton/colors/font_focus_color = Color(1, 0.92, 0.6, 1)
+MenuListButton/colors/font_hover_color = Color(1, 0.92, 0.6, 1)
+MenuListButton/colors/font_pressed_color = Color(0.78, 0.62, 0.28, 1)
+MenuListButton/font_sizes/font_size = 22
+MenuListButton/fonts/font = ExtResource("2_bold")
+MenuListButton/styles/disabled = SubResource("list_empty")
+MenuListButton/styles/focus = SubResource("list_empty")
+MenuListButton/styles/hover = SubResource("list_empty")
+MenuListButton/styles/normal = SubResource("list_empty")
+MenuListButton/styles/pressed = SubResource("list_empty")
 OptionButton/colors/font_color = Color(0.93, 0.86, 0.72, 1)
 OptionButton/colors/font_hover_color = Color(0.98, 0.94, 0.84, 1)
 OptionButton/fonts/font = ExtResource("2_bold")

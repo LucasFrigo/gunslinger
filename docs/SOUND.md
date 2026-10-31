@@ -79,6 +79,13 @@ Flesh vs world is the only material split today. Head/torso/arm/leg share `impac
 | [ ] | Wind bed | `wind_bed.ogg` (seamless loop) | Procedural placeholder plays today (`scenario_base.gd`, 2D). Per-arena level is `ScenarioResource.wind_volume_db`; `ambience` overrides it. Saloon silent |
 | [ ] | Wind gust | `wind_gust.ogg` | Procedural placeholder plays today, 3D one-shot, only when a visual gust spawns (`VfxCatalog` `wind_gust`). Not a second loop |
 
+### UI
+
+| Done | Cue | File | Plays when |
+|---|---|---|---|
+| [ ] | `ui_hover` | `ui_hover.ogg` | Mouse/laser/focus enters a menu list or dialog button (`ui/menu_sfx.gd`) |
+| [ ] | `ui_click` | `ui_click.ogg` | A menu list or dialog button is pressed (`ui/menu_sfx.gd`) |
+
 ## Silent (code, no cue)
 
 These already happen in gameplay with haptics or VFX but no `AudioCatalog` key. Add a cue + call site when designing them; then move the row into Catalog.
@@ -95,7 +102,6 @@ These already happen in gameplay with haptics or VFX but no `AudioCatalog` key. 
 | [ ] | Cigarette catch | `cig_catch.ogg` | Return to hand |
 | [ ] | Foul | `foul.ogg` | Early draw DQ (message only today) |
 | [ ] | Gauntlet cleared / over | `gauntlet_win.ogg` / `gauntlet_lose.ogg` | End-of-run HUD lines |
-| [ ] | UI confirm / back | `ui_click.ogg` | Menu / pause / settings |
 | [ ] | Footsteps | `footstep_dirt.ogg` (variants) | Locomotion. XR Tools has a footstep player; not wired on the rigs |
 
 ## Planned (no feature yet)
@@ -127,6 +133,7 @@ Do **not** record live gunfire for `gunshot`. Build it from a licensed crack (li
 | `whizz` / `near_miss_whoosh` | Stick or jacket swung past the phone, then pitch/stretch. Ableton noise is also fine |
 | `bell` | Small bell, glass + spoon, bicycle bell. One clean note, long tail |
 | `ui_click` | Same metal-click pile as `click`, quieter / shorter |
+| `ui_hover` | Same pile again, lighter touch and pitched up — a tick, not a click |
 | `cig_throw` / `cig_catch` | Light whoosh + a small object landing in the palm |
 | `glass_break` | Drop a cheap glass bottle into a cardboard box lined with a towel (safety glasses); layer a jar lid rattle for shards |
 | `slot_pull` / `slot_stop` / `slot_win` | Ratchet or bike lever for the pull; stapler thunks for reels; coins poured onto a plate plus a small bell for the win |

@@ -131,6 +131,9 @@ The current version is the single line in [`VERSION`](VERSION) (mirrored in `pro
 - In-game title is **Duello!** on the loading screen, main menu, and Quest launcher name.
 - Practice-hub ground: the imported 80 m pad no longer sits above the desert visual, so a thrown ace rests on the sand instead of floating past the fence. The card is heavier and snaps back onto a surface if it tunnels. Flat **G** flips the coin on press (it no longer reseats in the same instant). A toss now picks heads or tails instead of always returning the default tails-up face.
 - The cigarette shatters practice bottles on the way home as well as on the way out.
+- Main menu, pause, settings, lobby, and the loading screen now share one *Half-Life 2*-style layout: the title sits upper-left, a plain text list with no panel box sits lower-left over the live backdrop (the frozen arena in flat, the practice hub in VR), and Settings, the Lobby roster, and the Gauntlet / Single Duel / Horde pickers now open as a titled window centered over that backdrop, with the list still visible (but not clickable) behind it. List buttons brighten on hover and play a soft tick, and a click plays on press. The VR menu panel is wider to fit the new layout.
+- The flat main menu's frozen-arena backdrop no longer shows you standing in it: each arena now picks one of a few fixed establishing angles at random instead of your own first-person spawn view, and you (your body, hands, gun, any held item, and your shadow) are no longer in the shot. The persistent ammo / gate / hand / holster readout no longer shows through behind the menu's corner list either.
+- Menu text reads a little bigger across the board (base UI text, the Settings panel, and every title), so the corner list and dialogs hold up better on wide and ultrawide monitors.
 
 ### Added
 

@@ -74,6 +74,12 @@ func show_menu(is_vr: bool) -> void:
 		_menu.show_mode_select()
 	_menu.set_backdrop_dim(is_vr)
 	_menu.set_vr_layout(is_vr)
+	# The frozen backdrop still has a live Player underneath; its persistent
+	# combat readouts would otherwise bleed through the menu's corner list.
+	reload_status.visible = false
+	health_status.visible = false
+	practice_status.visible = false
+	horde_status.visible = false
 	if is_vr:
 		menu_holder.visible = false
 		return

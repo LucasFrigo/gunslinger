@@ -65,6 +65,17 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 8)
 [node name="EnemySpawn" type="Marker3D" parent="." unique_id=1701695076]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0.12, -8)
 
+[node name="MenuCameras" type="Node3D" parent="."]
+
+[node name="A" type="Marker3D" parent="MenuCameras"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 2.2, 0)
+
+[node name="B" type="Marker3D" parent="MenuCameras"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 1.8, 6)
+
+[node name="C" type="Marker3D" parent="MenuCameras"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 1.8, -7)
+
 [node name="EnemySpawns2" type="Node3D" parent="."]
 
 [node name="A" type="Marker3D" parent="EnemySpawns2"]

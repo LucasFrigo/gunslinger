@@ -258,6 +258,9 @@ var local_player: Player
 var avatars := {}
 var current_scenario: ScenarioBase
 var current_scenario_index := 0
+## Flat main-menu backdrop: a fixed camera on one of the scenario's MenuCameras
+## markers, with the player (and its shadow) hidden. Torn down by the next real spawn.
+var _menu_backdrop_camera: Camera3D
 ## The free-duel lineup the restart replays.
 var current_lineup: Array[AIArchetype] = []
 var current_ais: Array[DuelistAI] = []
@@ -383,6 +386,8 @@ func go_to_menu() -> void:
 		_instance_scenario(load(SCENARIOS[randi() % SCENARIOS.size()]))
 		current_scenario.process_mode = Node.PROCESS_MODE_DISABLED
 	_place_local_player(current_scenario.get_player_spawn())
+	if not is_vr:
+		_show_menu_backdrop_camera()
 	hud.show_menu(is_vr)
 	if is_vr:
 		_spawn_vr_menu_panel()
@@ -1178,8 +1183,33 @@ func _instance_scenario(resource: ScenarioResource, time_of_day := -1.0) -> void
 
 
 func _place_local_player(spawn: Transform3D) -> void:
+	_teardown_menu_backdrop()
 	local_player.reset_for_duel(spawn)
 	_capture_flat_mouse()
+
+
+## Flat only: a fixed camera on a random `MenuCameras` marker (falls back to the player
+## spawn when the scenario has none authored yet), with the player hidden so no one
+## (and no shadow) stands in the shot. Torn down by the next real `_place_local_player`.
+func _show_menu_backdrop_camera() -> void:
+	var cameras := current_scenario.get_menu_cameras()
+	var eye := cameras[randi() % cameras.size()] if not cameras.is_empty() \
+			else current_scenario.get_player_spawn()
+	_menu_backdrop_camera = Camera3D.new()
+	_menu_backdrop_camera.name = "MenuBackdropCamera"
+	main_root.add_child(_menu_backdrop_camera)
+	_menu_backdrop_camera.global_transform = eye
+	_menu_backdrop_camera.current = true
+	local_player.set_backdrop_hidden(true)
+
+
+func _teardown_menu_backdrop() -> void:
+	if is_instance_valid(_menu_backdrop_camera):
+		_menu_backdrop_camera.current = false
+		_menu_backdrop_camera.queue_free()
+	_menu_backdrop_camera = null
+	if is_instance_valid(local_player):
+		local_player.set_backdrop_hidden(false)
 
 
 ## Flat play owns the cursor from the first frame of a match or wave, so look

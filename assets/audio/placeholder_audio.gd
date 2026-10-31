@@ -29,6 +29,18 @@ static func click() -> AudioStreamWAV:
 		return _noise_burst(0.03, 0.4, 60.0))
 
 
+## Menu list / dialog button hover: a soft high tick.
+static func ui_hover() -> AudioStreamWAV:
+	return _cached("ui_hover", func() -> AudioStreamWAV:
+		return _tone(1400.0, 0.04, 0.18, 50.0))
+
+
+## Menu list / dialog button press: a tight, quiet confirm click.
+static func ui_click() -> AudioStreamWAV:
+	return _cached("ui_click", func() -> AudioStreamWAV:
+		return _noise_burst(0.025, 0.3, 70.0))
+
+
 static func dry_fire() -> AudioStreamWAV:
 	return _cached("dry_fire", func() -> AudioStreamWAV:
 		return _tone(320.0, 0.06, 0.3, 40.0))
