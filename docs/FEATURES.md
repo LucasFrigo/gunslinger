@@ -105,6 +105,7 @@ Design / lore: [`design/README.md`](design/README.md)
 | Quest 3 / PCVR / flat harness | `done` | OpenXR + `--flat`. Meta Store APK: LAN MP only; Steam lobby UI is hidden. VR spawn puts your head on the marker whatever your playspace offset, and stick walking collides with world geometry and slides along it (`player/vr_rig.gd` `_align_to_spawn`, `collide_stick_motion`; BUG-024) |
 | Ranking / leaderboards | `planned` | Roadmap (Ideas); Steam / desktop. Not on Meta Store |
 | Mod support | `planned` | Roadmap (Ideas) |
+| Trailer and viral shorts capture | `planned` | Roadmap (Moderate). Agent-driven capture: scripted free camera + shot list + Godot Movie Maker on the flat harness, edited through the FilmCraft MCP (configured in `.mcp.json`, untested); any VR footage recorded by hand. No capture code yet. Store-page requirement: `docs/RELEASE_TODOS.md` |
 
 ## Tooling
 

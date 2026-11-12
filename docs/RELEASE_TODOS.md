@@ -26,6 +26,8 @@ Status in FEATURES is `done` | `partial` | `planned` | `blocked`. Items below ar
 - [ ] **Meta Store / Quest APK stays LAN-only.** Never enable GodotSteam or Steam lobby UI on Android (`NetworkManager.steam_available()`, `export_presets.cfg` `exclude_filter=addons/godotsteam/*`). `from:` 1v1 Steam lobbies
 - [ ] Cross-buy / Quest↔Steam entitlement is undefined — GTM decision, see [`BUSINESS_BRIEF.md`](BUSINESS_BRIEF.md). Do not advertise online play between a Quest standalone owner and a Steam flat friend. Same-LAN Quest + flat PC is the cross-platform path that exists. A cheap extra Steam key for Quest owners is optional and only adds PC play.
 
+- [ ] Trailer (60–90 s) for the Steam and Quest store pages, plus 9:16 shorts for launch-week social. Needs real SFX and textured maps first. Footage captured by the agent on the flat harness, cut through the FilmCraft MCP (in `.mcp.json`, untested). Roadmap Moderate item 2.
+
 ## Multiplayer
 
 - [ ] Two-PC Steam NAT test: Steam client running on both, **HOST (STEAM)** / auto-refresh list / join, the host presses START on the Lobby page, duel + rematch, leave/rejoin. Invite is Esc → **Invite friends** (or Shift+Tab), not auto-opened on host. `from:` 1v1 Steam lobbies

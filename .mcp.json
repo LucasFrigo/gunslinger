@@ -19,6 +19,11 @@
         "--automation-read-root", "E:\\Projetos\\gunslinger",
         "--automation-write-root", "E:\\Projetos\\gunslinger\\assets"
       ]
+    },
+    "filmcraft": {
+      "type": "stdio",
+      "command": "C:\\Program Files\\FilmCraft\\filmcraft-cli.exe",
+      "args": ["mcp"]
     }
   }
 }
