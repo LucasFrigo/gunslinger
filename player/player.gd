@@ -94,6 +94,8 @@ var _wrist_synced: Dictionary = {}
 var _wrist_lock: Dictionary = {}
 var _wrist_from_local: Dictionary = {}
 var _wrist_blend: Dictionary = {}
+## The title cards hold the camera (`set_intro_view`).
+var _intro_view := false
 var _mesh_lab_parked := false
 var _mesh_lab_head_held := false
 var _mesh_lab_body_yaw := 0.0
@@ -184,6 +186,7 @@ func _process(delta: float) -> void:
 	_broadcast_pose(delta)
 	_update_vr_message(delta)
 	_update_reload_event(delta)
+	_update_twirl()
 
 
 # -- Body / hitboxes ------------------------------------------------------------
@@ -195,13 +198,7 @@ func _follow_body() -> void:
 	# Floor offsets. VR standing height moves the XR origin so the headset
 	# lines up with these. The hit volumes ride the mannequin bones (BodyHitboxes).
 	var torso_pos := Vector3(head.origin.x, global_position.y + 1.1, head.origin.z)
-	match held_gun_hand():
-		HAND_LEFT:
-			_dummy.set_gun_arm(&"L")
-		HAND_RIGHT:
-			_dummy.set_gun_arm(&"R")
-		_:
-			_dummy.set_gun_arm(&"")
+	_dummy.set_gun_arm(_body_side(held_gun_hand()))
 
 	# Alive: the mannequin stands under the head. Death freezes that pose for the orbit.
 	if _dummy != null and alive:
@@ -230,8 +227,9 @@ func _follow_body() -> void:
 	var hip := HOLSTER_HIP
 	if int(GameManager.tuning["holster_side"]) != 0:
 		hip.x = -hip.x
+	# Barrel hangs down: the gun's -Z is pitched to -Y (BUG-028).
 	holster.global_transform = Transform3D(
-		yaw,
+		yaw * Basis(Vector3.RIGHT, -PI * 0.5),
 		Vector3(head.origin.x, global_position.y + 1.0, head.origin.z) + yaw * hip)
 
 	# Ammo belt around the waist / lower torso.
@@ -297,6 +295,29 @@ func _mesh_lab_hand_source(hand_name: StringName, vr: VRRig) -> Node3D:
 	if held_gun_hand() == hand_name and revolver != null and not revolver.is_spin_active():
 		return revolver
 	return vr.get_hand_node(hand_name)
+
+
+## Duel title cards (`DuelIntro`): an outside camera sees the whole body, head included,
+## and none of the head-locked labels. Off puts first person back.
+func set_intro_view(enabled: bool) -> void:
+	_intro_view = enabled
+	if _dummy != null and alive:
+		_dummy.set_body_shelved(use_vr and not enabled)
+		_dummy.set_head_hidden(not enabled)
+		_dummy.set_first_person_clip(not enabled)
+	if _vr_reload_label != null:
+		_vr_reload_label.visible = not enabled
+	if enabled and _vr_message != null:
+		_vr_message.visible = false
+
+
+## Flat main-menu backdrop (`GameManager._show_menu_backdrop_camera`): hides the whole
+## body, hands, gun, and any held prop, and their shadows, while a separate fixed camera
+## frames the arena. The rig's own camera steps aside; the backdrop camera owns the view.
+func set_backdrop_hidden(hidden: bool) -> void:
+	visible = not hidden
+	if rig is FlatRig:
+		(rig as FlatRig).camera.current = not hidden
 
 
 ## Flat mesh lab parks this body so the fly camera owns WASD and the view.
@@ -379,9 +400,10 @@ func _place_wrist(hand_name: StringName, goal: Transform3D, delta: float, lock_i
 	var marker := _wrist_marker(hand_name)
 	var prev := str(_wrist_lock.get(hand_name, ""))
 	if prev != lock_id or not _wrist_synced.get(hand_name, false):
-		var current := marker.global_transform if _wrist_synced.get(hand_name, false) else goal
+		var was_synced: bool = _wrist_synced.get(hand_name, false)
+		var current := marker.global_transform if was_synced else goal
 		_wrist_from_local[hand_name] = global_transform.affine_inverse() * current
-		_wrist_blend[hand_name] = 0.0
+		_wrist_blend[hand_name] = 0.0 if was_synced else 1.0
 		_wrist_lock[hand_name] = lock_id
 		_wrist_synced[hand_name] = true
 	var t := float(_wrist_blend.get(hand_name, 1.0))
@@ -392,6 +414,11 @@ func _place_wrist(hand_name: StringName, goal: Transform3D, delta: float, lock_i
 	_wrist_blend[hand_name] = t
 	var start: Transform3D = global_transform * (_wrist_from_local[hand_name] as Transform3D)
 	marker.global_transform = start.interpolate_with(goal, t)
+
+
+## Flat draw / holster teleport the gun, so the hand jumps with it (BUG-026).
+func _snap_wrist(hand_name: StringName) -> void:
+	_wrist_synced[hand_name] = false
 
 
 ## VR closes while the grab button is down. Flat closes once something is in that hand.
@@ -492,6 +519,16 @@ func hitbox_rids() -> Array[RID]:
 	]
 
 
+## `&"L"` / `&"R"` (`Hitbox.side`, `BodyHitboxes`) for a hand name, `&""` for none.
+func _body_side(hand: StringName) -> StringName:
+	match hand:
+		HAND_LEFT:
+			return &"L"
+		HAND_RIGHT:
+			return &"R"
+	return &""
+
+
 func gun_hand_hitbox_rids() -> Array[RID]:
 	match held_gun_hand():
 		HAND_LEFT:
@@ -540,6 +577,7 @@ func reset_for_wave() -> void:
 	_clear_held_cartridge(true)
 	_release_held_bottle()
 	props.reset_for_duel()
+	props.restore_saved_item()
 	_holster_gun()
 	revolver.reset()
 	_refresh_health_hud()
@@ -555,19 +593,20 @@ func reset_for_wave() -> void:
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 		region: StringName = CombatRules.REGION_TORSO, self_inflicted := false,
-		_shooter_is_local := false, shooter := -1, cut := {}) -> void:
+		_shooter_is_local := false, shooter := -1, cut := {}, side := &"") -> void:
 	if not alive or GameManager.in_practice():
 		return
 	if NetworkManager.is_active():
 		# MP: host resolves HP/status; application arrives via _mp_wound / _mp_down / _mp_finish.
 		if NetworkManager.is_host():
 			GameManager.duel.mp_report_hit(GameManager.local_actor_id(), trail_points, region,
-					damage_mult, shooter, cut)
+					damage_mult, shooter, cut, side)
 		return
 	var result := CombatRules.resolve(region, health, damage_mult)
 	health = result["health"]
 	_refresh_health_hud()
 	if _dummy != null:
+		_dummy.flash(ReplayBuffer.clip_time())
 		_dummy.knock_chunk(cut, DummyBody.shot_dir(trail_points), ReplayBuffer.clip_time(), result["died"])
 	if result["died"]:
 		killed_by_self = self_inflicted
@@ -576,16 +615,16 @@ func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 		collapse(trail_points)
 		died.emit(trail_points)
 		return
-	_apply_nonfatal(region)
+	_apply_nonfatal(region, side)
 
 
 ## Host/client wound RPC: set HP and apply arm/leg status without re-resolving.
-func apply_wound(region: StringName, new_health: float) -> void:
+func apply_wound(region: StringName, new_health: float, side := &"") -> void:
 	if not alive:
 		return
 	health = new_health
 	_refresh_health_hud()
-	_apply_nonfatal(region)
+	_apply_nonfatal(region, side)
 
 
 func play_death_feedback() -> void:
@@ -598,7 +637,7 @@ func play_death_feedback() -> void:
 	move_speed_mult = 1.0
 	_leg_remaining = 0.0
 	ImpactFeedback.player_hurt(true)
-	GameManager.hud.flash_red()
+	ScreenOverlay.hurt(float(GameManager.tuning["hurt_kill"]), ScreenOverlay.KILL_FADE)
 	_refresh_health_hud()
 
 
@@ -704,6 +743,8 @@ func _attach_gun_to_hand(hand: StringName) -> void:
 	var was_holstered := not revolver.drawn
 	revolver.use_aim_steady = use_vr
 	revolver.attach_to(_gun_attach_node(hand), hand)
+	if not use_vr:
+		_snap_wrist(hand)
 	_holding_hand = GunHand.LEFT if hand == HAND_LEFT else GunHand.RIGHT
 	# A trick-shot bind already down at a spinning catch must not relock when it lifts.
 	_trick_release_ignored = revolver.is_spin_active() and _trick_shot_held(hand)
@@ -812,6 +853,18 @@ func _recover_free_gun() -> void:
 		_holster_gun()
 
 
+## Off-arm wound: the prop in the hand falls loose, then the belt round. The prop goes
+## first, while a round in the hand still parks it at the mouth.
+func _drop_off_hand() -> void:
+	var vel := Vector3.ZERO
+	if rig is VRRig:
+		vel = (rig as VRRig).hand_velocity(off_hand_name()) * 0.25
+	props.drop_from_hand(get_tree().current_scene, vel)
+	if _holding_cartridge():
+		_drop_held_cartridge()
+		_refresh_reload_status()
+
+
 func _pain_toss_gun() -> void:
 	revolver.pain_jerk_into_world(get_tree().current_scene)
 	_holding_hand = GunHand.NONE
@@ -857,10 +910,15 @@ func _hit_is_revolver(collider: Object) -> bool:
 	return collider is Node and revolver.is_ancestor_of(collider)
 
 
-func _apply_nonfatal(region: StringName) -> void:
+## `side` is the arm hit. The gun arm is the holding hand, else the holster side.
+func _apply_nonfatal(region: StringName, side := &"") -> void:
 	ImpactFeedback.player_hurt(false)
+	var hurt_key := "hurt_torso" if region == CombatRules.REGION_TORSO else "hurt_limb"
+	ScreenOverlay.hurt(float(GameManager.tuning[hurt_key]), ScreenOverlay.WOUND_FADE)
 	if region == CombatRules.REGION_ARM:
-		if revolver.held:
+		if not CombatRules.is_gun_arm(side, _body_side(draw_hand_name())):
+			_drop_off_hand()
+		elif revolver.held:
 			_pain_toss_gun()
 			GameManager.show_message(tr("MSG_DISARMED"), 1.5)
 	elif region == CombatRules.REGION_LEG:
@@ -900,6 +958,30 @@ func _update_jam_clear(delta: float) -> void:
 		_refresh_reload_status()
 
 
+## Flat only. A twirl flourish needs a drawn gun after the bell, the winner's gun once the
+## replay lets go (`_combat_blocked` covers the fly-along and the clip), or the practice hub.
+func twirl_allowed() -> bool:
+	if use_vr or not alive or not revolver.held or revolver.gate_open or revolver.jammed \
+			or _combat_blocked():
+		return false
+	if GameManager.in_practice():
+		return true
+	if GameManager.duel == null:
+		return false
+	return GameManager.duel.state == DuelManager.State.DRAW \
+			or GameManager.duel.state == DuelManager.State.RESOLUTION
+
+
+## Hold the twirl bind: the blaster turns. Release or any gate closing eases it out.
+func _update_twirl() -> void:
+	if use_vr:
+		return
+	if twirl_allowed() and Input.is_action_pressed("flat_twirl"):
+		revolver.begin_twirl()
+	else:
+		revolver.end_twirl()
+
+
 func _refresh_health_hud() -> void:
 	if GameManager.hud == null:
 		return
@@ -918,6 +1000,8 @@ func _holster_gun() -> void:
 	_clear_held_cartridge(true)
 	if revolver.gate_open:
 		revolver.close_gate()
+	if not use_vr and revolver.held:
+		_snap_wrist(_holding_hand_name())
 	revolver.holster_to(holster)
 	_holding_hand = GunHand.NONE
 	holstered_changed.emit(true)
@@ -959,6 +1043,11 @@ func _on_trigger_changed(hand: StringName, pressed: bool) -> void:
 		DeathCam.cycle_spectate()
 		return
 	if DeathCam.blocks_combat():
+		return
+	# Fire is locked under the title cards; a press skips them instead.
+	if GameManager.duel != null and GameManager.duel.intro_playing() and not GameManager.is_pause_open():
+		if pressed:
+			GameManager.duel.request_intro_skip()
 		return
 	# VR: the off-hand trigger throws the equipped prop instead of firing.
 	if use_vr and hand == off_hand_name() and props.has_prop():
@@ -1469,6 +1558,18 @@ func _build_reload_status_text() -> String:
 	return "\n".join(lines)
 
 
+## Every fixed line `_build_reload_status_text` can print, for the VR label's glyph warm-up.
+func _reload_status_phrases() -> PackedStringArray:
+	var phrases := PackedStringArray()
+	for key in [
+			"RELOAD_AMMO_EMPTY", "RELOAD_GATE_OPEN", "RELOAD_GATE_CLOSED", "RELOAD_HAND_ROUND",
+			"RELOAD_HAND_EMPTY", "RELOAD_READY", "RELOAD_JAMMED", "RELOAD_HOLSTERED",
+			"RELOAD_IN_AIR_VR", "RELOAD_RELOADING_VR", "RELOAD_EMPTY_VR"]:
+		phrases.append(tr(key))
+	phrases.append(tr("RELOAD_AMMO") % [0, 0])
+	return phrases
+
+
 func _refresh_reload_status() -> void:
 	var text := _build_reload_status_text()
 	if GameManager.hud != null:
@@ -1488,13 +1589,16 @@ func _update_vr_reload_label(text: String) -> void:
 		_vr_reload_label.font_size = 42
 		_vr_reload_label.pixel_size = 0.0018
 		_vr_reload_label.outline_size = 12
+		# Every shot rewrites this label (ammo count). Render its glyphs now, not on a shot.
+		UiFonts.warm_glyphs(UiFonts.BOLD, _vr_reload_label.font_size, _vr_reload_label.outline_size,
+				PackedStringArray([text]) + _reload_status_phrases())
 		_vr_reload_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_vr_reload_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 		_vr_reload_label.no_depth_test = true
 		_vr_reload_label.position = Vector3(-0.55, -0.25, -1.4)
 		camera.add_child(_vr_reload_label)
 	_vr_reload_label.text = text
-	_vr_reload_label.visible = true
+	_vr_reload_label.visible = not _intro_view
 
 
 # -- Multiplayer pose broadcast ------------------------------------------------------
@@ -1515,6 +1619,8 @@ func pose_flags() -> int:
 		flags |= NetworkManager.POSE_FLAG_HOLSTER_LEFT
 	if revolver.gate_open:
 		flags |= NetworkManager.POSE_FLAG_GATE_OPEN
+	if revolver.is_twirling():
+		flags |= NetworkManager.POSE_FLAG_GUN_TWIRL
 	flags |= revolver.chamber_index() << NetworkManager.POSE_FLAG_CHAMBER_SHIFT
 	if PlayerSettings.voice_muted:
 		flags |= NetworkManager.POSE_FLAG_VOICE_MUTED
@@ -1777,7 +1883,7 @@ func _broadcast_pose(delta: float) -> void:
 func show_menu_panel(menu_control: Control) -> void:
 	hide_menu_panel()
 	_menu_panel = UIPanel3D.new()
-	_menu_panel.panel_size = Vector2(1.0, 0.8)
+	_menu_panel.panel_size = Vector2(1.5, 0.85)
 	add_child(_menu_panel)
 	var head := get_head_position()
 	var forward := -Basis(Vector3.UP, rig.get_head_transform().basis.get_euler().y).z

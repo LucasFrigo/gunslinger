@@ -41,7 +41,7 @@ Name VR, flat, AI, and multiplayer before editing. If the spec leaves one unchan
 
 - **Flat** aims with the camera ray (`player/flat_rig.gd`). **VR** uses the controllers (`player/vr_rig.gd`). **AI** passes its own aim. A VR-only feel (aim steady, jam-free) stays off the other two.
 - Fire, cock, and reload require `held`. `drawn` stays true while the gun is in the air.
-- Hits apply only in `DRAW`. Head kills; a surviving arm hit tosses the gun; a leg hit slows. Gun-hand self-hit grace skips only that arm. AI bullets still exclude the shooter.
+- Hits apply only in `DRAW`. Head kills; a surviving gun-arm hit tosses the gun (`Hitbox.side`, `CombatRules.is_gun_arm`), while an off-arm hit drops the off-hand prop; a leg hit slows. Gun-hand self-hit grace skips only that arm. AI bullets still exclude the shooter.
 - Multiplayer is **host-authoritative lobbies of 2-4 duelists**: humans and host-run NPCs, free-for-all or Teams. A lobby slot is the actor id and the shooter id (`LobbyRoster`, `NetworkManager.roster`; each duel runs on `DuelManager.snapshot`). Do not pause the tree in MP. Visuals a human peer must see go on the pose stream; an NPC slot's go on `_npc_pose` / `_npc_shot`. LAN is every SKU. Steam is desktop only. The Quest APK is LAN-only.
 - Slow-mo is single-player. The kill-cam burst is the multiplayer exception.
 - Practice has no `DuelManager` and no HP.

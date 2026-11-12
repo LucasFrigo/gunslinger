@@ -3,6 +3,8 @@
 [ext_resource type="Script" uid="uid://ckn2axsnnawmu" path="res://weapons/revolver/revolver.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://d1wyitw8e8syj" path="res://assets/models/weapons/wpn_psx_blaster.glb" id="2"]
 
+[ext_resource type="Script" path="res://weapons/spin_fx.gd" id="3"]
+
 [sub_resource type="PhysicsMaterial" id="phys_gun"]
 friction = 0.8
 bounce = 0.2
@@ -90,3 +92,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, -0.21)
 
 [node name="GripAnchor" type="Marker3D" parent="." unique_id=1187198542]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.035083443, -0.045, -0.0646835)
+
+[node name="SpinFx" type="MeshInstance3D" parent="."]
+script = ExtResource("3")

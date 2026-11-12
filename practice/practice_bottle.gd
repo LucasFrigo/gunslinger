@@ -42,6 +42,8 @@ func _ready() -> void:
 	max_contacts_reported = 4
 	continuous_cd = true
 	body_entered.connect(_on_body_entered)
+	# The line is a child of the mesh: it rides the hand with the model and hides on shatter.
+	OutlineHull.attach_model(_model)
 
 
 func set_home(xf: Transform3D) -> void:

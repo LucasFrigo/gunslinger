@@ -1,8 +1,11 @@
 shader_type spatial;
 render_mode cull_back;
-// Body and head parts of a DummyBody (hands keep the solid material). Each hit hole
-// (`BodyChunks`) is a world sphere: skin inside it is discarded, skin just outside it
-// takes the rim stain. `clip_radius` > 0 drops the first-person neck cavity.
+// Body, head, and hand parts of a DummyBody (hands get a copy with no holes or clip). Each
+// hit hole (`BodyChunks`) is a world sphere: skin inside it is discarded, skin just outside
+// it takes the rim stain. `clip_radius` > 0 drops the first-person neck cavity.
+// The silhouette gets a rim of the scenario sun's color (`edge_light`, global, set by
+// `TimeOfDay`); `flash` blinks the whole body white on a hit. Hands run `edge_strength` 0.
+#include "res://assets/shaders/toon_light.gdshaderinc"
 
 const int HOLE_CAP = 8;
 // The rim stain fades out at this share of the hole radius.
@@ -11,6 +14,10 @@ const float RIM_SHARE = 1.25;
 uniform vec4 albedo : source_color = vec4(0.62, 0.60, 0.58, 1.0);
 uniform float roughness_amount = 0.9;
 uniform float clip_radius = 0.0;
+global uniform vec4 edge_light : source_color;
+uniform float edge_power = 3.0;
+uniform float edge_strength = 0.35;
+uniform float flash = 0.0;
 uniform vec4 rim_color : source_color = vec4(0.62, 0.16, 0.13, 1.0);
 // xyz world center, w radius.
 uniform vec4 holes[HOLE_CAP];
@@ -39,4 +46,6 @@ void fragment() {
 	}
 	ALBEDO = color;
 	ROUGHNESS = roughness_amount;
+	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), edge_power);
+	EMISSION = edge_light.rgb * rim * edge_strength + vec3(flash);
 }

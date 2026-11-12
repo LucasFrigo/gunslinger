@@ -41,15 +41,19 @@ func on_duel_finished(player_won: bool) -> void:
 			_defeat()
 			return
 		GameManager.show_message(tr("MSG_LIVES_LEFT") % lives, 2.0)
-	_next_encounter()
+	_next_encounter(player_won)
 
 
-func _next_encounter() -> void:
+## `fresh`: a rung not yet fought, which gets the title cards. A retry after a loss does not.
+func _next_encounter(fresh := true) -> void:
 	var encounter := ladder.encounters[encounter_index]
+	var play_intro := fresh and GameManager.duel.intro_enabled()
+	if play_intro:
+		GameManager.hold_messages()
 	progress_changed.emit(encounter_index, ladder.encounters.size(), score, lives)
 	GameManager.show_message(tr("MSG_DUEL_PROGRESS") % [
 		encounter_index + 1, ladder.encounters.size(), encounter.label], 3.0)
-	GameManager.begin_gauntlet_encounter(encounter)
+	GameManager.begin_gauntlet_encounter(encounter, play_intro)
 
 
 func _victory() -> void:

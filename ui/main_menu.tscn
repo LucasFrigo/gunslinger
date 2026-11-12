@@ -1,26 +1,17 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://ui/main_menu.gd" id="1"]
 [ext_resource type="PackedScene" path="res://ui/settings_menu.tscn" id="2"]
 [ext_resource type="Theme" path="res://ui/theme_duello.tres" id="3"]
 [ext_resource type="PackedScene" path="res://ui/lobby_panel.tscn" id="4"]
 [ext_resource type="FontFile" uid="uid://dsduftx1pb1ii" path="res://assets/fonts/Ultra-Regular.ttf" id="font_title"]
+[ext_resource type="PackedScene" path="res://ui/menu_dialog.tscn" id="5"]
 
 [sub_resource type="LabelSettings" id="title_settings"]
 font = ExtResource("font_title")
-font_size = 40
+font_size = 44
 shadow_color = Color(0.55, 0.28, 0.14, 1)
 shadow_offset = Vector2(3, 3)
-
-[sub_resource type="LabelSettings" id="section_settings"]
-font = ExtResource("font_title")
-font_size = 20
-shadow_color = Color(0.55, 0.28, 0.14, 1)
-shadow_offset = Vector2(2, 2)
-
-[sub_resource type="LabelSettings" id="version_settings"]
-font_size = 14
-font_color = Color(0.72, 0.62, 0.48, 0.9)
 
 [node name="MainMenu" type="Control"]
 theme = ExtResource("3")
@@ -38,403 +29,359 @@ anchor_bottom = 1.0
 mouse_filter = 2
 color = Color(0.09, 0.06, 0.04, 0.94)
 
-[node name="Center" type="CenterContainer" parent="."]
+[node name="TitleBlock" type="VBoxContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 32.0
+offset_top = 24.0
+offset_right = -32.0
+offset_bottom = -24.0
+mouse_filter = 2
+theme_override_constants/separation = 2
 
-[node name="Panel" type="PanelContainer" parent="Center"]
-layout_mode = 2
-
-[node name="Margin" type="MarginContainer" parent="Center/Panel"]
-layout_mode = 2
-theme_override_constants/margin_left = 28
-theme_override_constants/margin_top = 20
-theme_override_constants/margin_right = 28
-theme_override_constants/margin_bottom = 20
-
-[node name="Landing" type="VBoxContainer" parent="Center/Panel/Margin"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="Title" type="Label" parent="Center/Panel/Margin/Landing"]
+[node name="Title" type="Label" parent="TitleBlock"]
 layout_mode = 2
 label_settings = SubResource("title_settings")
 text = "Duello!"
-horizontal_alignment = 1
+horizontal_alignment = 0
 
-[node name="Subtitle" type="Label" parent="Center/Panel/Margin/Landing"]
+[node name="Subtitle" type="Label" parent="TitleBlock"]
 layout_mode = 2
 text = "MENU_SUBTITLE"
-horizontal_alignment = 1
+horizontal_alignment = 0
 
-[node name="VersionLabel" type="Label" parent="Center/Panel/Margin/Landing"]
+[node name="List" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 32.0
+offset_top = 24.0
+offset_right = -32.0
+offset_bottom = -24.0
+mouse_filter = 2
+alignment = 2
+
+[node name="Landing" type="VBoxContainer" parent="List"]
 unique_name_in_owner = true
 layout_mode = 2
-label_settings = SubResource("version_settings")
-text = "v0.0.0"
-horizontal_alignment = 1
+theme_override_constants/separation = 6
 
-[node name="Sep1" type="HSeparator" parent="Center/Panel/Margin/Landing"]
-layout_mode = 2
-
-[node name="SingleplayerButton" type="Button" parent="Center/Panel/Margin/Landing"]
+[node name="SingleplayerButton" type="Button" parent="List/Landing"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"MenuListButton"
+alignment = 0
 text = "MENU_SINGLEPLAYER"
 
-[node name="MultiplayerButton" type="Button" parent="Center/Panel/Margin/Landing"]
+[node name="MultiplayerButton" type="Button" parent="List/Landing"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"MenuListButton"
+alignment = 0
 text = "MENU_MULTIPLAYER"
 
-[node name="PracticeButton" type="Button" parent="Center/Panel/Margin/Landing"]
+[node name="PracticeButton" type="Button" parent="List/Landing"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"MenuListButton"
+alignment = 0
 text = "MENU_PRACTICE"
 
-[node name="Sep2" type="HSeparator" parent="Center/Panel/Margin/Landing"]
+[node name="Sep1" type="HSeparator" parent="List/Landing"]
 layout_mode = 2
 
-[node name="SettingsButton" type="Button" parent="Center/Panel/Margin/Landing"]
+[node name="SettingsButton" type="Button" parent="List/Landing"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"MenuListButton"
+alignment = 0
 text = "MENU_SETTINGS"
 
-[node name="QuitButton" type="Button" parent="Center/Panel/Margin/Landing"]
+[node name="QuitButton" type="Button" parent="List/Landing"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"MenuListButton"
+alignment = 0
 text = "MENU_QUIT"
 
-[node name="SingleplayerPage" type="VBoxContainer" parent="Center/Panel/Margin"]
+[node name="SingleplayerPage" type="VBoxContainer" parent="List"]
 unique_name_in_owner = true
 layout_mode = 2
 visible = false
-theme_override_constants/separation = 8
+theme_override_constants/separation = 6
 
-[node name="SpTitle" type="Label" parent="Center/Panel/Margin/SingleplayerPage"]
-layout_mode = 2
-label_settings = SubResource("section_settings")
-text = "MENU_SP_TITLE"
-horizontal_alignment = 1
-
-[node name="SpSep" type="HSeparator" parent="Center/Panel/Margin/SingleplayerPage"]
-layout_mode = 2
-
-[node name="GauntletModeButton" type="Button" parent="Center/Panel/Margin/SingleplayerPage" groups=["menu_big_button"]]
+[node name="GauntletModeButton" type="Button" parent="List/SingleplayerPage" groups=["menu_big_button"]]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"MenuListButton"
+alignment = 0
 text = "MENU_GAUNTLET"
 
-[node name="DuelModeButton" type="Button" parent="Center/Panel/Margin/SingleplayerPage" groups=["menu_big_button"]]
+[node name="DuelModeButton" type="Button" parent="List/SingleplayerPage" groups=["menu_big_button"]]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"MenuListButton"
+alignment = 0
 text = "MENU_SINGLE_DUEL"
 
-[node name="HordeModeButton" type="Button" parent="Center/Panel/Margin/SingleplayerPage" groups=["menu_big_button"]]
+[node name="HordeModeButton" type="Button" parent="List/SingleplayerPage" groups=["menu_big_button"]]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"MenuListButton"
+alignment = 0
 text = "MENU_HORDE"
 
-[node name="SpSep2" type="HSeparator" parent="Center/Panel/Margin/SingleplayerPage"]
+[node name="SpSep2" type="HSeparator" parent="List/SingleplayerPage"]
 layout_mode = 2
 
-[node name="SpBackButton" type="Button" parent="Center/Panel/Margin/SingleplayerPage"]
+[node name="SpBackButton" type="Button" parent="List/SingleplayerPage"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"MenuListButton"
+alignment = 0
 text = "UI_BACK"
 
-[node name="GauntletPage" type="VBoxContainer" parent="Center/Panel/Margin"]
+[node name="MenuDialog" parent="." instance=ExtResource("5")]
+unique_name_in_owner = true
+
+[node name="GauntletPage" type="VBoxContainer" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent"]
 unique_name_in_owner = true
 layout_mode = 2
 visible = false
 theme_override_constants/separation = 8
 
-[node name="GauntletPageTitle" type="Label" parent="Center/Panel/Margin/GauntletPage"]
-layout_mode = 2
-label_settings = SubResource("section_settings")
-text = "MENU_GAUNTLET_TITLE"
-horizontal_alignment = 1
-
-[node name="GauntletPageSep" type="HSeparator" parent="Center/Panel/Margin/GauntletPage"]
-layout_mode = 2
-
-[node name="GauntletBlurb" type="Label" parent="Center/Panel/Margin/GauntletPage"]
+[node name="GauntletBlurb" type="Label" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/GauntletPage"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(420, 0)
 autowrap_mode = 3
 horizontal_alignment = 1
 
-[node name="GauntletBestLabel" type="Label" parent="Center/Panel/Margin/GauntletPage"]
+[node name="GauntletBestLabel" type="Label" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/GauntletPage"]
 unique_name_in_owner = true
 layout_mode = 2
 horizontal_alignment = 1
 visible = false
 
-[node name="GauntletSep2" type="HSeparator" parent="Center/Panel/Margin/GauntletPage"]
+[node name="GauntletSep2" type="HSeparator" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/GauntletPage"]
 layout_mode = 2
 
-[node name="GauntletButton" type="Button" parent="Center/Panel/Margin/GauntletPage" groups=["menu_big_button"]]
+[node name="GauntletButton" type="Button" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/GauntletPage" groups=["menu_big_button"]]
 unique_name_in_owner = true
 layout_mode = 2
 text = "UI_START"
 
-[node name="GauntletBackButton" type="Button" parent="Center/Panel/Margin/GauntletPage"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "UI_BACK"
-
-[node name="DuelPage" type="VBoxContainer" parent="Center/Panel/Margin"]
+[node name="DuelPage" type="VBoxContainer" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent"]
 unique_name_in_owner = true
 layout_mode = 2
 visible = false
 theme_override_constants/separation = 8
 
-[node name="DuelPageTitle" type="Label" parent="Center/Panel/Margin/DuelPage"]
-layout_mode = 2
-label_settings = SubResource("section_settings")
-text = "MENU_DUEL_TITLE"
-horizontal_alignment = 1
-
-[node name="DuelPageSep" type="HSeparator" parent="Center/Panel/Margin/DuelPage"]
-layout_mode = 2
-
-[node name="DuelBlurb" type="Label" parent="Center/Panel/Margin/DuelPage"]
+[node name="DuelBlurb" type="Label" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/DuelPage"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(420, 0)
 autowrap_mode = 3
 horizontal_alignment = 1
 
-[node name="ScenarioRow" type="HBoxContainer" parent="Center/Panel/Margin/DuelPage"]
+[node name="ScenarioRow" type="HBoxContainer" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/DuelPage"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="ScenarioRowLabel" type="Label" parent="Center/Panel/Margin/DuelPage/ScenarioRow"]
+[node name="ScenarioRowLabel" type="Label" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/DuelPage/ScenarioRow"]
 layout_mode = 2
 text = "MENU_TOWN"
 custom_minimum_size = Vector2(110, 0)
 
-[node name="ScenarioOption" type="OptionButton" parent="Center/Panel/Margin/DuelPage/ScenarioRow"]
+[node name="ScenarioOption" type="OptionButton" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/DuelPage/ScenarioRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="EnemyRow" type="HBoxContainer" parent="Center/Panel/Margin/DuelPage"]
+[node name="EnemyRow" type="HBoxContainer" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/DuelPage"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="EnemyRowLabel" type="Label" parent="Center/Panel/Margin/DuelPage/EnemyRow"]
+[node name="EnemyRowLabel" type="Label" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/DuelPage/EnemyRow"]
 layout_mode = 2
 text = "MENU_OPPONENT"
 custom_minimum_size = Vector2(110, 0)
 
-[node name="EnemyOption" type="OptionButton" parent="Center/Panel/Margin/DuelPage/EnemyRow"]
+[node name="EnemyOption" type="OptionButton" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/DuelPage/EnemyRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="CountRow" type="HBoxContainer" parent="Center/Panel/Margin/DuelPage"]
+[node name="CountRow" type="HBoxContainer" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/DuelPage"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="CountRowLabel" type="Label" parent="Center/Panel/Margin/DuelPage/CountRow"]
+[node name="CountRowLabel" type="Label" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/DuelPage/CountRow"]
 layout_mode = 2
 text = "MENU_ODDS"
 custom_minimum_size = Vector2(110, 0)
 
-[node name="CountOption" type="OptionButton" parent="Center/Panel/Margin/DuelPage/CountRow"]
+[node name="CountOption" type="OptionButton" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/DuelPage/CountRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="DuelSep2" type="HSeparator" parent="Center/Panel/Margin/DuelPage"]
+[node name="DuelSep2" type="HSeparator" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/DuelPage"]
 layout_mode = 2
 
-[node name="FreeDuelButton" type="Button" parent="Center/Panel/Margin/DuelPage" groups=["menu_big_button"]]
+[node name="FreeDuelButton" type="Button" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/DuelPage" groups=["menu_big_button"]]
 unique_name_in_owner = true
 layout_mode = 2
 text = "UI_START"
 
-[node name="DuelBackButton" type="Button" parent="Center/Panel/Margin/DuelPage"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "UI_BACK"
-
-[node name="HordePage" type="VBoxContainer" parent="Center/Panel/Margin"]
+[node name="HordePage" type="VBoxContainer" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent"]
 unique_name_in_owner = true
 layout_mode = 2
 visible = false
 theme_override_constants/separation = 8
 
-[node name="HordePageTitle" type="Label" parent="Center/Panel/Margin/HordePage"]
-layout_mode = 2
-label_settings = SubResource("section_settings")
-text = "MENU_HORDE_TITLE"
-horizontal_alignment = 1
-
-[node name="HordePageSep" type="HSeparator" parent="Center/Panel/Margin/HordePage"]
-layout_mode = 2
-
-[node name="HordeBlurb" type="Label" parent="Center/Panel/Margin/HordePage"]
+[node name="HordeBlurb" type="Label" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/HordePage"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(420, 0)
 autowrap_mode = 3
 horizontal_alignment = 1
 
-[node name="HordeScenarioRow" type="HBoxContainer" parent="Center/Panel/Margin/HordePage"]
+[node name="HordeScenarioRow" type="HBoxContainer" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/HordePage"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="HordeScenarioRowLabel" type="Label" parent="Center/Panel/Margin/HordePage/HordeScenarioRow"]
+[node name="HordeScenarioRowLabel" type="Label" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/HordePage/HordeScenarioRow"]
 layout_mode = 2
 text = "MENU_ARENA"
 custom_minimum_size = Vector2(110, 0)
 
-[node name="HordeScenarioOption" type="OptionButton" parent="Center/Panel/Margin/HordePage/HordeScenarioRow"]
+[node name="HordeScenarioOption" type="OptionButton" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/HordePage/HordeScenarioRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="HordeBestLabel" type="Label" parent="Center/Panel/Margin/HordePage"]
+[node name="HordeBestLabel" type="Label" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/HordePage"]
 unique_name_in_owner = true
 layout_mode = 2
 horizontal_alignment = 1
 visible = false
 
-[node name="HordeSep2" type="HSeparator" parent="Center/Panel/Margin/HordePage"]
+[node name="HordeSep2" type="HSeparator" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/HordePage"]
 layout_mode = 2
 
-[node name="HordeButton" type="Button" parent="Center/Panel/Margin/HordePage" groups=["menu_big_button"]]
+[node name="HordeButton" type="Button" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/HordePage" groups=["menu_big_button"]]
 unique_name_in_owner = true
 layout_mode = 2
 text = "UI_START"
 
-[node name="HordeBackButton" type="Button" parent="Center/Panel/Margin/HordePage"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "UI_BACK"
-
-[node name="MultiplayerPage" type="VBoxContainer" parent="Center/Panel/Margin"]
+[node name="MultiplayerPage" type="VBoxContainer" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="MpTitle" type="Label" parent="Center/Panel/Margin/MultiplayerPage"]
-layout_mode = 2
-label_settings = SubResource("section_settings")
-text = "MENU_MP_TITLE"
-horizontal_alignment = 1
-
-[node name="MpSep" type="HSeparator" parent="Center/Panel/Margin/MultiplayerPage"]
-layout_mode = 2
-
-[node name="MpScroll" type="ScrollContainer" parent="Center/Panel/Margin/MultiplayerPage"]
+[node name="MpScroll" type="ScrollContainer" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage"]
 custom_minimum_size = Vector2(520, 400)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="MpContent" type="VBoxContainer" parent="Center/Panel/Margin/MultiplayerPage/MpScroll"]
+[node name="MpContent" type="VBoxContainer" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
-[node name="SetupTitle" type="Label" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
+[node name="SetupTitle" type="Label" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent"]
 layout_mode = 2
 text = "LOBBY_SETUP_TITLE"
 horizontal_alignment = 1
 
-[node name="LobbySetup" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent" instance=ExtResource("4")]
+[node name="LobbySetup" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent" instance=ExtResource("4")]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="SetupSep" type="HSeparator" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
+[node name="SetupSep" type="HSeparator" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent"]
 layout_mode = 2
 
-[node name="LanRow" type="HBoxContainer" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
+[node name="LanRow" type="HBoxContainer" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="HostLanButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent/LanRow"]
+[node name="HostLanButton" type="Button" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent/LanRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "MENU_HOST_LAN"
 
-[node name="IpEdit" type="LineEdit" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent/LanRow"]
+[node name="IpEdit" type="LineEdit" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent/LanRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "MENU_IP_PLACEHOLDER"
 
-[node name="JoinIpButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent/LanRow"]
+[node name="JoinIpButton" type="Button" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent/LanRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "MENU_JOIN_IP"
 
-[node name="LanList" type="ItemList" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
+[node name="LanList" type="ItemList" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(420, 76)
 
-[node name="JoinLanButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
+[node name="JoinLanButton" type="Button" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "MENU_JOIN_LAN"
 
-[node name="SteamRow" type="HBoxContainer" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
+[node name="SteamRow" type="HBoxContainer" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="HostSteamButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent/SteamRow"]
+[node name="HostSteamButton" type="Button" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent/SteamRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "MENU_HOST_STEAM"
 
-[node name="RefreshSteamButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent/SteamRow"]
+[node name="RefreshSteamButton" type="Button" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent/SteamRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "MENU_REFRESH_LOBBIES"
 
-[node name="SteamList" type="ItemList" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
+[node name="SteamList" type="ItemList" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(420, 76)
 
-[node name="JoinSteamButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
+[node name="JoinSteamButton" type="Button" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "MENU_JOIN_LOBBY"
 
-[node name="SteamNote" type="Label" parent="Center/Panel/Margin/MultiplayerPage/MpScroll/MpContent"]
+[node name="SteamNote" type="Label" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage/MpScroll/MpContent"]
 unique_name_in_owner = true
 layout_mode = 2
 text = ""
 autowrap_mode = 2
 
-[node name="MpSep2" type="HSeparator" parent="Center/Panel/Margin/MultiplayerPage"]
+[node name="MpSep2" type="HSeparator" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage"]
 layout_mode = 2
 
-[node name="StatusLabel" type="Label" parent="Center/Panel/Margin/MultiplayerPage"]
+[node name="StatusLabel" type="Label" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent/MultiplayerPage"]
 unique_name_in_owner = true
 layout_mode = 2
 text = ""
 autowrap_mode = 2
 
-[node name="MpBackButton" type="Button" parent="Center/Panel/Margin/MultiplayerPage"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "UI_BACK"
-
-[node name="SettingsMenu" parent="Center/Panel/Margin" instance=ExtResource("2")]
+[node name="SettingsMenu" parent="MenuDialog/Center/Panel/Margin/DialogRoot/DialogContent" instance=ExtResource("2")]
 unique_name_in_owner = true
 visible = false
+
+[editable path="MenuDialog"]

@@ -1,13 +1,16 @@
 extends Node
 ## Headless smoke tests, launched via `--autotest=<mode>` after `--`:
-##   duel     - free duel vs AI; passes when bullets actually resolve the duel
+##   duel     - the `ScreenOverlay` state first (hurt per region and its fade, the kill-cam
+##              iris on the kill-cam camera, abort, a freed camera, the Settings toggle),
+##              then a free duel vs AI; passes when bullets actually resolve the duel
 ##   props    - equips the cigarette / coin / ace / bottle and throws them
 ##   gauntlet - clears two gauntlet rungs by force-killing the AI;
 ##              first rung also checks the pain-jerk toss
 ##   host     - hosts a LAN game, waits for a peer in the waiting room, presses
-##              START (NetworkManager.host_start), wins the MP duel; slot tints
+##              START (NetworkManager.host_start), wins the MP duel; slot tints.
+##              `--arena=N` first moves the waiting room to SCENARIOS[N]
 ##   join     - joins 127.0.0.1, stands in the waiting room on slot 1, expects to
-##              lose the MP duel; slot tints
+##              lose the MP duel; slot tints; the arena's time of day as the host sent it
 ##   lobbyhost - hosts 4 slots (the last an NPC), waits for two `lobbyjoin` peers, checks
 ##              an avatar per joiner on its ring point and no NPC before START, starts,
 ##              has the slowed NPC draw and fire, kills it mid-duel ("3 left"), then slot
@@ -62,20 +65,41 @@ extends Node
 ##              porch deck holds a dropped revolver, no wounds, flat backdrop
 ##   i18n     - every tr("KEY") / key constant / scene text key in code exists in
 ##              translations.csv, and the imported English translation resolves
+##   intro    - duel title cards: a menu free duel's cards (order, cameras, held lines, the
+##              HUD), fire skip, Reset Duel, three NPCs, the toggle, Horde, the gauntlet's
+##              retry, names, then a lobby host alone (slot order, rematch, leavers)
+##   introhost / introjoin - a real 1v1: the joiner's fire skips the cards on both peers,
+##              and the auto-rematch skips them
+## Every suite but intro* runs with `DuelManager.skip_intros` (straight to the standoff).
 ## Prints AUTOTEST PASS / AUTOTEST FAIL and sets the exit code.
 
 var mode := "duel"
+## `--arena=N`: the `host` suite moves its waiting room to SCENARIOS[N] before the joiner
+## arrives (the oil field's fixed time over the wire). -1 keeps the host's arena.
+var arena_arg := -1
+## Unscaled game seconds since start. Timeouts and duration checks read this, not the wall
+## clock, so `--fixed-fps` (game time faster than real time) changes nothing but speed.
+var _clock := 0.0
 
 
 func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--autotest="):
 			mode = arg.get_slice("=", 1)
+		elif arg.begins_with("--arena="):
+			arena_arg = int(arg.get_slice("=", 1))
 	print("AUTOTEST: mode=%s" % mode)
+	get_tree().process_frame.connect(func() -> void:
+		_clock += get_process_delta_time() / maxf(Engine.time_scale, 0.001))
 	# The processes drive the roster with no player at the menu: the host's Lobby page stays
 	# shut unless a test is about it (`_lobby_page_ok`).
 	GameManager.hud.pause_menu.auto_open_lobby = false
 	_saved_lobby_setup = _lobby_setup_snapshot()
+	_saved_offhand_item = PlayerSettings.offhand_item
+	_saved_intro = [PlayerSettings.duel_intro_enabled, PlayerSettings.display_name]
+	# The title cards are the `intro` suites' own; every other suite goes straight to the
+	# standoff, whatever the saved Settings say.
+	GameManager.duel.skip_intros = not mode.begins_with("intro")
 	match mode:
 		"duel":
 			_test_duel()
@@ -111,6 +135,12 @@ func _ready() -> void:
 			_test_steam()
 		"steamcycle":
 			_test_steam_cycle()
+		"intro":
+			_test_intro()
+		"introhost":
+			_test_intro_host()
+		"introjoin":
+			_test_intro_join()
 		_:
 			_fail("unknown mode %s" % mode)
 
@@ -119,6 +149,12 @@ func _ready() -> void:
 
 func _test_duel() -> void:
 	await _sleep(1.0)
+	if not await _screen_overlay_ok():
+		return
+	if not await _npc_replay_hand_ok():
+		return
+	if not await _spin_after_replay_ok():
+		return
 	GameManager.start_free_duel(0, 0)
 	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
 		return _fail("duel never reached DRAW")
@@ -128,6 +164,230 @@ func _test_duel() -> void:
 		return _fail("duel did not resolve (no bullet hit landed)")
 	print("AUTOTEST: duel finished, local won=%s (%s)" % [result[0], result[1]])
 	_pass()
+
+
+## BUG-029: an NPC killed mid-draw keeps its gun hand on the revolver in the replay. The
+## death flings the gun out of the NPC's subtree, which used to break the arm IK's target.
+func _npc_replay_hand_ok() -> bool:
+	var saved_speed: float = GameManager.tuning["ai_speed_mult"]
+	GameManager.tuning["ai_speed_mult"] = MULTI_AI_SPEED
+	GameManager.start_free_duel(0, 0)
+	var ok := await _npc_replay_hand_steps()
+	GameManager.tuning["ai_speed_mult"] = saved_speed
+	return ok
+
+
+func _npc_replay_hand_steps() -> bool:
+	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
+		_fail("replay hand: the duel never reached DRAW")
+		return false
+	var ai: DuelistAI = GameManager.current_ais[0]
+	# At MULTI_AI_SPEED the random reaction alone runs 12-24 s before the draw starts.
+	if not await _wait_for(func() -> bool: return ai.state == DuelistAI.AIState.DRAWING and ai._draw_progress > 0.5, 60.0):
+		_fail("replay hand: the NPC never got mid-draw (state %d, progress %.2f, time scale %.2f, clock %.1f)" % [
+				ai.state, ai._draw_progress, Engine.time_scale, _clock])
+		return false
+	var dummy := ai.corpse_body()
+	ai.take_bullet_hit(99.0, PackedVector3Array(), CombatRules.REGION_HEAD, false, true, 0)
+	if not await _wait_for(func() -> bool: return DeathCam.phase == DeathCam.Phase.PLAYBACK, 40.0):
+		_fail("replay hand: playback never started")
+		return false
+	if not await _wait_for(func() -> bool: return DeathCam._play_t >= ReplayBuffer.death_time - 0.3, 40.0):
+		_fail("replay hand: playback never neared the death")
+		return false
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var anchor := ai.revolver.get_node("GripAnchor") as Node3D
+	var gap := dummy.bone_global(&"Hand.R").origin.distance_to(anchor.global_position)
+	if gap > 0.2:
+		_fail("replay hand: the NPC's hand is %.2f m from its gun in the replay" % gap)
+		return false
+	print("AUTOTEST: replay hand: a mid-draw NPC's hand stays on its gun (%.2f m)" % gap)
+	return true
+
+
+## Roadmap 1.4: after a replay (player won, then player lost) the next duel's drawn gun must
+## still hinge-spin and twirl, and the winner's gun must hinge-spin as soon as the replay ends.
+func _spin_after_replay_ok() -> bool:
+	var saved_speed: float = GameManager.tuning["ai_speed_mult"]
+	GameManager.tuning["ai_speed_mult"] = MULTI_AI_SPEED
+	var ok := await _spin_after_replay_round(true) and await _spin_after_replay_round(false)
+	GameManager.tuning["ai_speed_mult"] = saved_speed
+	Input.action_release("flat_twirl")
+	return ok
+
+
+func _spin_after_replay_round(player_wins: bool) -> bool:
+	var tag := "spin after replay (%s)" % ("won" if player_wins else "lost")
+	GameManager.start_free_duel(0, 0)
+	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
+		_fail("%s: the duel never reached DRAW" % tag)
+		return false
+	var player := GameManager.local_player
+	player._draw_gun()
+	if player_wins:
+		var ai: DuelistAI = GameManager.current_ais[0]
+		ai.take_bullet_hit(99.0, PackedVector3Array(), CombatRules.REGION_HEAD, false, true, 0)
+	else:
+		player.take_bullet_hit(99.0, PackedVector3Array(), CombatRules.REGION_HEAD)
+	if not await _wait_for(func() -> bool: return DeathCam.phase == DeathCam.Phase.TRAILING, 60.0):
+		_fail("%s: the replay never ended (phase %d)" % [tag, DeathCam.phase])
+		return false
+	for i in 4:
+		await get_tree().physics_frame
+	if player_wins:
+		if not await _gun_spins(player, tag + " right after the replay"):
+			return false
+		Input.action_press("flat_twirl")
+		for i in 6:
+			await get_tree().process_frame
+		var twirled_after := absf(player.revolver.twirl_angle) > 0.001
+		Input.action_release("flat_twirl")
+		if not twirled_after:
+			_fail("%s: flat twirl is dead right after the replay (%s)" % [tag, _gun_state(player.revolver)])
+			return false
+	elif player.twirl_allowed():
+		_fail("%s: a dead player may twirl" % tag)
+		return false
+	GameManager.start_free_duel(0, 0)
+	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
+		_fail("%s: the next duel never reached DRAW" % tag)
+		return false
+	player = GameManager.local_player
+	player._draw_gun()
+	await get_tree().physics_frame
+	if not await _gun_spins(player, tag + " in the next duel"):
+		return false
+	Input.action_press("flat_twirl")
+	for i in 6:
+		await get_tree().process_frame
+	var twirled := absf(player.revolver.twirl_angle) > 0.001
+	Input.action_release("flat_twirl")
+	if not twirled:
+		_fail("%s: flat twirl did not turn the gun in the next duel (%s)" % [tag, _gun_state(player.revolver)])
+		return false
+	print("AUTOTEST: %s: hinge spin and twirl work" % tag)
+	return true
+
+
+func _gun_state(gun: WeaponBase) -> String:
+	return "held %s drawn %s follow %s freeze %s blocks %s" % [
+			gun.held, gun.drawn, gun.follow_parent, gun.freeze, DeathCam.blocks_combat()]
+
+
+func _gun_spins(player: Player, tag: String) -> bool:
+	var gun: WeaponBase = player.revolver
+	gun.begin_spin()
+	for i in 6:
+		await get_tree().physics_frame
+	var turned := gun.is_spin_active() and absf(gun.spin_angle) > 0.001
+	var state := _gun_state(gun)
+	gun.end_spin(true)
+	if not turned:
+		_fail("%s: begin_spin did not turn the gun (%s)" % [tag, state])
+	return turned
+
+
+## `ScreenOverlay` is checked as state; headless draws no shader. The NPC is slowed so its
+## bullets do not land mid-test.
+func _screen_overlay_ok() -> bool:
+	var saved_speed: float = GameManager.tuning["ai_speed_mult"]
+	GameManager.tuning["ai_speed_mult"] = MULTI_AI_SPEED
+	var ok := await _screen_overlay_steps()
+	GameManager.tuning["ai_speed_mult"] = saved_speed
+	PlayerSettings.screen_effects_enabled = true
+	ScreenOverlay.reset()
+	return ok
+
+
+func _screen_overlay_steps() -> bool:
+	GameManager.start_free_duel(0, 0)
+	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
+		_fail("overlay: the duel never reached DRAW")
+		return false
+	var player := GameManager.local_player
+	var trail := PackedVector3Array([Vector3(0.0, 1.5, 0.0), Vector3(0.0, 1.5, -2.0)])
+	var quad_idle := func() -> bool:
+		return not ScreenOverlay._quad.visible and ScreenOverlay._quad.get_parent() == ScreenOverlay
+	var calm := func() -> bool: return not ScreenOverlay.is_active()
+	if GameManager.hud.get_node_or_null("RedFlash") != null or GameManager.hud.has_method("flash_red"):
+		_fail("overlay: the HUD still has the red flash")
+		return false
+
+	# A wound scales with the region, then fades and the quad parks hidden under the autoload.
+	ScreenOverlay.reset()
+	for wound in [[CombatRules.REGION_TORSO, "hurt_torso"], [CombatRules.REGION_ARM, "hurt_limb"]]:
+		player.take_bullet_hit(0.0, PackedVector3Array(), wound[0])
+		var want := float(GameManager.tuning[wound[1]])
+		if not is_equal_approx(ScreenOverlay.hurt_level(), want) or not ScreenOverlay.is_active():
+			_fail("overlay: a %s hit set hurt to %.2f, expected %.2f" % [wound[0], ScreenOverlay.hurt_level(), want])
+			return false
+		if not await _wait_for(calm, 3.0) or not quad_idle.call():
+			_fail("overlay: the %s vignette did not fade and park" % wound[0])
+			return false
+
+	# Toggle off: a wound and the kill cam leave the overlay idle.
+	PlayerSettings.screen_effects_enabled = false
+	player.take_bullet_hit(0.0, PackedVector3Array(), CombatRules.REGION_TORSO)
+	GameManager.duel.kill_cam_requested.emit(trail)
+	await get_tree().process_frame
+	if not KillCam.is_playing or ScreenOverlay.is_active() or ScreenOverlay.hurt_level() != 0.0:
+		_fail("overlay: effects off, but the overlay woke (kill cam playing %s)" % KillCam.is_playing)
+		return false
+	KillCam.cancel()
+	PlayerSettings.screen_effects_enabled = true
+
+	# Kill cam: shut on its own camera, opens, closes at the end, then opens on the next view.
+	GameManager.duel.kill_cam_requested.emit(trail)
+	var cam: Camera3D = KillCam._camera
+	if not KillCam.is_playing or not is_instance_valid(cam) or not ScreenOverlay.is_active() 			or ScreenOverlay.iris_level() != 0.0 or not ScreenOverlay._quad.visible 			or ScreenOverlay._quad.get_parent() != cam:
+		_fail("overlay: the kill cam did not start shut on its camera")
+		return false
+	if not await _wait_for(func() -> bool: return ScreenOverlay.iris_level() >= ScreenOverlay.IRIS_OPEN, 3.0):
+		_fail("overlay: the iris never opened on the kill cam")
+		return false
+	if not await _wait_for(func() -> bool: return not KillCam.is_playing, 10.0) 			or not await _wait_for(calm, 3.0) or not quad_idle.call() 			or ScreenOverlay.iris_level() != ScreenOverlay.IRIS_OPEN:
+		_fail("overlay: after the kill cam the iris is not open with the quad parked")
+		return false
+
+	# Abort: cancel mid-wipe leaves it open, clear and parked at once.
+	GameManager.duel.kill_cam_requested.emit(trail)
+	await get_tree().process_frame
+	if not ScreenOverlay.is_active():
+		_fail("overlay: the second kill cam did not wake the overlay")
+		return false
+	KillCam.cancel()
+	if ScreenOverlay.is_active() or ScreenOverlay.iris_level() != ScreenOverlay.IRIS_OPEN 			or ScreenOverlay.hurt_level() != 0.0 or not quad_idle.call():
+		_fail("overlay: cancelling the kill cam left the overlay up")
+		return false
+
+	# A camera freed under the quad does not take it, or the running effect, with it.
+	var temp := Camera3D.new()
+	add_child(temp)
+	temp.current = true
+	ScreenOverlay.hurt(0.5, 5.0)
+	await get_tree().process_frame
+	if ScreenOverlay._quad.get_parent() != temp:
+		_fail("overlay: the quad did not ride the current camera")
+		return false
+	temp.free()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if not is_instance_valid(ScreenOverlay._quad) or not ScreenOverlay._quad.is_inside_tree() 			or ScreenOverlay.hurt_level() <= 0.0:
+		_fail("overlay: freeing the camera under the quad broke the overlay")
+		return false
+	ScreenOverlay.reset()
+
+	# A kill: the strongest vignette, carried onto the kill-cam camera, then idle.
+	player.take_bullet_hit(99.0, trail, CombatRules.REGION_HEAD)
+	if not is_equal_approx(ScreenOverlay.hurt_level(), float(GameManager.tuning["hurt_kill"])) 			or not KillCam.is_playing or ScreenOverlay._quad.get_parent() != KillCam._camera:
+		_fail("overlay: a kill did not show the vignette on the kill-cam camera")
+		return false
+	if not await _wait_for(func() -> bool: return not KillCam.is_playing, 10.0) 			or not await _wait_for(calm, 3.0) or not quad_idle.call():
+		_fail("overlay: the overlay did not go idle after the kill cam")
+		return false
+	print("AUTOTEST: screen overlay hurt per region, iris on the kill cam, abort, freed camera, and toggle ok")
+	return true
 
 
 func _test_gauntlet() -> void:
@@ -146,7 +406,9 @@ func _test_gauntlet() -> void:
 			local._holster_gun()
 			if not player_ok:
 				return
-			if not (_assert_pain_jerk() and _assert_spin_throw()):
+			if not (_assert_flat_draw_snap() and _assert_pain_jerk() and _assert_spin_throw()):
+				return
+			if not await _assert_twirl_layer() or not await _assert_twirl_gate():
 				return
 		# Arm the listener before the kill: duel_finished fires synchronously.
 		var result := _arm_duel_listener()
@@ -162,7 +424,68 @@ func _test_gauntlet() -> void:
 		return _fail("gauntlet did not advance")
 	if not _gauntlet_record_ok():
 		return
+	if not await _gauntlet_oilfield_rung_ok():
+		return
 	_pass()
+
+
+## The temporary final rung (Roadmap, Oil-field Train): rung 8 repeats rung 7's Ghost + Sheriff + Drunk finale on
+## the oil field, the last `SCENARIOS` entry. The ladder has 8 rungs and the menu counts them (the blurb and the
+## "Best: duel N / 8" line); the rung spawns three NPCs on the oil field and a win over all three ends it. The
+## controller is stopped first, so no pending rung callback records a run or leaves for the menu.
+func _gauntlet_oilfield_rung_ok() -> bool:
+	var gauntlet := GameManager.gauntlet
+	gauntlet.stop()
+	var ladder: GauntletLadder = gauntlet.ladder
+	var last := ladder.encounters.size() - 1
+	var oil := GameManager.SCENARIOS.find(OILFIELD_TRES)
+	var trio := ladder.encounters[last - 1]
+	var rung := ladder.encounters[last]
+	if last != 7 or oil != GameManager.SCENARIOS.size() - 1 or trio.scenario_index != 0 or rung.scenario_index != oil:
+		return _fail_false("gauntlet: rung 8 should be the oil field after rung 7 on Main Street (%d rungs, scenario %d)" % [
+				last + 1, rung.scenario_index])
+	var before := trio.lineup()
+	var after := rung.lineup()
+	if after.size() != 3 or before.size() != 3 or rung.health_mult != trio.health_mult or rung.score_reward < trio.score_reward:
+		return _fail_false("gauntlet: rung 8 is not rung 7's three-way (%d NPCs)" % after.size())
+	for i in 3:
+		if after[i].resource_path != before[i].resource_path:
+			return _fail_false("gauntlet: rung 8's NPC %d is %s, rung 7's is %s" % [i, after[i].resource_path, before[i].resource_path])
+	for earlier in ladder.encounters.slice(0, 6):
+		if earlier.scenario_index == oil:
+			return _fail_false("gauntlet: only the last rung should be on the oil field")
+	var saved := [PlayerSettings.gauntlet_best_rung, PlayerSettings.gauntlet_best_score, PlayerSettings.gauntlet_cleared]
+	PlayerSettings.gauntlet_best_rung = 7
+	PlayerSettings.gauntlet_best_score = 4200
+	PlayerSettings.gauntlet_cleared = false
+	var menu: MainMenu = (load("res://ui/main_menu.tscn") as PackedScene).instantiate()
+	add_child(menu)
+	var blurb: String = menu.get_node("%GauntletBlurb").text
+	var best: String = menu.gauntlet_best_label.text
+	menu.queue_free()
+	PlayerSettings.gauntlet_best_rung = saved[0]
+	PlayerSettings.gauntlet_best_score = saved[1]
+	PlayerSettings.gauntlet_cleared = saved[2]
+	if blurb != tr("MENU_GAUNTLET_BLURB") % [8, ladder.lives] or best != tr("MENU_GAUNTLET_BEST") % [7, 8, 4200]:
+		return _fail_false("gauntlet: the menu does not count 8 rungs ('%s', '%s')" % [blurb, best])
+	gauntlet.encounter_index = last
+	GameManager.begin_gauntlet_encounter(rung)
+	await get_tree().process_frame
+	if GameManager.current_scenario_index != oil or GameManager.current_ais.size() != 3:
+		return _fail_false("gauntlet: rung 8 loaded scenario %d with %d NPCs" % [GameManager.current_scenario_index, GameManager.current_ais.size()])
+	for ai in GameManager.current_ais:
+		if ai.revolver.shooting_hand != &"":
+			return _fail_false("gauntlet: rung 8's NPC %d would buzz a controller" % ai.actor_id)
+	if not await _wait_for_state(DuelManager.State.DRAW, 25.0):
+		return _fail_false("gauntlet: rung 8 never reached DRAW")
+	var result := _arm_duel_listener()
+	for ai in GameManager.current_ais.duplicate():
+		ai.take_bullet_hit(99.0, PackedVector3Array())
+	await _await_result(result, 10.0)
+	if result.is_empty() or result[0] != true:
+		return _fail_false("gauntlet: rung 8 did not resolve as a win")
+	print("AUTOTEST: gauntlet rung 8: the Ghost, Sheriff, and Drunk on the oil field (scenario %d), the menu counts 8 rungs, a win over all three resolves" % oil)
+	return true
 
 
 ## Best rung / score / cleared each keep their maximum. Restores the real record.
@@ -193,6 +516,10 @@ const MULTI_CAPSULE_HEIGHT := 1.6
 const MULTI_MIN_SPACING := 3.0
 const MULTI_FLOOR_TOLERANCE := 0.3
 const MULTI_WORLD_MASK := 1
+## BUG-027: a spawn marker's floor may not rise above the sole (a sunk ragdoll is thrown
+## out of the ground); a short hover is a harmless drop.
+const SPAWN_FLOOR_ABOVE := 0.01
+const SPAWN_FLOOR_BELOW := 0.05
 
 
 func _test_multi() -> void:
@@ -370,6 +697,8 @@ func _fail_rooftop(message: String, saved_disarm: float) -> void:
 ## Part A: every arena and count places its NPCs clear of geometry, on the floor, facing
 ## the lane, spaced out, with a readable lineup and distinct shades for duplicates.
 func _multi_markers_ok() -> bool:
+	if not await _spawn_floors_ok():
+		return false
 	for arena in GameManager.SCENARIOS.size():
 		for count in [2, 3]:
 			GameManager.start_free_duel(arena, 0, count)
@@ -528,12 +857,12 @@ func _multi_loss_ok() -> bool:
 	return true
 
 
-## Part D: rung 7 is the three-way on Main Street, NPC revolvers carry no haptic hand
-## (BUG-017), and the menu offers Mixed, the opponent count, and the remembered pick.
+## Part D: rung 7 is the three-way on Main Street (rung 8 repeats it on the oil field), NPC revolvers carry no
+## haptic hand (BUG-017), and the menu offers Mixed, the opponent count, and the remembered pick.
 func _multi_ladder_menu_ok() -> bool:
 	var ladder: GauntletLadder = load(GameManager.GAUNTLET_LADDER)
-	var finale := ladder.encounters[ladder.encounters.size() - 1]
-	if ladder.encounters.size() != 7 or finale.lineup().size() != 3 or finale.scenario_index != 0:
+	var finale := ladder.encounters[6]
+	if ladder.encounters.size() != 8 or finale.lineup().size() != 3 or finale.scenario_index != 0:
 		_fail("rung 7 is not a three-way on Main Street")
 		return false
 	for encounter in ladder.encounters.slice(0, 6):
@@ -594,6 +923,38 @@ func _hitbox_center(hitbox: Hitbox) -> Vector3:
 		if child is CollisionShape3D:
 			return (child as CollisionShape3D).global_position
 	return hitbox.global_position
+
+
+## Every spawn marker on every arena (PlayerSpawn, EnemySpawn, EnemySpawns*) stands flush
+## on the world floor.
+func _spawn_floors_ok() -> bool:
+	for arena in GameManager.SCENARIOS.size():
+		GameManager.start_free_duel(arena, 0)
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		var scenario := GameManager.current_scenario
+		if not _arena_time_ok("single-player arena %d" % arena):
+			return false
+		var markers: Array[Marker3D] = [scenario.get_node("PlayerSpawn"), scenario.get_node("EnemySpawn")]
+		for group in scenario.get_children():
+			if String(group.name).begins_with("EnemySpawns"):
+				for marker in group.get_children():
+					markers.append(marker as Marker3D)
+		var space := scenario.get_world_3d().direct_space_state
+		for marker in markers:
+			var pos := marker.global_position
+			var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(pos + Vector3.UP * 0.5,
+					pos + Vector3.DOWN * 1.0, MULTI_WORLD_MASK))
+			if hit.is_empty():
+				_fail("spawn floor: arena %d %s has no floor under it" % [arena, scenario.get_path_to(marker)])
+				return false
+			var floor_y: float = hit["position"].y
+			if floor_y > pos.y + SPAWN_FLOOR_ABOVE or floor_y < pos.y - SPAWN_FLOOR_BELOW:
+				_fail("spawn floor: arena %d %s at y %.3f, floor at y %.3f" % [arena,
+						scenario.get_path_to(marker), pos.y, floor_y])
+				return false
+	print("AUTOTEST: spawn markers flush on the floor on every arena")
+	return true
 
 
 func _multi_arena_ok(arena: int, count: int) -> bool:
@@ -750,7 +1111,41 @@ func _outward(point: Vector3, center: Vector3) -> Vector3:
 	return flat.normalized() if flat.length_squared() > 0.0001 else Vector3.RIGHT
 
 
+## BUG-026: a flat draw puts the wrist on the grip the same frame the gun lands, and a
+## holster puts it back at the hang. Slow-mo stretches the old ease, so it would show there.
+func _assert_flat_draw_snap() -> bool:
+	var player := GameManager.local_player
+	if player == null or player.use_vr:
+		return true
+	const STEP := 0.016
+	player._holster_gun()
+	for i in 20:
+		player.drive_wrists_late(STEP)
+	player._draw_gun()
+	var hand := player.draw_hand_name()
+	player.drive_wrists_late(STEP)
+	var grip := player._grip_anchor(player.revolver)
+	var wrist := player._wrist_marker(hand)
+	if grip == null or wrist.global_position.distance_to(grip.global_position) > 0.01:
+		_fail("flat draw snap: the wrist trails the gun by %.3f m" % wrist.global_position.distance_to(grip.global_position))
+		return false
+	player._holster_gun()
+	player.drive_wrists_late(STEP)
+	var head: Transform3D = player.rig.get_head_transform()
+	var yaw := Basis(Vector3.UP, head.basis.get_euler().y)
+	var local_hang := Player.ARM_FLAT_HAND_LOCAL
+	if hand == Player.HAND_LEFT:
+		local_hang.x = -local_hang.x
+	var hang := Vector3(head.origin.x, player.global_position.y + 1.1, head.origin.z) + yaw * local_hang
+	if wrist.global_position.distance_to(hang) > 0.01:
+		_fail("flat draw snap: the wrist trails the holster by %.3f m" % wrist.global_position.distance_to(hang))
+		return false
+	print("AUTOTEST: flat draw / holster snap the wrist with the gun")
+	return true
+
+
 ## Arm hit flings a held gun and does not block an immediate catch. AI gun leaves the arm.
+## An off-arm hit (BUG-025) keeps the gun and drops the off-hand prop instead.
 func _assert_pain_jerk() -> bool:
 	var player := GameManager.local_player
 	if player == null or player.revolver == null:
@@ -760,7 +1155,19 @@ func _assert_pain_jerk() -> bool:
 	if not player.revolver.held:
 		_fail("pain-jerk: gun was not in hand")
 		return false
-	player.apply_wound(CombatRules.REGION_ARM, player.health)
+	var gun_side := player._body_side(player.draw_hand_name())
+	var off_side := &"L" if gun_side == &"R" else &"R"
+	player.props.equip_item(PropController.ITEM_COIN)
+	var coin: Node3D = player.props.current_prop()
+	player.apply_wound(CombatRules.REGION_ARM, player.health, off_side)
+	if not player.revolver.held:
+		_fail("pain-jerk: an off-arm hit disarmed the player")
+		return false
+	if coin == null or not coin.is_loose():
+		_fail("pain-jerk: an off-arm hit did not drop the coin")
+		return false
+	player.props.equip_item(PropController.ITEM_NONE)
+	player.apply_wound(CombatRules.REGION_ARM, player.health, gun_side)
 	if not player.revolver.drawn or player.revolver.held:
 		_fail("pain-jerk: arm hit did not toss the player gun")
 		return false
@@ -775,7 +1182,12 @@ func _assert_pain_jerk() -> bool:
 	if ai == null or ai.revolver == null:
 		_fail("pain-jerk: no AI duelist")
 		return false
-	ai.take_bullet_hit(0.0, PackedVector3Array(), CombatRules.REGION_ARM)
+	var ai_state := ai.state
+	ai.take_bullet_hit(0.0, PackedVector3Array(), CombatRules.REGION_ARM, false, false, -1, {}, &"L")
+	if ai.state != ai_state or ai.state == DuelistAI.AIState.DISARMED:
+		_fail("pain-jerk: an AI off-arm hit disarmed it")
+		return false
+	ai.take_bullet_hit(0.0, PackedVector3Array(), CombatRules.REGION_ARM, false, false, -1, {}, &"R")
 	if ai.revolver.get_parent() == ai.arm:
 		_fail("pain-jerk: AI arm hit did not toss the gun")
 		return false
@@ -812,6 +1224,151 @@ func _assert_spin_throw() -> bool:
 	return true
 
 
+## Flat twirl gate: allowed after the bell (and in practice), refused pre-bell, idle,
+## holstered, gate open, or jammed. The bind drives it.
+func _assert_twirl_gate() -> bool:
+	var player := GameManager.local_player
+	var gun: WeaponBase = player.revolver
+	var duel := GameManager.duel
+	var saved_state := duel.state
+	player._draw_gun()
+	if saved_state != DuelManager.State.DRAW or not player.twirl_allowed():
+		_fail("twirl gate: refused a drawn gun in DRAW (state=%d)" % saved_state)
+		return false
+	for pre in [DuelManager.State.STANDOFF, DuelManager.State.WAIT_SIGNAL, DuelManager.State.IDLE]:
+		duel.state = pre
+		if player.twirl_allowed():
+			duel.state = saved_state
+			_fail("twirl gate: allowed outside DRAW (state=%d)" % pre)
+			return false
+	duel.state = saved_state
+	gun.gate_open = true
+	var open_refused := not player.twirl_allowed()
+	gun.gate_open = false
+	gun.jammed = true
+	var jam_refused := not player.twirl_allowed()
+	gun.jammed = false
+	if not open_refused or not jam_refused:
+		_fail("twirl gate: allowed with the gate open or jammed")
+		return false
+	Input.action_press("flat_twirl")
+	for i in 6:
+		await get_tree().process_frame
+	var twirled := gun.is_twirling()
+	Input.action_release("flat_twirl")
+	await get_tree().create_timer(0.6).timeout
+	if not twirled or gun.is_twirling():
+		_fail("twirl gate: the bind did not twirl and ease out (twirled=%s)" % twirled)
+		return false
+	Input.action_press("flat_twirl")
+	await get_tree().process_frame
+	player._holster_gun()
+	Input.action_release("flat_twirl")
+	if player.twirl_allowed() or gun.is_twirling():
+		_fail("twirl gate: holstering did not stop the twirl")
+		return false
+	print("AUTOTEST: flat twirl gated to DRAW and practice, driven by the bind")
+	return true
+
+
+## Cosmetic twirl: only the blaster mesh turns. Muzzle, chamber, and fire stay at rest;
+## a VR hinge spin turns it `spin_visual_mult` times as fast and lands on a whole turn.
+func _assert_twirl_layer() -> bool:
+	var hand := Node3D.new()
+	add_child(hand)
+	var gun := load("res://weapons/revolver/revolver.tscn").instantiate() as Revolver
+	hand.add_child(gun)
+	gun.attach_to(hand)
+	gun.rounds = gun.max_rounds
+	var muzzle := gun.get_muzzle()
+	var blaster := gun.get_node("Model/WPN_PSX_Blaster") as Node3D
+	var rest_blaster := blaster.transform
+	var rest_muzzle := muzzle.global_transform
+	var rest_chamber := gun.get_chamber_point()
+	var shots: Array[Vector3] = []
+	gun.fired.connect(func(origin: Vector3, _dir: Vector3) -> void: shots.append(origin))
+	gun.begin_twirl()
+	for i in 8:
+		await get_tree().process_frame
+	var ok := true
+	if not gun.is_twirling() or absf(gun.twirl_speed) < 1.0 or blaster.transform.is_equal_approx(rest_blaster):
+		_fail("twirl: begin_twirl did not turn the blaster")
+		ok = false
+	elif not muzzle.global_transform.is_equal_approx(rest_muzzle) \
+			or not gun.get_chamber_point().is_equal_approx(rest_chamber) or gun.spinning:
+		_fail("twirl: the cosmetic layer moved the muzzle, chamber, or hinge state")
+		ok = false
+	elif not gun.try_fire(true) or shots.size() != 1 \
+			or not shots[0].is_equal_approx(rest_muzzle.origin):
+		_fail("twirl: mid-twirl fire did not leave the rest muzzle (%s)" % [shots])
+		ok = false
+	if ok:
+		var fx := gun.get_node("SpinFx") as SpinFx
+		var saved_mode := int(GameManager.tuning["spin_fx_mode"])
+		GameManager.tuning["spin_fx_mode"] = 1
+		fx._process(0.0)
+		var shown := fx.visible
+		GameManager.tuning["spin_fx_mode"] = 0
+		fx._process(0.0)
+		var off_hidden := not fx.visible
+		GameManager.tuning["spin_fx_mode"] = saved_mode
+		if not shown or not off_hidden:
+			_fail("twirl: spin fx should show mid-twirl and hide at mode 0 (shown=%s, off hidden=%s)" % [
+					shown, off_hidden])
+			ok = false
+	if ok:
+		gun.end_twirl()
+		await get_tree().create_timer(0.6).timeout
+		if gun.is_twirling() or not blaster.transform.is_equal_approx(rest_blaster):
+			_fail("twirl: release did not ease back to the rest pose")
+			ok = false
+	if ok:
+		gun.begin_twirl()
+		await get_tree().process_frame
+		gun.holster_to(hand)
+		if gun.is_twirling() or not blaster.transform.is_equal_approx(rest_blaster):
+			_fail("twirl: holstering did not cancel the twirl")
+			ok = false
+	if ok:
+		gun.attach_to(hand)
+		gun.begin_twirl()
+		await get_tree().process_frame
+		gun.pain_jerk_into_world(self)
+		if gun.is_twirling() or not blaster.transform.is_equal_approx(rest_blaster):
+			_fail("twirl: a pain-jerk did not cancel the twirl")
+			ok = false
+	if ok:
+		gun.attach_to(hand)
+		gun.begin_spin()
+		gun.spin_omega = 10.0
+		var mult := float(GameManager.tuning["spin_visual_mult"])
+		for i in 4:
+			await get_tree().physics_frame
+		await get_tree().process_frame
+		if absf(gun.spin_omega) < 1.0 \
+				or absf(gun.twirl_speed / gun.spin_omega - mult) > 0.15 * mult:
+			_fail("twirl: hinge visual speed %.2f is not %.1fx spin_omega %.2f" % [
+					gun.twirl_speed, mult, gun.spin_omega])
+			ok = false
+		gun.end_spin(false)
+		await get_tree().create_timer(0.6).timeout
+		var turns := gun.twirl_angle / TAU
+		if gun.is_twirling() or absf(turns - roundf(turns)) > 0.001 \
+				or not blaster.transform.is_equal_approx(rest_blaster):
+			_fail("twirl: the hinge relock did not land on a whole turn (angle=%.3f twirling=%s spinning=%s carry=%s)" % [
+					gun.twirl_angle, gun.is_twirling(), gun.spinning, gun.carrying_spin])
+			ok = false
+	gun.queue_free()
+	hand.queue_free()
+	if ok:
+		print("AUTOTEST: twirl layer rotates only the blaster, fires from the rest muzzle, and relocks")
+	return ok
+
+
+## BUG-027: how far the hips may rise above the standing pose in a gravity-only collapse.
+const RAGDOLL_MAX_RISE := 0.03
+
+
 func _test_ragdoll() -> void:
 	await _sleep(0.5)
 	print("AUTOTEST: physics engine setting=%s, %d ticks/s" % [
@@ -846,8 +1403,8 @@ func _test_ragdoll() -> void:
 	var knee_range := Vector2(INF, -INF)
 	var elbow_range := Vector2(INF, -INF)
 	var max_time := float(GameManager.tuning["ragdoll_max_time"])
-	var deadline := Time.get_ticks_msec() + int((max_time + 1.0) * 1000.0)
-	while dummy.corpse_state() == BodyRagdoll.State.SIMULATING and Time.get_ticks_msec() < deadline:
+	var deadline := _clock_msec() + int((max_time + 1.0) * 1000.0)
+	while dummy.corpse_state() == BodyRagdoll.State.SIMULATING and _clock_msec() < deadline:
 		await get_tree().physics_frame
 		for i in joints.size():
 			var bend := _hinge_angle(dummy, joints[i][0], joints[i][1], joints[i][2]) - rest_bend[i]
@@ -875,6 +1432,13 @@ func _test_ragdoll() -> void:
 	var bodies := dummy.get_node("BodyRagdoll").get_child_count()
 	if bodies != 0:
 		return _fail("ragdoll: %d bodies or joints left after settling" % bodies)
+	# The ink hulls ride the fallen skeleton: same skin and skeleton, still shown.
+	if dummy._outline_parts.is_empty():
+		return _fail("ragdoll: the body has no outline children")
+	for line in dummy._outline_parts:
+		if line.skin != dummy._mesh.skin or line.get_node(line.skeleton) != skeleton \
+				or not line.is_visible_in_tree() or line.material_override == null:
+			return _fail("ragdoll: the corpse's %s outline left the skeleton or is hidden" % line.get_parent().name)
 	var held_chest := skeleton.get_bone_global_pose(chest_bone)
 	var start_pose := dummy._ragdoll.track_at(0.0)
 	var end_pose := dummy._ragdoll.track_at(dummy._ragdoll.track_length())
@@ -917,6 +1481,8 @@ func _test_ragdoll() -> void:
 	print("AUTOTEST: ragdoll core ok")
 	if not await _ragdoll_player_ok():
 		return
+	if not await _ragdoll_npc_floor_ok():
+		return
 	_pass()
 
 
@@ -937,6 +1503,9 @@ func _ragdoll_player_ok() -> bool:
 			CombatRules.REGION_TORSO)
 	if player.alive or not dummy.has_corpse():
 		_fail("ragdoll: the player's death made no corpse")
+		return false
+	if dummy._flash_times.size() != 1 or not is_equal_approx(float(dummy._skin_material.get_shader_parameter("flash")), 1.0):
+		_fail("ragdoll: the killing shot did not flash the body (%d logged)" % dummy._flash_times.size())
 		return false
 	if player.revolver.held or player.revolver.freeze:
 		_fail("ragdoll: the dead player's revolver is still held or frozen")
@@ -959,6 +1528,31 @@ func _ragdoll_player_ok() -> bool:
 		_fail("ragdoll: reset_for_duel left the player's corpse locked")
 		return false
 	print("AUTOTEST: player collapsed (chest dropped %.2f m), reset stands it up" % drop)
+	return true
+
+
+## BUG-027: an NPC on Main Street (arena 0) falls under gravity alone without the hips
+## first rising out of the ground.
+func _ragdoll_npc_floor_ok() -> bool:
+	GameManager.start_free_duel(0, 0)
+	if not await _wait_for_state(DuelManager.State.DRAW, 20.0):
+		_fail("ragdoll: NPC duel never reached DRAW")
+		return false
+	var dummy := GameManager.current_ais[0].corpse_body()
+	var start := dummy.bone_global(&"Hips").origin.y
+	var peak := 0.0
+	dummy.collapse(PackedVector3Array())
+	if not dummy.has_corpse():
+		_fail("ragdoll: the NPC collapse made no corpse")
+		return false
+	var deadline := _clock_msec() + int((float(GameManager.tuning["ragdoll_max_time"]) + 1.0) * 1000.0)
+	while dummy.corpse_state() == BodyRagdoll.State.SIMULATING and _clock_msec() < deadline:
+		await get_tree().physics_frame
+		peak = maxf(peak, dummy.bone_global(&"Hips").origin.y - start)
+	print("AUTOTEST: NPC ragdoll on Main Street, hips peak rise %.3f m" % peak)
+	if peak > RAGDOLL_MAX_RISE:
+		_fail("ragdoll: the NPC's hips rose %.3f m when it ragdolled" % peak)
+		return false
 	return true
 
 
@@ -1022,7 +1616,7 @@ func _chunks_ok() -> bool:
 	var ai := GameManager.current_ais[0]
 	var dummy := ai.corpse_body()
 	ai.health = 1000.0
-	if not _chunks_parse_ok(dummy) or not await _chunks_warmup_ok():
+	if not _chunks_parse_ok(dummy) or not _chunks_outline_ok(dummy) or not await _chunks_warmup_ok():
 		return false
 	await get_tree().physics_frame
 	await get_tree().physics_frame
@@ -1059,6 +1653,17 @@ func _chunks_ok() -> bool:
 		return false
 	print("AUTOTEST: chunks: bullet cut UpperArm.L (r %.3f), uniforms match, gib left %.3f m from the bone" % [
 			arm_cut["radius"], gap])
+	# Hit flash: the accepted hit logged one; flash() raises the skin uniform and never the hands'.
+	if dummy._flash_times.size() != 1:
+		_fail("chunks: the arm bullet logged %d flashes" % dummy._flash_times.size())
+		return false
+	dummy.flash(ReplayBuffer.clip_time())
+	var hand_flash: Variant = dummy._hand_material.get_shader_parameter("flash")
+	if not is_equal_approx(float(dummy._skin_material.get_shader_parameter("flash")), 1.0) 			or (hand_flash != null and float(hand_flash) != 0.0) 			or float(dummy._hand_material.get_shader_parameter("edge_strength")) != 0.0:
+		_fail("chunks: flash() skin %s hand %s" % [dummy._skin_material.get_shader_parameter("flash"), hand_flash])
+		return false
+	dummy._flash_times.pop_back()
+	dummy._flash_fired.pop_back()
 
 	# 5. chunk_chance 0 cuts nothing.
 	GameManager.tuning["chunk_chance"] = 0.0
@@ -1069,6 +1674,9 @@ func _chunks_ok() -> bool:
 	GameManager.tuning["chunk_chance"] = 1.0
 	if dummy.chunk_count() != 1 or events.size() != 1:
 		_fail("chunks: chunk_chance 0 still cut a hole")
+		return false
+	if dummy._flash_times.size() != 2:
+		_fail("chunks: a hit with an empty cut logged %d flashes, wanted 2" % dummy._flash_times.size())
 		return false
 
 	# 6. The gib settles: frozen, with a track, on the ground.
@@ -1221,15 +1829,113 @@ func _chunks_parse_ok(dummy: DummyBody) -> bool:
 		_fail("chunks: body and head do not wear the shared skin shader")
 		return false
 	for hand in dummy._hand_meshes:
-		if not hand.material_override is StandardMaterial3D:
-			_fail("chunks: a hand wears %s, not the solid material" % hand.material_override)
+		if hand.material_override != dummy._hand_material \
+				or dummy._hand_material == dummy._skin_material:
+			_fail("chunks: a hand wears %s, not its own banded skin" % hand.material_override)
 			return false
 	print("AUTOTEST: chunks: snap triangles (%s)" % ", ".join(line))
 	return true
 
 
-## 2. Boot warmup (skipped headless): a probe with both hole passes plus one frozen gib the
-## cap does not count.
+## 1b. Every part carries an "Outline" child: the cached welded copy on the part's skin and
+## skeleton, wearing the ink shader. The weld closes the flat-shaded cracks (one normal per
+## position) and keeps the part's vertex and index counts. The tuning knobs and the
+## first-person clip reach it.
+func _chunks_outline_ok(dummy: DummyBody) -> bool:
+	var welded: Dictionary = dummy._split.get("outline", {})
+	var parts: Array[MeshInstance3D] = [dummy._body_mesh, dummy._head_mesh]
+	parts.append_array(dummy._hand_meshes)
+	if dummy._outline_parts.size() != parts.size():
+		_fail("chunks: %d outline children for %d parts" % [dummy._outline_parts.size(), parts.size()])
+		return false
+	var cracked := 0
+	var worst := 0.0
+	for part in parts:
+		var line := part.get_node_or_null("Outline") as MeshInstance3D
+		var ink: ShaderMaterial = dummy._hand_outline_material if dummy._hand_meshes.has(part) else dummy._outline_material
+		if line == null or not dummy._outline_parts.has(line) or line.skin != part.skin \
+				or line.get_node(line.skeleton) != dummy._skeleton \
+				or line.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or line.layers != part.layers:
+			_fail("chunks: %s has no outline child on its skin and skeleton" % part.name)
+			return false
+		if line.material_override != ink or ink.shader != BodyChunks.OUTLINE_SHADER:
+			_fail("chunks: the %s outline wears %s, not its ink" % [part.name, line.material_override])
+			return false
+		if not welded.values().has(line.mesh):
+			_fail("chunks: the %s outline is not the cached welded mesh" % part.name)
+			return false
+		var source := part.mesh.surface_get_arrays(0)
+		var arrays := line.mesh.surface_get_arrays(0)
+		var verts: PackedVector3Array = source[Mesh.ARRAY_VERTEX]
+		if (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() != verts.size() \
+				or (arrays[Mesh.ARRAY_INDEX] as PackedInt32Array).size() != (source[Mesh.ARRAY_INDEX] as PackedInt32Array).size():
+			_fail("chunks: the %s outline changed the vertex or index count" % part.name)
+			return false
+		var was: PackedVector3Array = source[Mesh.ARRAY_NORMAL]
+		var now: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		var first_was := {}
+		var first_now := {}
+		for i in verts.size():
+			var cell := Vector3i((verts[i] / OutlineHull.WELD_EPSILON).round())
+			if not first_now.has(cell):
+				first_now[cell] = now[i]
+				first_was[cell] = was[i]
+				continue
+			worst = maxf(worst, (now[i] - (first_now[cell] as Vector3)).length())
+			if (was[i] - (first_was[cell] as Vector3)).length() > 0.1:
+				cracked += 1
+	if worst > 0.001:
+		_fail("chunks: welded outline normals at one position still differ by %.4f" % worst)
+		return false
+	if cracked == 0:
+		_fail("chunks: the source parts have no split normals, so the weld proves nothing")
+		return false
+	# The knobs: width on both inks, visibility on every child, clip on the body's ink only.
+	var saved_on: Variant = GameManager.tuning.get("outline_enabled", 1.0)
+	var saved_width: Variant = GameManager.tuning.get("outline_width", 0.004)
+	GameManager.tuning["outline_width"] = 0.01
+	GameManager.tuning_changed.emit("outline_width", 0.01)
+	var width_ok := is_equal_approx(float(dummy._outline_material.get_shader_parameter("width")), 0.01) \
+			and is_equal_approx(float(dummy._hand_outline_material.get_shader_parameter("width")), 0.01)
+	# The gun's lines (the duelists' revolvers) follow `object_outline_width` and `outline_enabled`.
+	var saved_object: Variant = GameManager.tuning.get("object_outline_width", OutlineHull.OBJECT_WIDTH)
+	GameManager.tuning["object_outline_width"] = 0.006
+	GameManager.tuning_changed.emit("object_outline_width", 0.006)
+	var object_ok := is_equal_approx(float(OutlineHull.gun_material().get_shader_parameter("width")), 0.006) \
+			and is_equal_approx(float(OutlineHull.ammo_material().get_shader_parameter("width")), 0.006)
+	GameManager.tuning["object_outline_width"] = saved_object
+	GameManager.tuning_changed.emit("object_outline_width", saved_object)
+	var gun_lines := get_tree().get_nodes_in_group(OutlineHull.GROUP)
+	GameManager.tuning["outline_enabled"] = 0.0
+	GameManager.tuning_changed.emit("outline_enabled", 0.0)
+	var hidden := dummy._outline_parts.all(func(line: MeshInstance3D) -> bool: return not line.visible)
+	var gun_hidden := not gun_lines.is_empty() and gun_lines.all(func(line: MeshInstance3D) -> bool: return not line.visible)
+	GameManager.tuning["outline_enabled"] = saved_on
+	GameManager.tuning["outline_width"] = saved_width
+	GameManager.tuning_changed.emit("outline_enabled", saved_on)
+	GameManager.tuning_changed.emit("outline_width", saved_width)
+	var shown := dummy._outline_parts.all(func(line: MeshInstance3D) -> bool: return line.visible)
+	var gun_shown := gun_lines.all(func(line: MeshInstance3D) -> bool: return line.visible)
+	if not width_ok or not hidden or not shown or not object_ok or not gun_hidden or not gun_shown:
+		_fail("chunks: outline knobs: width %s, hidden at 0 %s, shown again %s; gun width %s, hidden %s (%d lines), shown %s" % [
+				width_ok, hidden, shown, object_ok, gun_hidden, gun_lines.size(), gun_shown])
+		return false
+	var before := dummy._fp_clip
+	dummy.set_first_person_clip(true)
+	var body_clip := float(dummy._outline_material.get_shader_parameter("clip_radius"))
+	var hand_clip := float(dummy._hand_outline_material.get_shader_parameter("clip_radius"))
+	dummy.set_first_person_clip(before)
+	if body_clip != DummyBody.FP_CLIP_RADIUS or hand_clip != 0.0 \
+			or float(dummy._outline_material.get_shader_parameter("clip_radius")) != (DummyBody.FP_CLIP_RADIUS if before else 0.0):
+		_fail("chunks: outline clip body %.2f hand %.2f" % [body_clip, hand_clip])
+		return false
+	print("AUTOTEST: chunks: %d outline children, welded normals within %.5f (%d split in the source)" % [
+			parts.size(), worst, cracked])
+	return true
+
+
+## 2. Boot warmup (skipped headless): a probe with both hole passes and an ink hull child,
+## a plain probe with the held-object hull, plus one frozen gib the cap does not count.
 func _chunks_warmup_ok() -> bool:
 	var warm := Node3D.new()
 	add_child(warm)
@@ -1237,18 +1943,26 @@ func _chunks_warmup_ok() -> bool:
 	var warm_gibs := warm.get_children().filter(func(node: Node) -> bool: return node is BodyGib)
 	var probes := warm.get_children().filter(func(node: Node) -> bool: return node is MeshInstance3D)
 	var warm_count := warm.get_child_count()
+	var object_hull := (probes[1] as Node).get_node_or_null("Outline") as MeshInstance3D if probes.size() > 1 else null
+	var object_inked := object_hull != null and object_hull.material_override == OutlineHull.gun_material() \
+			and object_hull.skin == null
 	var warm_frozen := not warm_gibs.is_empty() and (warm_gibs[0] as BodyGib).freeze
 	var skin := (probes[0] as MeshInstance3D).material_override as ShaderMaterial if not probes.is_empty() else null
 	var passes := skin != null and skin.shader == BodyChunks.SKIN_SHADER and skin.next_pass != null \
 			and (skin.next_pass as ShaderMaterial).shader == BodyChunks.CAVITY_SHADER
+	var hull := (probes[0] as Node).get_node_or_null("Outline") as MeshInstance3D if not probes.is_empty() else null
+	var hull_ink := hull.material_override as ShaderMaterial if hull != null else null
+	var inked := hull_ink != null and hull_ink.shader == BodyChunks.OUTLINE_SHADER \
+			and int(hull_ink.get_shader_parameter("hole_count")) == 1
 	# Probe first: the headless renderer logs a null material if the gib goes before it.
 	await get_tree().process_frame
 	if not probes.is_empty():
 		(probes[0] as Node).free()
 	warm.free()
-	if warm_count != 2 or warm_gibs.size() != 1 or not warm_frozen or not passes or BodyGib.alive_count() != 0:
-		_fail("chunks: warmup drew %d nodes, %d gibs (frozen %s), both passes %s, %d counted" % [warm_count,
-				warm_gibs.size(), warm_frozen, passes, BodyGib.alive_count()])
+	if warm_count != 3 or warm_gibs.size() != 1 or not warm_frozen or not passes or not inked \
+			or not object_inked or BodyGib.alive_count() != 0:
+		_fail("chunks: warmup drew %d nodes, %d gibs (frozen %s), both passes %s, ink hull %s, object hull %s, %d counted" % [
+				warm_count, warm_gibs.size(), warm_frozen, passes, inked, object_inked, BodyGib.alive_count()])
 		return false
 	return true
 
@@ -1351,6 +2065,14 @@ func _chunks_uniforms_ok(dummy: DummyBody, label: String) -> bool:
 				or absf(hole.w - float(cuts[i]["radius"])) > 0.0001:
 			_fail("chunks: %s hole %d is %s, the cut is at %s r %.3f" % [label, i, hole, center, cuts[i]["radius"]])
 			return false
+	# The ink hull is cut by the same holes; the hands' ink never is.
+	var ink: ShaderMaterial = dummy._outline_material
+	if int(ink.get_shader_parameter("hole_count")) != count or ink.get_shader_parameter("holes") != holes \
+			or int(dummy._hand_outline_material.get_shader_parameter("hole_count")) != 0:
+		_fail("chunks: %s ink hull hole_count %d (skin %d), hands' ink %s" % [label,
+				int(ink.get_shader_parameter("hole_count")), count,
+				dummy._hand_outline_material.get_shader_parameter("hole_count")])
+		return false
 	return true
 
 
@@ -1363,10 +2085,17 @@ func _chunks_replay_ok(dummy: DummyBody, event: Dictionary, gib: BodyGib) -> boo
 	if dummy.chunk_count() != 0 or gib.visible or not _chunks_uniforms_ok(dummy, "replay begin"):
 		_fail("chunks: replay begin did not heal the hole and hide the gib")
 		return false
+	dummy._flash_tween.kill()
+	dummy._skin_material.set_shader_parameter("flash", 0.0)
 	dummy.chunks_replay_at(t_hit - 0.1)
-	if dummy.chunk_count() != 0 or gib.visible:
-		_fail("chunks: the hole opened before its clip time")
+	if dummy.chunk_count() != 0 or gib.visible 			or float(dummy._skin_material.get_shader_parameter("flash")) != 0.0:
+		_fail("chunks: the hole opened or the body flashed before its clip time")
 		return false
+	dummy.chunks_replay_at(t_hit + 0.001)
+	if not is_equal_approx(float(dummy._skin_material.get_shader_parameter("flash")), 1.0):
+		_fail("chunks: the replay did not re-flash at the hit")
+		return false
+	dummy._flash_tween.kill()
 	var since := minf(0.2, gib.track_length())
 	dummy.chunks_replay_at(t_hit + since)
 	if dummy.chunk_count() != 1 or not gib.visible or not _chunks_uniforms_ok(dummy, "replay pop") \
@@ -1511,6 +2240,11 @@ func _test_host() -> void:
 		return _fail("host: hosting did not open a waiting room with one open slot")
 	if NetworkManager.host_start():
 		return _fail("host: START worked with a slot still open")
+	if arena_arg >= 0:
+		if not NetworkManager.host_set_scenario(arena_arg) or GameManager.current_scenario_index != arena_arg:
+			return _fail("host: could not move the waiting room to --arena=%d" % arena_arg)
+		if not _arena_time_ok("host waiting room"):
+			return
 	print("AUTOTEST: hosting, waiting for peer...")
 	if not await _wait_for(func() -> bool: return NetworkManager.roster.can_start(), 40.0):
 		return _fail("no peer joined")
@@ -1554,6 +2288,9 @@ func _test_host() -> void:
 		return
 	if not await _assert_hitboxes_follow(avatar, avatar._dummy, "remote avatar"):
 		return
+	# The joiner's avatar of the host should draw the coin (checked in `_test_join`).
+	GameManager.local_player.props.equip_item(PropController.ITEM_COIN, false)
+	await _sleep(1.0)
 	print("AUTOTEST: MP DRAW reached, host shoots the avatar")
 	var result := _arm_duel_listener()
 	var head := avatar._dummy.bone_global(&"Head").origin
@@ -1596,12 +2333,25 @@ func _test_join() -> void:
 		return _fail("client: bad roster in the waiting room: %s" % roster.pack())
 	if not _lobby_tints_ok("client waiting room", 2):
 		return
+	if not _arena_time_ok("client waiting room"):
+		return
 	if not _client_page_ok("client"):
 		return
 	if NetworkManager.host_start():
 		return _fail("client: START must be host only")
 	print("AUTOTEST: client in the waiting room on slot 1, host is '%s'" % roster.slots[0]["name"])
-	var result := await _wait_duel_finished(60.0)
+	var result := _arm_duel_listener()
+	# The host holds a coin from DRAW on: its avatar here draws it from the pose stream.
+	var coin_seen := await _wait_for(func() -> bool:
+			var host_avatar := GameManager.actor_node(0) as RemoteAvatar  # rebuilt when the duel starts
+			return host_avatar != null and host_avatar._replay_objects != null \
+					and is_instance_valid(host_avatar._replay_objects._prop), 30.0)
+	if not coin_seen:
+		return _fail("client: the host's avatar never drew the coin the host carries")
+	print("AUTOTEST: client sees the host's carried coin")
+	if not _arena_time_ok("client duel"):
+		return
+	await _await_result(result, 60.0)
 	if result.is_empty():
 		return _fail("client never saw the duel resolve")
 	if result[0] != false:
@@ -2821,6 +3571,8 @@ func _lobby_spawns_ok() -> bool:
 		if not NetworkManager.host_set_scenario(arena) or GameManager.current_scenario_index != arena:
 			_fail("lobby: could not move the waiting room to arena %d" % arena)
 			return false
+		if not _arena_time_ok("lobby waiting room, arena %d" % arena):
+			return false
 		var scenario := GameManager.current_scenario
 		for count in [2, 3, 4]:
 			var spawns := scenario.get_duel_spawns(count)
@@ -3432,7 +4184,7 @@ func _lobby_spectate_kill_ok() -> bool:
 		_fail("lobby spectate: a 4-slot duel should record 4 actors with nobody watching yet")
 		return false
 	var head := local.get_head_position()
-	var died_at := Time.get_ticks_msec()
+	var died_at := _clock_msec()
 	local.take_bullet_hit(99.0, PackedVector3Array([head - Vector3.FORWARD, head]), CombatRules.REGION_HEAD,
 			false, false, 2)
 	if not result.is_empty() or duel.live_slots() != [1, 2, 3] or local.alive or KillCam.is_playing:
@@ -3450,7 +4202,7 @@ func _lobby_spectate_kill_ok() -> bool:
 	if not await _wait_for(func() -> bool: return DeathCam.spectate_target() != 0, LOBBY_SPECTATE_HOLD + 3.0):
 		_fail("lobby spectate: the hold on the own corpse never ended")
 		return false
-	var held := (Time.get_ticks_msec() - died_at) / 1000.0
+	var held := (_clock_msec() - died_at) / 1000.0
 	if held < LOBBY_SPECTATE_HOLD - 0.15 or not _watching(2) or not _orbit_on(DeathCam._chest(2)):
 		_fail("lobby spectate: after %.2f s the camera is on slot %d, not on the killer (slot 2) after the hold" % [
 				held, DeathCam.spectate_target()])
@@ -4282,7 +5034,7 @@ func _lobby_page_ok() -> bool:
 		_fail("lobby page: the pause root should offer a Lobby button")
 		return false
 	pause.lobby_button.pressed.emit()
-	if not pause.is_lobby_open() or pause.pause_root.visible or not pause.is_subpage_open():
+	if not pause.is_lobby_open() or not pause.is_subpage_open():
 		_fail("lobby page: the Lobby button did not open the page")
 		return false
 	pause.close()
@@ -4399,6 +5151,16 @@ func _lobby_vr_spectate_tag_ok() -> bool:
 
 ## What the saved host setup was when this process began, so a run leaves it as found.
 var _saved_lobby_setup := {}
+## Same for the saved off-hand pick, which the props suite changes through the radial.
+var _saved_offhand_item := "none"
+
+
+## Puts the real off-hand pick back, in memory and on disk, if a test changed it.
+func _restore_offhand_item() -> void:
+	if PlayerSettings.offhand_item == _saved_offhand_item:
+		return
+	PlayerSettings.offhand_item = _saved_offhand_item
+	PlayerSettings._save_config()
 
 
 func _lobby_setup_snapshot() -> Dictionary:
@@ -5164,11 +5926,19 @@ func _test_practice() -> void:
 		return _fail("flat menu backdrop is not frozen")
 	if GameManager.in_practice():
 		return _fail("flat menu loaded the hub instead of a duel arena")
+	# A saved off-hand pick stays out of the menu backdrop and comes back in the hub.
+	var local := GameManager.local_player
+	PlayerSettings.offhand_item = "coin"
+	local.reset_for_duel(local.global_transform)
+	if local.props.has_prop():
+		return _fail("the menu backdrop should not auto-equip the saved off-hand item")
 	GameManager.start_practice()
 	await _sleep(0.5)
 	var hub := GameManager.practice_hub()
 	if hub == null or GameManager.mode != GameManager.GameMode.PRACTICE:
 		return _fail("start_practice did not load the hub")
+	if local.props.equipped_item() != PropController.ITEM_COIN or not local.props.has_prop():
+		return _fail("practice should put the saved off-hand item in hand")
 	if hub.bottles().size() != 12:
 		return _fail("hub spawned %d bottles, expected 12" % hub.bottles().size())
 	if hub.slot_machine == null:
@@ -5210,6 +5980,17 @@ func _test_practice() -> void:
 		return _fail("porch deck is not at plank height (hit=%s)" % porch_hit)
 
 	var player := GameManager.local_player
+	player._holster_gun()
+	var holstered_refused := not player.twirl_allowed()
+	player._draw_gun()
+	var practice_allowed := player.twirl_allowed()
+	player.revolver.gate_open = true
+	var open_refused := not player.twirl_allowed()
+	player.revolver.gate_open = false
+	player._holster_gun()
+	if not (holstered_refused and practice_allowed and open_refused):
+		return _fail("practice: twirl gate wrong (holstered refused=%s, hub allowed=%s, gate open refused=%s)" % [
+				holstered_refused, practice_allowed, open_refused])
 	# Dropped revolver must rest on the planks, not the lot under them (BUG-011).
 	var gun := player.revolver
 	gun.axis_lock_angular_x = true
@@ -5317,6 +6098,8 @@ func _test_practice() -> void:
 ## cigarette, and catch it back onto the hand attach.
 func _test_props() -> void:
 	await _sleep(1.0)
+	# In memory only: a saved pick would put an item in the hand at the duel start.
+	PlayerSettings.offhand_item = "none"
 	GameManager.start_free_duel(0, 0)
 	await _sleep(1.0)
 	var player := GameManager.local_player
@@ -5395,7 +6178,147 @@ func _test_props() -> void:
 		return _fail("empty-hand wedge did not clear the prop")
 	if not await _bottle_ok():
 		return
+	if not await _offhand_persist_ok(player) or not await _remote_prop_ok():
+		return
 	_pass()
+
+
+## The wheel pick on `[props]`: saved by a radial pick only, put back silently by every duel,
+## wave, and restart reset, kept raw when unknown, and held back outside the play modes.
+## The real settings file is restored by `_restore_offhand_item` on pass or fail.
+func _offhand_persist_ok(player: Player) -> bool:
+	var props := player.props
+	var hand := player.off_hand_name()
+	var coin_wedge := PropController.ITEMS.find_custom(func(item: Dictionary) -> bool: return item["id"] == PropController.ITEM_COIN)
+	if PlayerSettings.offhand_item != "none":
+		_fail("offhand: equip_item alone must not change the saved pick (%s)" % PlayerSettings.offhand_item)
+		return false
+	var toasts := [0]
+	GameManager.hud.message_shown.connect(func(_text: String) -> void: toasts[0] += 1)
+	# 1-2: a radial pick saves, and the next duel starts with it, silently.
+	if not _pick_wheel(props, hand, coin_wedge) or PlayerSettings.offhand_item != "coin":
+		_fail("offhand: the coin pick was not saved (%s)" % PlayerSettings.offhand_item)
+		return false
+	toasts[0] = 0
+	player.reset_for_duel(player.global_transform)
+	if props.equipped_item() != PropController.ITEM_COIN or not props.has_prop() or toasts[0] != 0:
+		_fail("offhand: a new duel should put the saved coin in hand with no toast (%s, %d toasts)" % [
+				props.equipped_item(), toasts[0]])
+		return false
+	if PlayerSettings.offhand_item != "coin":
+		_fail("offhand: the auto-equip must not rewrite the saved pick")
+		return false
+	# 3: Empty Hand is a pick too.
+	if not _pick_wheel(props, hand, 0) or PlayerSettings.offhand_item != "none":
+		_fail("offhand: Empty Hand was not saved")
+		return false
+	player.reset_for_duel(player.global_transform)
+	if props.equipped_item() != PropController.ITEM_NONE or props.has_prop():
+		_fail("offhand: a saved Empty Hand should start the duel empty")
+		return false
+	# 4: a shattered bottle is replaced by a fresh one, and the saved pick is untouched.
+	if not _pick_wheel(props, hand, PropController.ITEMS.size() - 1) or PlayerSettings.offhand_item != "bottle":
+		_fail("offhand: the bottle pick was not saved")
+		return false
+	var bottle := props.current_prop() as Longneck
+	var shot: WeakRef = weakref(bottle)
+	bottle.take_bullet(bottle.center(), Vector3.FORWARD)
+	if not await _wait_freed(shot, 1.0):
+		_fail("offhand: the shot bottle did not shatter")
+		return false
+	player.reset_for_duel(player.global_transform)
+	if not (props.current_prop() is Longneck) or not props.is_prop_in_hand() or PlayerSettings.offhand_item != "bottle":
+		_fail("offhand: a new duel should hand over a fresh bottle after one shattered")
+		return false
+	# 5: the horde wave reset puts a lost item back.
+	_pick_wheel(props, hand, PropController.ITEMS.find_custom(func(item: Dictionary) -> bool: return item["id"] == PropController.ITEM_CIGARETTE))
+	props.equip_item(PropController.ITEM_NONE, false)
+	player.reset_for_wave()
+	if props.equipped_item() != PropController.ITEM_CIGARETTE or not props.has_prop():
+		_fail("offhand: reset_for_wave should put the saved cigarette back")
+		return false
+	# 6: an unknown id loads without error, equips nothing, and survives the next save raw.
+	var path := "user://autotest_offhand.cfg"
+	PlayerSettings.offhand_item = "revolver_cannon"
+	PlayerSettings._save_config(path)
+	PlayerSettings.offhand_item = "none"
+	PlayerSettings._load_config(path)
+	player.reset_for_duel(player.global_transform)
+	var resaved := "user://autotest_offhand_resaved.cfg"
+	PlayerSettings._save_config(resaved)
+	var cfg := ConfigFile.new()
+	var kept: bool = cfg.load(resaved) == OK and cfg.get_value("props", "item", "") == "revolver_cannon"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(resaved))
+	if PlayerSettings.offhand_item != "revolver_cannon" or props.equipped_item() != PropController.ITEM_NONE \
+			or props.has_prop() or not kept:
+		_fail("offhand: an unknown saved id should load raw, equip nothing, and survive a save")
+		return false
+	# 7: outside the play modes the saved pick stays in the file but the hand stays empty.
+	PlayerSettings.offhand_item = "coin"
+	var mode_was := GameManager.mode
+	for blocked in [GameManager.GameMode.MENU, GameManager.GameMode.MESH_LAB, GameManager.GameMode.BOOT,
+			GameManager.GameMode.MULTIPLAYER]:  # MP with no running duel is the waiting room
+		GameManager.mode = blocked
+		player.reset_for_duel(player.global_transform)
+		props.restore_saved_item()
+		if props.has_prop() or props.equipped_item() != PropController.ITEM_NONE:
+			GameManager.mode = mode_was
+			_fail("offhand: mode %d must not auto-equip the saved item" % blocked)
+			return false
+	GameManager.mode = mode_was
+	player.reset_for_duel(player.global_transform)
+	if props.equipped_item() != PropController.ITEM_COIN:
+		_fail("offhand: the saved coin should return once the mode allows it")
+		return false
+	print("AUTOTEST: offhand pick saved, restored silently, gated by mode")
+	return true
+
+
+## One wheel pick through the real radial path (open, aim at `index`, release).
+func _pick_wheel(props: PropController, hand: StringName, index: int) -> bool:
+	props.on_radial_changed(hand, true)
+	if not props.is_radial_open() or index < 0:
+		return false
+	props._radial_index = index
+	props.on_radial_changed(hand, false)
+	return props.equipped_item() == PropController.ITEMS[index]["id"]
+
+
+## A peer's avatar draws the streamed off-hand prop (held or loose) and never the reload round.
+func _remote_prop_ok() -> bool:
+	var prop_bits := ReplayBuffer.PROP_COIN | (ReplayBuffer.PROP_PLACE_HAND << ReplayBuffer.PROP_PLACE_SHIFT)
+	if RemoteAvatar.PROP_WORD_MASK & ReplayBuffer.ROUND_HELD != 0 \
+			or (prop_bits | ReplayBuffer.ROUND_HELD) & RemoteAvatar.PROP_WORD_MASK != prop_bits:
+		_fail("remote prop: the objects mask should keep the prop id and place and drop the round")
+		return false
+	var avatar := (load("res://player/remote_avatar.tscn") as PackedScene).instantiate() as RemoteAvatar
+	add_child(avatar)
+	await get_tree().process_frame
+	var id := Transform3D.IDENTITY
+	var at := Transform3D(Basis.IDENTITY, Vector3(0.4, 1.2, -0.3))
+	avatar.apply_pose(id, id, id, 0, id, 0, prop_bits | ReplayBuffer.ROUND_HELD, at, at)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var ghost := avatar._replay_objects
+	var problem := ""
+	if ghost == null or not is_instance_valid(ghost._prop) or not ghost._prop.global_transform.origin.is_equal_approx(at.origin):
+		problem = "a streamed coin was not drawn where the peer holds it"
+	elif ghost._round != null:
+		problem = "the held reload round must not be drawn"
+	elif ghost._prop.find_child(OutlineHull.OUTLINE_NAME, true, false) == null:
+		problem = "the streamed coin has no ink line"
+	avatar.apply_pose(id, id, id, 0, id, 0, 0)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if problem.is_empty() and ghost._prop != null:
+		problem = "an empty objects word should clear the drawn prop"
+	avatar.queue_free()
+	if not problem.is_empty():
+		_fail("remote prop: " + problem)
+		return false
+	print("AUTOTEST: remote avatar draws the carried prop")
+	return true
 
 
 ## Instantiate every scene and load every resource the flat tests don't cover.
@@ -5412,10 +6335,12 @@ func _test_load_all() -> void:
 		"res://props/cigarette.tscn",
 		"res://props/coin.tscn",
 		"res://props/ace.tscn",
+		"res://props/bottle.tscn",
 		"res://scenarios/main_street/main_street.tscn",
 		"res://scenarios/saloon/saloon.tscn",
 		"res://scenarios/train_rooftop/train_rooftop.tscn",
 		"res://scenarios/canyon/canyon.tscn",
+		OILFIELD_SCENE,
 		"res://scenarios/practice_hub/practice_hub.tscn",
 		"res://practice/practice_bottle.tscn",
 		"res://practice/slot_machine.tscn",
@@ -5432,8 +6357,29 @@ func _test_load_all() -> void:
 				var count := 0 if scenery == null else scenery.get_child_count()
 				instance.queue_free()
 				return _fail("train rooftop scenery belt built %d pieces" % count)
+			if not _engine_smoke_ok(instance, ENGINE_SMOKE_SILVER):
+				instance.queue_free()
+				return
+		if path == OILFIELD_SCENE:
+			if not _oilfield_belt_ok(instance) or not _engine_smoke_ok(instance, OILFIELD_SMOKE):
+				instance.queue_free()
+				return
+		if instance is ScenarioBase and GameManager.SCENARIOS.has(path.replace(".tscn", ".tres")) \
+					and (instance as ScenarioBase).get_menu_cameras().is_empty():
+				instance.queue_free()
+				return _fail("%s has no MenuCameras markers for the menu backdrop" % path)
 		instance.queue_free()
 		print("AUTOTEST: loaded %s" % path)
+	if not _spin_fx_ok() or not await _twirl_remote_ok() or not _bullet_trail_ok():
+		return
+	if not _object_outline_ok() or not await _ammo_outline_ok():
+		return
+	if not _puff_cues_ok():
+		return
+	if not _world_globals_ok():
+		return
+	if not _world_surface_ok():
+		return
 	var resources: Array = []
 	resources.append_array(GameManager.SCENARIOS)
 	resources.append_array(GameManager.ARCHETYPES)
@@ -5444,8 +6390,8 @@ func _test_load_all() -> void:
 			return _fail("resource failed to load: %s" % path)
 		print("AUTOTEST: loaded %s" % path)
 	var ladder: GauntletLadder = load(GameManager.GAUNTLET_LADDER)
-	if ladder.encounters.size() != 7:
-		return _fail("ladder has %d encounters, expected 7" % ladder.encounters.size())
+	if ladder.encounters.size() != 8:
+		return _fail("ladder has %d encounters, expected 8" % ladder.encounters.size())
 	if not _main_menu_split_ok():
 		return
 	if not _lobby_settings_ok() or not _lobby_setup_ok():
@@ -5464,7 +6410,13 @@ func _test_load_all() -> void:
 		return
 	if not _leave_rejoin_ok():
 		return
-	if not _time_of_day_ok():
+	if not _time_of_day_ok() or not _fixed_time_ok():
+		return
+	if not await _wind_ok():
+		return
+	if not await _shot_pool_ok():
+		return
+	if not await _vr_rig_ok():
 		return
 	if not ImpactFeedback.has_warmed_up():
 		return _fail("boot warmup did not run")
@@ -5473,8 +6425,656 @@ func _test_load_all() -> void:
 	_pass()
 
 
+## The revolver and the four offhand props wear the ink line: every model mesh has an
+## "Outline" child on the shared gun material, a welded unskinned copy with the host's vertex
+## count, no shadow, the host's layers. The drum's line sits under `CylinderPivot`; the
+## greybox meshes the model hides get none. Headless skips the compile: wiring only.
+func _object_outline_ok() -> bool:
+	var shapes := {
+		"res://weapons/revolver/revolver.tscn": 2,
+		"res://props/coin.tscn": 1,
+		"res://props/ace.tscn": 1,
+		"res://props/bottle.tscn": 1,
+		"res://props/cigarette.tscn": 1,
+	}
+	var lines := 0
+	for path: String in shapes:
+		var root: Node = (load(path) as PackedScene).instantiate()
+		add_child(root)
+		var model := root.get_node("Model")
+		var hosts: Array[MeshInstance3D] = []
+		if model is MeshInstance3D:
+			hosts.append(model as MeshInstance3D)
+		for node in model.find_children("*", "MeshInstance3D", true, false):
+			if node.name != OutlineHull.OUTLINE_NAME:
+				hosts.append(node as MeshInstance3D)
+		var problem := _outline_child_problem(hosts, OutlineHull.gun_material(), true)
+		if problem.is_empty() and hosts.size() != shapes[path]:
+			problem = "%d model meshes, expected %d" % [hosts.size(), shapes[path]]
+		if problem.is_empty() and path.ends_with("revolver.tscn"):
+			if root.get_node_or_null("Model/WPN_PSX_Blaster/CylinderPivot/Cylinder/Outline") == null:
+				problem = "the drum's line is not under CylinderPivot"
+			elif root.get_node("Barrel").get_node_or_null(OutlineHull.OUTLINE_NAME) != null:
+				problem = "the hidden greybox barrel wears a line"
+		root.queue_free()
+		if not problem.is_empty():
+			_fail("object outline: %s: %s" % [path, problem])
+			return false
+		lines += hosts.size()
+	print("AUTOTEST: object outline: %d lines on the gun and props" % lines)
+	return true
+
+
+## "" when every host has an "Outline" child on `material`: the cached welded copy with the
+## host's vertex count, unskinned, no shadow, the host's layers, and in the gun group or not.
+func _outline_child_problem(hosts: Array[MeshInstance3D], material: ShaderMaterial, grouped: bool) -> String:
+	if hosts.is_empty():
+		return "no model mesh"
+	for host in hosts:
+		var line := host.get_node_or_null(OutlineHull.OUTLINE_NAME) as MeshInstance3D
+		if line == null:
+			return "%s has no Outline child" % host.name
+		if line.material_override != material or material.shader != BodyChunks.OUTLINE_SHADER:
+			return "%s's line wears %s" % [host.name, line.material_override]
+		if line.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or line.layers != host.layers \
+				or line.skin != null:
+			return "%s's line has shadow %d, layers %d, skin %s" % [host.name, line.cast_shadow, line.layers, line.skin]
+		if line.is_in_group(OutlineHull.GROUP) != grouped:
+			return "%s's line group membership is wrong" % host.name
+		var source := 0
+		for s in host.mesh.get_surface_count():
+			source += (host.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+		var arrays := line.mesh.surface_get_arrays(0)
+		var count := (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+		if line.mesh.get_surface_count() != 1 or count != source \
+				or (arrays[Mesh.ARRAY_BONES] != null and not (arrays[Mesh.ARRAY_BONES] as PackedInt32Array).is_empty()):
+			return "%s's welded copy has %d surfaces, %d vertices for %d" % [host.name,
+					line.mesh.get_surface_count(), count, source]
+		if line.mesh != OutlineHull.weld_cached(host.mesh):
+			return "%s's line is not the cached hull" % host.name
+	return ""
+
+
+## Casings and cartridges wear a line on the brass material. Only the newest `AMMO_LINE_CAP`
+## keep it (the thirteenth hides the oldest), and one past `AMMO_LINE_RANGE` of the camera is
+## hidden on the next refresh.
+func _ammo_outline_ok() -> bool:
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.current = true
+	var casing_scene := load("res://weapons/shell_casing_placeholder.tscn") as PackedScene
+	var round_scene := load("res://weapons/cartridge_physical.tscn") as PackedScene
+	var pieces: Array[Node] = []
+	var problem := ""
+	for scene: PackedScene in [casing_scene, round_scene]:
+		var piece := scene.instantiate()
+		add_child(piece)
+		pieces.append(piece)
+		problem = _outline_child_problem([piece.get_node("Mesh") as MeshInstance3D], OutlineHull.ammo_material(), false)
+		if not problem.is_empty():
+			break
+	for piece in pieces:
+		piece.free()
+	pieces.clear()
+	if problem.is_empty() and not OutlineHull.ammo_lines().is_empty():
+		problem = "%d ammo lines survived freeing their pieces" % OutlineHull.ammo_lines().size()
+	var spawned: Array[MeshInstance3D] = []
+	for i in OutlineHull.AMMO_LINE_CAP + 1:
+		if not problem.is_empty():
+			break
+		var casing := casing_scene.instantiate() as Node3D
+		add_child(casing)
+		pieces.append(casing)
+		spawned.append(casing.get_node("Mesh/Outline") as MeshInstance3D)
+		if OutlineHull.ammo_lines().size() > OutlineHull.AMMO_LINE_CAP:
+			problem = "%d ammo lines after %d pieces" % [OutlineHull.ammo_lines().size(), i + 1]
+	if problem.is_empty():
+		var live := OutlineHull.ammo_lines()
+		if spawned[0].visible or live.has(spawned[0]) or live.size() != OutlineHull.AMMO_LINE_CAP \
+				or live[0] != spawned[1] or not spawned.back().visible:
+			problem = "the thirteenth piece did not hide the oldest line (%d live, oldest visible %s)" % [
+					live.size(), spawned[0].visible]
+	if problem.is_empty():
+		var newest := pieces.back() as Node3D
+		newest.global_position = Vector3(0.0, 0.0, -2.0)
+		OutlineHull.refresh_ammo()
+		var near_shown: bool = spawned.back().visible
+		var far := OutlineHull.AMMO_LINE_RANGE + 2.0
+		newest.global_position = Vector3(0.0, 0.0, -far)
+		OutlineHull.refresh_ammo()
+		var far_shown: bool = spawned.back().visible
+		if not near_shown or far_shown:
+			problem = "range: line at 2 m shown %s, at %.0f m shown %s" % [near_shown, far, far_shown]
+	for piece in pieces:
+		piece.free()
+	camera.free()
+	if not problem.is_empty():
+		_fail("ammo outline: " + problem)
+		return false
+	print("AUTOTEST: ammo outline: cap %d, range %.0f m" % [OutlineHull.AMMO_LINE_CAP, OutlineHull.AMMO_LINE_RANGE])
+	return true
+
+
+## The spin effect is a ShaderMaterial on the spin shader, the revolver carries the quad, and
+## its F3 mode is a saved tunable. Headless skips shader compiles: wiring only.
+func _spin_fx_ok() -> bool:
+	var mat := SpinFx.make_material()
+	if mat == null or mat.shader != SpinFx.SHADER:
+		_fail("spin fx material is not a ShaderMaterial on spin_fx.gdshader")
+		return false
+	var gun := load("res://weapons/revolver/revolver.tscn").instantiate() as Revolver
+	add_child(gun)
+	var fx := gun.get_node_or_null("SpinFx") as SpinFx
+	var mode := int(GameManager.tuning.get("spin_fx_mode", -1))
+	var quad_ok := fx != null and fx.mesh is QuadMesh and fx.material_override is ShaderMaterial \
+			and not fx.visible
+	gun.queue_free()
+	if not quad_ok or mode < 0:
+		_fail("spin fx: revolver is missing a hidden SpinFx quad or spin_fx_mode is not saved")
+		return false
+	return true
+
+
+## POSE_FLAG_GUN_TWIRL: the local player sets it while twirling, and a peer's avatar turns the
+## blaster on its own. A VR hinge spin with the flag stays in the hand; without it the gun
+## still follows the streamed world pose.
+func _twirl_remote_ok() -> bool:
+	var player := GameManager.local_player
+	if player != null:
+		player.revolver.begin_twirl()
+		var flagged := player.pose_flags() & NetworkManager.POSE_FLAG_GUN_TWIRL != 0
+		player.revolver._reset_twirl()
+		if not flagged or player.pose_flags() & NetworkManager.POSE_FLAG_GUN_TWIRL != 0:
+			_fail("twirl flag: pose_flags did not follow the local twirl")
+			return false
+	var avatar := (load("res://player/remote_avatar.tscn") as PackedScene).instantiate() as RemoteAvatar
+	add_child(avatar)
+	await get_tree().process_frame
+	var gun := avatar.gun as Revolver
+	var id := Transform3D.IDENTITY
+	var drawn := NetworkManager.POSE_FLAG_GUN_DRAWN
+	var twirl := NetworkManager.POSE_FLAG_GUN_TWIRL
+	var spin := NetworkManager.POSE_FLAG_GUN_SPINNING
+	var problem := ""
+	avatar.apply_pose(id, id, id, drawn | twirl)
+	for i in 8:
+		await get_tree().process_frame
+	if not gun.is_twirling() or gun.get_parent() != avatar.right_hand:
+		problem = "a peer's twirl flag did not turn its drawn gun"
+	avatar.apply_pose(id, id, id, drawn | spin | twirl)
+	await get_tree().process_frame
+	if problem.is_empty() and (not gun.follow_parent or not gun.is_twirling()):
+		problem = "a VR spin with the twirl flag should stay hand-parented and twirl"
+	avatar.apply_pose(id, id, id, drawn | spin)
+	await get_tree().process_frame
+	if problem.is_empty() and gun.follow_parent:
+		problem = "a spin without the twirl flag should still follow the streamed pose"
+	avatar.apply_pose(id, id, id, drawn)
+	await get_tree().create_timer(0.6).timeout
+	if problem.is_empty() and gun.is_twirling():
+		problem = "clearing the twirl flag did not ease the peer's gun to rest"
+	avatar.queue_free()
+	if not problem.is_empty():
+		_fail("twirl flag: " + problem)
+		return false
+	return true
+
+
+## The trail is a ShaderMaterial on the trail shader and its ribbon carries UVs
+## (UV.y 0 at the tail, 1 at the bullet). Headless skips shader compiles: wiring only.
+func _bullet_trail_ok() -> bool:
+	var mat := BulletTrail.make_material(Color.WHITE)
+	if mat == null or mat.shader != BulletTrail.SHADER:
+		_fail("bullet trail material is not a ShaderMaterial on bullet_trail.gdshader")
+		return false
+	var trail := BulletTrail.new()
+	add_child(trail)
+	for i in 4:
+		trail.add_point(Vector3(0.0, 0.0, -float(i)))
+	trail._rebuild_ribbon()
+	var arrays := (trail.mesh as ImmediateMesh).surface_get_arrays(0)
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var lo := 1.0
+	var hi := 0.0
+	for uv in uvs:
+		lo = minf(lo, uv.y)
+		hi = maxf(hi, uv.y)
+	trail.queue_free()
+	if uvs.size() != 8 or not is_zero_approx(lo) or not is_equal_approx(hi, 1.0):
+		_fail("bullet trail ribbon UVs: %d verts, UV.y %.2f..%.2f" % [uvs.size(), lo, hi])
+		return false
+	var slug := Bullet.spawn(self, Vector3.ZERO, Vector3.FORWARD, 1.0, false, [], false)
+	var slug_mesh := slug.get_children().filter(func(n: Node) -> bool: return n is MeshInstance3D)
+	var casts := slug_mesh.is_empty() \
+			or (slug_mesh[0] as MeshInstance3D).cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	slug._expire()
+	if casts:
+		_fail("bullet slug casts a shadow; the boot warmup draws it without one")
+		return false
+	return true
+
+
+## The world shader globals are declared in project.godot, and F3 `band_low` / `band_soft`
+## reach them (one value for skin, cavity, hands, and the world). The headless renderer keeps
+## the declared names but returns null on a read, so the value is compared only when it exists.
+func _world_globals_ok() -> bool:
+	# `global_shader_parameter_get_list` is editor-only on GLES3, so read the project setting.
+	for key in ["band_low", "band_soft", "grain_strength_mult", "grain_scale_mult",
+			"sheet_mix", "wind_ambient", "wind_gust", "smoke_fog_near", "smoke_fog_far", "smoke_fog_color"]:
+		if not ProjectSettings.has_setting("shader_globals/" + key):
+			_fail("shader global %s is not declared in project.godot" % key)
+			return false
+	var saved_low: float = GameManager.tuning["band_low"]
+	GameManager.set_tuning("band_low", 0.4)
+	# The getter is editor-only on GLES3 and logs an error in a windowed run.
+	var pushed: Variant = null
+	if DisplayServer.get_name() == "headless":
+		pushed = RenderingServer.global_shader_parameter_get(&"band_low")
+	GameManager.set_tuning("band_low", saved_low)
+	if pushed != null and not is_equal_approx(float(pushed), 0.4):
+		_fail("band_low tuning did not reach the shader global (%s)" % pushed)
+		return false
+	var ramp: Array[float] = [float(ProjectSettings.get_setting("shader_globals/smoke_fog_near")["value"]),
+			float(ProjectSettings.get_setting("shader_globals/smoke_fog_far")["value"])]
+	if ramp != [150.0, 300.0]:
+		_fail("the smoke / flame fog ramp is %s, expected [150, 300] (F11)" % [ramp])
+		return false
+	print("AUTOTEST: world shader globals declared; band tuning drives them")
+	return true
+
+
+## Every scenario GLB surface (the five scenes, which also hold the Train Rooftop belt's GLB
+## instances) wears `world_surface.gdshader`: the swap is made at import, so a missing
+## reimport shows up here as a StandardMaterial3D. Sway sits only on plants and hay, the hinge
+## only on the four named slabs, and collision proxies stay bare. The trim sheet is paused
+## (`USE_TRIM_SHEET` in the import script): while it is off no surface uses it, and when it is on a
+## surface takes it exactly when its mesh has UVs and its material is not tiling ground or rock.
+## A surface with a hand-painted GLB image (`use_albedo_tex`) must have UVs, an `albedo_tex`, and
+## no sheet; zero painted surfaces is fine (no PNG exists yet). `self_lit` sits exactly on the
+## importer's `SELF_LIT` names (`M_Flame`, `M_LampGlass`; at least one, the Saloon chandelier), and a
+## mesh casts no shadow exactly when all its surfaces are self-lit. Headless skips the compile.
+func _world_surface_ok() -> bool:
+	var shader := load("res://assets/shaders/world_surface.gdshader") as Shader
+	var sheet := load("res://assets/textures/trim_sheet.png") as Texture2D
+	var importer := load("res://assets/shaders/world_surface_import.gd") as Script
+	var trim_on: bool = importer != null and importer.get_script_constant_map().get("USE_TRIM_SHEET", false) == true
+	var painted := 0
+	var tiling := ["M_Sand", "M_SandFar", "M_Dirt", "M_DirtFar", "M_Rock", "M_RockDark", "M_Cap",
+			"M_CapDark"]
+	var sheeted := 0
+	const SHEET_SURFACES_MIN := 1500
+	var plants := ["M_Yucca", "M_Scrub", "M_ScrubDry", "M_Hay"]
+	var glow_names := ["M_Flame", "M_LampGlass"]
+	var smoke_shader := load("res://assets/shaders/world_smoke.gdshader") as Shader
+	var importer_smoke: Variant = importer.get_script_constant_map().get("SMOKE") if importer != null else null
+	if importer_smoke == null or (importer_smoke as Array).map(func(n: StringName) -> String: return String(n)) != ["M_Smoke"]:
+		_fail("world_surface_import.gd SMOKE is %s, expected [M_Smoke]" % [importer_smoke])
+		return false
+	var smoky := 0
+	var importer_glow: Variant = importer.get_script_constant_map().get("SELF_LIT") if importer != null else null
+	if importer_glow == null or (importer_glow as Array).map(func(n: StringName) -> String: return String(n)) != glow_names:
+		_fail("world_surface_import.gd SELF_LIT is %s, expected %s" % [importer_glow, glow_names])
+		return false
+	var glowing := 0
+	var slabs := [&"Sign", &"PorchSign", &"Canopy", &"ShedAwning"]
+	var hinged := {}
+	var swayed := 0
+	var surfaces := 0
+	for path in [
+		"res://scenarios/main_street/main_street.tscn",
+		"res://scenarios/saloon/saloon.tscn",
+		"res://scenarios/train_rooftop/train_rooftop.tscn",
+		"res://scenarios/canyon/canyon.tscn",
+		OILFIELD_SCENE,
+		"res://scenarios/practice_hub/practice_hub.tscn",
+	]:
+		var instance := (load(path) as PackedScene).instantiate()
+		add_child(instance)
+		for node in instance.find_children("*", "MeshInstance3D", true, false):
+			var mi := node as MeshInstance3D
+			# A flame column rides a GLB's anchor but wears its own shader (flame_column.gdshader).
+			if mi.mesh == null or mi is FlameColumn or not _in_scenario_glb(mi):
+				continue
+			var lit_surfaces := 0
+			var self_lit_surfaces := 0
+			var smoke_surfaces := 0
+			for surface in mi.mesh.get_surface_count():
+				var mat := mi.get_active_material(surface)
+				if mat == null:
+					continue
+				var label := "%s %s surface %d" % [path.get_file(), mi.name, surface]
+				# M_Smoke wears its own shader (fog_disabled is static: the ramp cannot live in the world shader).
+				var is_smoke := mat is ShaderMaterial and String(mat.resource_name).get_slice("__", 0) == "M_Smoke"
+				if is_smoke:
+					if (mat as ShaderMaterial).shader != smoke_shader:
+						_fail("%s is M_Smoke but not on world_smoke.gdshader" % label)
+						return false
+					smoke_surfaces += 1
+					smoky += 1
+					continue
+				surfaces += 1
+				if not (mat is ShaderMaterial and (mat as ShaderMaterial).shader == shader):
+					_fail("%s is not on world_surface.gdshader (reimport the GLBs?)" % label)
+					return false
+				var sm := mat as ShaderMaterial
+				var self_lit: bool = sm.get_shader_parameter("self_lit") == true
+				if self_lit != glow_names.has(String(sm.resource_name).get_slice("__", 0)):
+					_fail("%s self_lit is %s on %s" % [label, self_lit, sm.resource_name])
+					return false
+				if self_lit:
+					self_lit_surfaces += 1
+					glowing += 1
+				else:
+					lit_surfaces += 1
+				if sm.get_shader_parameter("grain_local") != true:
+					_fail("%s does not use grain_local" % label)
+					return false
+				var sway: Variant = sm.get_shader_parameter("sway_amount")
+				var swaying: bool = sway != null and float(sway) > 0.0
+				if swaying != plants.has(String(sm.resource_name).get_slice("__", 0)):
+					_fail("%s sway_amount does not follow its material %s" % [label, sm.resource_name])
+					return false
+				if swaying:
+					swayed += 1
+					var on_belt: bool = path.ends_with("train_rooftop.tscn") or path == OILFIELD_SCENE
+					if on_belt and instance.get_node("Scenery").is_ancestor_of(mi):
+						_fail("%s: a belt piece sways" % label)
+						return false
+				var hinge: Variant = sm.get_shader_parameter("hinge_amount")
+				var hinging: bool = hinge != null and float(hinge) > 0.0
+				if hinging != slabs.has(StringName(mi.name)):
+					_fail("%s hinge_amount does not follow its node name" % label)
+					return false
+				if hinging:
+					hinged[mi.name] = true
+				var has_uv := (mi.mesh as ArrayMesh).surface_get_format(surface) & Mesh.ARRAY_FORMAT_TEX_UV != 0
+				var base_name := String(sm.resource_name).get_slice("__", 0)
+				var wants_sheet := trim_on and has_uv and not tiling.has(base_name)
+				var on_sheet: bool = sm.get_shader_parameter("use_sheet") == true
+				if sm.get_shader_parameter("use_albedo_tex") == true:
+					painted += 1
+					if not has_uv or on_sheet or not (sm.get_shader_parameter("albedo_tex") is Texture2D):
+						_fail("%s is painted but has_uv %s, use_sheet %s, albedo_tex %s" % [
+								label, has_uv, on_sheet, sm.get_shader_parameter("albedo_tex")])
+						return false
+					if tiling.has(base_name):
+						_fail("%s: tiling material %s is painted" % [label, sm.resource_name])
+						return false
+					continue
+				if on_sheet != wants_sheet:
+					_fail("%s use_sheet is %s but has_uv is %s on %s" % [
+							label, on_sheet, has_uv, sm.resource_name])
+					return false
+				if on_sheet:
+					sheeted += 1
+					if sm.get_shader_parameter("sheet_tex") != sheet:
+						_fail("%s sheet_tex is not trim_sheet.png" % label)
+						return false
+			# A mesh that is all glow casts no shadow; every other mesh still does.
+			var all_glow := self_lit_surfaces + smoke_surfaces > 0 and lit_surfaces == 0
+			var no_shadow := mi.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			if all_glow != no_shadow:
+				_fail("%s %s: %d self-lit and %d lit surfaces, cast_shadow %d" % [
+						path.get_file(), mi.name, self_lit_surfaces, lit_surfaces, mi.cast_shadow])
+				return false
+		for body in instance.find_children("*", "StaticBody3D", true, false):
+			if _in_scenario_glb(body) and body.find_children("*", "MeshInstance3D", false, false).size() > 0:
+				_fail("%s collision proxy %s grew a mesh" % [path.get_file(), body.name])
+				return false
+		instance.queue_free()
+	# The plumes are gone (Roadmap Ideas parks them): the M_Smoke path stays, with no surface on it.
+	if smoky != 0:
+		_fail("world surface: %d M_Smoke surfaces, but the oil field's plumes were removed" % smoky)
+		return false
+	if surfaces < 500 or swayed == 0 or glowing == 0 or hinged.size() != slabs.size():
+		_fail("world surface: %d surfaces, %d swaying, %d self-lit, hinges on %s" % [
+				surfaces, swayed, glowing, hinged.keys()])
+		return false
+	if trim_on and sheeted < SHEET_SURFACES_MIN:
+		_fail("world surface: only %d surfaces take the trim sheet" % sheeted)
+		return false
+	print("AUTOTEST: %d scenario surfaces wear world_surface.gdshader (%d sway, %d self-lit, %d hand-painted, %d on the trim sheet (%s), hinges %s); %d M_Smoke surfaces (the plumes are removed; the smoke path stays)" % [
+			surfaces, swayed, glowing, painted, sheeted, "on" if trim_on else "paused", hinged.keys(), smoky])
+	return true
+
+
+## True under an instanced scenario GLB (a scene or a belt piece), not for nodes authored in a .tscn.
+func _in_scenario_glb(node: Node) -> bool:
+	var parent := node.get_parent()
+	while parent != null:
+		var file := parent.scene_file_path
+		if file.ends_with(".glb"):
+			return file.contains("/models/scenarios/")
+		parent = parent.get_parent()
+	return false
+
+
+## The smoke and dust cues draw puff.gdshader on a QuadMesh with a spin range, so the
+## shader reads an angle and the scale is the puff diameter. Wiring only: headless skips compiles.
+func _puff_cues_ok() -> bool:
+	var shader := load("res://assets/vfx/puff.gdshader") as Shader
+	if shader == null:
+		_fail("puff.gdshader failed to load")
+		return false
+	for cue in [&"muzzle_smoke", &"world_dust", &"barrel_smoke", &"engine_smoke"]:
+		var node := (load("res://assets/vfx/%s.tscn" % cue) as PackedScene).instantiate() as GPUParticles3D
+		var mesh := node.draw_pass_1 as QuadMesh
+		var mat := mesh.material as ShaderMaterial if mesh != null else null
+		var proc := node.process_material as ParticleProcessMaterial
+		var ok := mat != null and mat.shader == shader and proc != null 				and proc.angle_max > proc.angle_min and proc.scale_curve != null
+		node.free()
+		if not ok:
+			_fail("%s does not draw puff.gdshader on a quad with a spin range" % cue)
+			return false
+	return true
+
+
+## The stack plume on both trains (Roadmap 2.2): a looping, non-casting `puff.gdshader` emitter on
+## the crown, with a process material of its own tinted `tint` (silver on Train Rooftop, dark on
+## the oil field, sheet F8), and F3 `engine_smoke_density` driving the count only.
+func _engine_smoke_ok(arena: Node, tint: Color) -> bool:
+	var smoke := arena.get_node_or_null("EngineSmoke") as GPUParticles3D
+	if smoke == null:
+		_fail("%s has no EngineSmoke" % arena.name)
+		return false
+	if not (smoke.process_material as ParticleProcessMaterial).color.is_equal_approx(tint):
+		_fail("%s EngineSmoke puffs are %s, expected %s" % [arena.name,
+				(smoke.process_material as ParticleProcessMaterial).color, tint])
+		return false
+	var mesh := smoke.draw_pass_1 as QuadMesh
+	var mat := mesh.material as ShaderMaterial if mesh != null else null
+	var shader := load("res://assets/vfx/puff.gdshader") as Shader
+	if smoke.one_shot or not smoke.emitting or mat == null or mat.shader != shader \
+			or smoke.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+		_fail("EngineSmoke is not a looping, non-casting puff.gdshader emitter")
+		return false
+	if smoke.position.distance_to(Vector3(0.0, 4.40, -54.25)) > 0.05:
+		_fail("EngineSmoke sits at %s, not on the stack crown" % smoke.position)
+		return false
+	var plain := (load("res://assets/vfx/engine_smoke.tscn") as PackedScene).instantiate() as GPUParticles3D
+	var shared := plain.process_material == smoke.process_material
+	plain.free()
+	if shared:
+		_fail("EngineSmoke shares its process material across instances")
+		return false
+	var saved: float = GameManager.tuning["engine_smoke_density"]
+	var results: Array[float] = []
+	var emitting: Array[bool] = []
+	for density in [0.0, 3.0, saved]:
+		GameManager.set_tuning("engine_smoke_density", density)
+		results.append(smoke.amount_ratio)
+		emitting.append(smoke.emitting)
+	if not is_zero_approx(results[0]) or emitting[0] or not is_equal_approx(results[1], 1.0) \
+			or not emitting[1] or not is_equal_approx(results[2], saved / 3.0) or not emitting[2]:
+		_fail("engine_smoke_density does not drive the plume count (ratios %s, emitting %s)" % [results, emitting])
+		return false
+	return true
+
+
+## Per-shot cues must not allocate GPU nodes mid-duel (Roadmap 1.3): a finished
+## `muzzle_smoke` / `barrel_smoke` parks and the next shot reuses that node, and a
+## revolver builds its muzzle light once and only hides it between shots.
+func _shot_pool_ok() -> bool:
+	for cue in [&"muzzle_smoke", &"barrel_smoke"]:
+		var first := VfxCatalog.spawn(cue, self, Vector3.ZERO) as OneShotParticles
+		var base_lifetime := first.lifetime
+		# The finish signal may not fire headless; the node's own safety timer parks it.
+		await get_tree().create_timer(base_lifetime * 2.0 + 1.0, true, false, true).timeout
+		if first.get_parent() != VfxCatalog._pool_root:
+			_fail("%s did not park after its burst" % cue)
+			return false
+		var second := VfxCatalog.spawn(cue, self, Vector3.ZERO, Vector3.UP, 1.0, 2.0) as OneShotParticles
+		var reused := second == first and is_equal_approx(second.lifetime, base_lifetime * 2.0)
+		second.free()
+		if not reused:
+			_fail("%s: the next shot instanced a new node instead of reusing the parked one" % cue)
+			return false
+	var gun := (load("res://weapons/revolver/revolver.tscn") as PackedScene).instantiate() as WeaponBase
+	add_child(gun)
+	gun._muzzle_flash()
+	var light := gun._flash_light
+	gun._muzzle_flash()
+	var one_light := light != null and light == gun._flash_light and gun.find_children("*", "OmniLight3D", true, false).size() == 1
+	gun.free()
+	if not one_light:
+		_fail("muzzle flash builds a new light per shot")
+		return false
+	return true
+
+
 ## Outdoor times recolor the sky but keep the fog distances and shadow fade
 ## that hide the canyon plain and the train belt. Saloon has no sun.
+## Outdoor arenas build a wind bed and gust timer from their ScenarioResource; the
+## Saloon builds none. A forced gust spawns the `wind_gust` cue and a 3D player.
+func _wind_ok() -> bool:
+	var paths: Array[String] = GameManager.SCENARIOS.duplicate()
+	paths.append(GameManager.PRACTICE_HUB)
+	for path in paths:
+		var res := load(path) as ScenarioResource
+		var instance := res.scene.instantiate() as ScenarioBase
+		instance.scenario_resource = res
+		add_child(instance)
+		var wind := res.wind_volume_db > ScenarioBase.WIND_OFF_DB
+		if instance.has_wind() != wind or (instance._wind_player != null) != wind:
+			instance.queue_free()
+			_fail("%s wind setup does not match its resource" % res.display_name)
+			return false
+		# `world_surface.gdshader` sway: the wind globals follow the arena, and zero in the Saloon.
+		if (instance.get_wind_ambient() > 0.0) != instance.has_wind() or instance.get_wind_gust() != 0.0:
+			instance.queue_free()
+			_fail("%s wind globals: ambient %.2f, gust %.2f, wind %s" % [res.display_name,
+					instance.get_wind_ambient(), instance.get_wind_gust(), instance.has_wind()])
+			return false
+		if wind:
+			var saved_scale: float = GameManager.tuning["sway_scale"]
+			GameManager.set_tuning("sway_scale", 0.0)
+			var held := instance.get_wind_ambient()
+			GameManager.set_tuning("sway_scale", saved_scale)
+			if held != 0.0 or instance.get_wind_ambient() <= 0.0:
+				instance.queue_free()
+				_fail("%s sway_scale does not scale the ambient wind" % res.display_name)
+				return false
+			var before := instance.get_child_count()
+			var smoke := instance.get_node_or_null("EngineSmoke") as GPUParticles3D
+			var calm_gravity := (smoke.process_material as ParticleProcessMaterial).gravity if smoke != null else Vector3.ZERO
+			instance.fire_gust()
+			await get_tree().process_frame
+			await get_tree().process_frame
+			if smoke != null:
+				var shoved := (smoke.process_material as ParticleProcessMaterial).gravity
+				if shoved.x >= calm_gravity.x or not is_equal_approx(shoved.y, calm_gravity.y):
+					instance.queue_free()
+					_fail("%s gust did not shove the engine smoke toward -X" % res.display_name)
+					return false
+			if instance.get_wind_gust() <= 0.0:
+				instance.queue_free()
+				_fail("%s gust did not pulse wind_gust" % res.display_name)
+				return false
+			var gust := false
+			var spatial := false
+			for child in instance.get_children():
+				gust = gust or (child is OneShotParticles and child.name == &"WindGust")
+				spatial = spatial or child is AudioStreamPlayer3D
+			if instance.get_child_count() != before + 2 or not gust or not spatial:
+				instance.queue_free()
+				_fail("%s forced gust did not spawn dust and a 3D player" % res.display_name)
+				return false
+		instance.queue_free()
+	print("AUTOTEST: wind bed and gusts follow the scenario resource")
+	return true
+
+
+## BUG-024: the VR head lands on the spawn whatever the playspace offset, waits for
+## tracking, and stick walking slides along Train Rooftop's side guard wall. Headless
+## has no XR interface, so the camera keeps the pose the test writes.
+func _vr_rig_ok() -> bool:
+	var arena := (load("res://scenarios/train_rooftop/train_rooftop.tscn") as PackedScene) \
+			.instantiate() as ScenarioBase
+	add_child(arena)
+	var body := Node3D.new()
+	add_child(body)
+	var rig := (load("res://player/vr_rig.tscn") as PackedScene).instantiate() as VRRig
+	body.add_child(rig)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var ok := await _vr_rig_checks(arena, body, rig)
+	body.queue_free()
+	arena.queue_free()
+	return ok
+
+
+func _vr_rig_checks(arena: ScenarioBase, body: Node3D, rig: VRRig) -> bool:
+	# EnemySpawn is yawed 180Â°: the joiner's facing must survive the recentre too.
+	for spawn: Transform3D in [arena.get_enemy_spawn(), arena.get_player_spawn()]:
+		body.global_transform = spawn
+		rig.camera.position = Vector3(1.8, 1.6, 0.9)
+		rig.camera.rotation = Vector3(0.0, 0.7, 0.0)
+		rig.reset_locomotion()
+		if not _vr_head_on_spawn(rig, spawn, "offset playspace"):
+			return false
+	var spawn := arena.get_player_spawn()
+	rig.camera.position = Vector3(1.2, 0.0, -0.6)
+	rig.reset_locomotion()
+	if not rig._spawn_align_pending:
+		_fail("vr rig: an untracked head did not defer the spawn alignment")
+		return false
+	rig.camera.position.y = 1.6
+	# process_frame fires before nodes process: the second one follows the rig's _process.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if rig._spawn_align_pending:
+		_fail("vr rig: the deferred spawn alignment never ran once tracked")
+		return false
+	if not _vr_head_on_spawn(rig, spawn, "deferred"):
+		return false
+	# GuardSideR's inner face is x = 1.64; the 0.28 m capsule must stop by 1.36.
+	var start_z := rig.camera.global_position.z
+	for i in 40:
+		rig.global_position += rig.collide_stick_motion(Vector3(0.1, 0.0, -0.05))
+	var head := rig.camera.global_position
+	if head.x > 1.4:
+		_fail("vr rig: stick walked through GuardSideR (head x %.2f)" % head.x)
+		return false
+	if start_z - head.z < 1.0:
+		_fail("vr rig: stick stuck on GuardSideR instead of sliding (z moved %.2f)" % (start_z - head.z))
+		return false
+	print("AUTOTEST: vr rig recentres on spawn, stick slides on the guard wall (x %.2f, z -%.2f)"
+			% [head.x, start_z - head.z])
+	return true
+
+
+func _vr_head_on_spawn(rig: VRRig, spawn: Transform3D, label: String) -> bool:
+	var head := rig.camera.global_position
+	var off := Vector2(head.x - spawn.origin.x, head.z - spawn.origin.z).length()
+	var look := -rig.camera.global_basis.z
+	var want := -spawn.basis.z
+	var facing := Vector2(look.x, look.z).normalized().dot(Vector2(want.x, want.z).normalized())
+	if off > 0.01 or facing < 0.999:
+		_fail("vr rig (%s): head %.2f m off the spawn, facing dot %.3f" % [label, off, facing])
+		return false
+	return true
+
+
 func _time_of_day_ok() -> bool:
 	var outdoor := [
 		"res://scenarios/main_street/main_street.tscn",
@@ -5483,6 +7083,9 @@ func _time_of_day_ok() -> bool:
 	]
 	for path in outdoor:
 		if not _outdoor_time_ok(path):
+			return false
+	for path in ["res://scenarios/practice_hub/practice_hub.tscn", GameManager.MESH_LAB_SCENE]:
+		if not _sky_scene_ok(path):
 			return false
 	if not _saloon_time_ok():
 		return false
@@ -5493,15 +7096,22 @@ func _time_of_day_ok() -> bool:
 func _outdoor_time_ok(path: String) -> bool:
 	var instance := (load(path) as PackedScene).instantiate() as ScenarioBase
 	add_child(instance)
+	if _sky_shader(instance) == null:
+		instance.queue_free()
+		_fail("%s sky is not sky_western.gdshader" % path)
+		return false
 	var snap := _horizon_snapshot(instance)
+	var cover := -1.0
+	var offset := Vector2.ZERO
 	for t in [0.0, 0.5, 1.0]:
 		instance.apply_time(t)
 		if not _horizon_unchanged(instance, snap, path):
 			instance.queue_free()
 			return false
 		var world := instance.get_node("WorldEnvironment") as WorldEnvironment
-		var mat := world.environment.sky.sky_material as ProceduralSkyMaterial
-		if not world.environment.fog_light_color.is_equal_approx(mat.ground_horizon_color):
+		var mat := _sky_shader(instance)
+		var ground: Color = mat.get_shader_parameter(&"ground_horizon")
+		if not world.environment.fog_light_color.is_equal_approx(ground):
 			instance.queue_free()
 			_fail("%s fog tint drifted from the sky ground at t=%.1f" % [path, t])
 			return false
@@ -5515,6 +7125,26 @@ func _outdoor_time_ok(path: String) -> bool:
 			instance.queue_free()
 			_fail("%s sun yaw moved off the authored azimuth" % path)
 			return false
+		var want_cloud := sun.light_color.lerp(Color.WHITE, TimeOfDay.CLOUD_WHITE_MIX)
+		var got_cloud: Color = mat.get_shader_parameter(&"cloud_color")
+		if not got_cloud.is_equal_approx(want_cloud):
+			instance.queue_free()
+			_fail("%s cloud tint does not follow the sun color at t=%.1f" % [path, t])
+			return false
+		var rolled := float(mat.get_shader_parameter(&"cloud_cover"))
+		var rolled_offset: Vector2 = mat.get_shader_parameter(&"cloud_offset")
+		if cover < 0.0:
+			cover = rolled
+			offset = rolled_offset
+			if cover < ScenarioBase.CLOUD_COVER_MIN - 0.001 \
+					or cover > ScenarioBase.CLOUD_COVER_MAX + 0.001:
+				instance.queue_free()
+				_fail("%s cloud cover %.2f is outside the rolled band" % [path, cover])
+				return false
+		elif not is_equal_approx(rolled, cover) or not rolled_offset.is_equal_approx(offset):
+			instance.queue_free()
+			_fail("%s cloud roll changed while scrubbing time of day" % path)
+			return false
 		if t == 0.0 or t == 1.0:
 			var elev := rad_to_deg(asin(clampf(sun.global_transform.basis.z.y, -1.0, 1.0)))
 			var expect: float = TimeOfDay.DUSK_ELEVATION_DEG
@@ -5524,8 +7154,54 @@ func _outdoor_time_ok(path: String) -> bool:
 				instance.queue_free()
 				_fail("%s sun elevation %.1f, expected %.1f" % [path, elev, expect])
 				return false
+	var ok := _cloud_drift_ok(instance, path)
 	instance.queue_free()
+	return ok
+
+
+## The deck moves `cloud_speed` per second in one direction, wraps inside [0, 1), and
+## stops (no `_process`) at speed 0.
+func _cloud_drift_ok(instance: ScenarioBase, path: String) -> bool:
+	var mat := _sky_shader(instance)
+	var before: Vector2 = mat.get_shader_parameter(&"cloud_offset")
+	instance._process(1.0)
+	var after: Vector2 = mat.get_shader_parameter(&"cloud_offset")
+	var moved := Vector2(wrapf(after.x - before.x, -0.5, 0.5), wrapf(after.y - before.y, -0.5, 0.5))
+	if absf(moved.length() - instance.cloud_speed) > 0.0005:
+		_fail("%s clouds drifted %.4f in 1 s, expected %.4f" % [path, moved.length(), instance.cloud_speed])
+		return false
+	if after.x < 0.0 or after.x >= 1.0 or after.y < 0.0 or after.y >= 1.0:
+		_fail("%s cloud offset %s left [0, 1)" % [path, after])
+		return false
+	instance.set_cloud_speed(0.0)
+	instance._process(1.0)
+	var frozen: Vector2 = mat.get_shader_parameter(&"cloud_offset")
+	if instance.is_processing() or not frozen.is_equal_approx(after):
+		_fail("%s clouds still drift at cloud_speed 0" % path)
+		return false
 	return true
+
+
+## Scenes the time test does not instance (the hub and the mesh lab spin up gameplay on
+## `_ready`): only check that their sky is the western shader.
+func _sky_scene_ok(path: String) -> bool:
+	var instance := (load(path) as PackedScene).instantiate()
+	var ok := _sky_shader(instance) != null
+	instance.free()
+	if not ok:
+		_fail("%s sky is not sky_western.gdshader" % path)
+	return ok
+
+
+func _sky_shader(root: Node) -> ShaderMaterial:
+	var world := root.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if world == null or world.environment == null or world.environment.sky == null:
+		return null
+	var mat := world.environment.sky.sky_material as ShaderMaterial
+	if mat == null or mat.shader == null \
+			or not mat.shader.resource_path.ends_with("sky_western.gdshader"):
+		return null
+	return mat
 
 
 func _saloon_time_ok() -> bool:
@@ -5542,7 +7218,8 @@ func _saloon_time_ok() -> bool:
 			and is_equal_approx(lamp.light_energy, energy) \
 			and lamp.light_color.is_equal_approx(color) \
 			and env.background_color.is_equal_approx(background) \
-			and is_equal_approx(env.ambient_light_energy, ambient)
+			and is_equal_approx(env.ambient_light_energy, ambient) \
+			and not instance.is_processing()
 	instance.queue_free()
 	if not unchanged:
 		_fail("saloon lighting changed with time of day")
@@ -5550,9 +7227,542 @@ func _saloon_time_ok() -> bool:
 	return true
 
 
+const OILFIELD_TRES := "res://scenarios/oilfield_train/oilfield_train.tres"
+const OILFIELD_SCENE := "res://scenarios/oilfield_train/oilfield_train.tscn"
+## The plume tints (sheet F8): `engine_smoke.tscn`'s silver, and the oil field's dark smoke.
+const ENGINE_SMOKE_SILVER := Color(0.561, 0.549, 0.525)
+const OILFIELD_SMOKE := Color(0.2275, 0.1725, 0.149)
+## Belt copies: 90 tracks, 20 near and 12 mid pumpjacks, 32 horizon tiles, 2 burning wells, 10 derricks, 8 tanks,
+## 8 pylons, 24 pipe runs, 16 wellheads, 16 sumps (sheet B, The belt; C steps 1, 3, 4, 5, 6, and 7).
+const OILFIELD_BELT_PIECES := 238
+const OILFIELD_WELLHEADS := 16
+const OILFIELD_SUMPS := 16
+const OILFIELD_PYLONS := 8
+const OILFIELD_PIPE_RUNS := 24
+const OILFIELD_DERRICKS := 10
+const OILFIELD_TANKS := 8
+const OILFIELD_PUMPJACKS := 32
+const OILFIELD_TILES := 32
+const OILFIELD_WELLS := 2
+
+
+## The live arena's t: the resource's fixed one where it has one (the oil field), else a roll
+## in [0, 1). Every load path ends here: single player, the host's waiting room through its
+## call_local RPC, and a joiner applying the host's value.
+func _arena_time_ok(label: String) -> bool:
+	var res := load(GameManager.SCENARIOS[GameManager.current_scenario_index]) as ScenarioResource
+	var t := GameManager.current_scenario.time_of_day
+	var fixed := res.fixed_time_of_day
+	if (fixed >= 0.0 and not is_equal_approx(t, fixed)) or (fixed < 0.0 and (t < 0.0 or t >= 1.0)):
+		_fail("%s: %s time of day %.3f (fixed %.2f)" % [label, res.display_name, t, fixed])
+		return false
+	print("AUTOTEST: %s: %s at time of day %.2f" % [label, res.display_name, t])
+	return true
+
+
+## Oil-field Train's fixed night (Roadmap 3.3). Only it fixes t, at `TimeOfDay.NIGHT_T`; the
+## value an MP host sends is that t on every pick while the other arenas roll in [0, 1); a
+## load given that value (the client's path) keeps it, with the night point's sun, sky, fog,
+## and own cloud colour; the clouds stay as authored; and t 1 is still exactly dusk.
+func _fixed_time_ok() -> bool:
+	var oil := GameManager.SCENARIOS.find(OILFIELD_TRES)
+	if oil != GameManager.SCENARIOS.size() - 1:
+		_fail("the oil field should be the last SCENARIOS entry (index %d)" % oil)
+		return false
+	for i in GameManager.SCENARIOS.size():
+		var arena_res := load(GameManager.SCENARIOS[i]) as ScenarioResource
+		if (i == oil) != (arena_res.fixed_time_of_day >= 0.0):
+			_fail("%s fixed_time_of_day is %.2f" % [arena_res.display_name, arena_res.fixed_time_of_day])
+			return false
+		for n in 16:
+			var t := GameManager.roll_time_of_day(i)
+			var bad := not is_equal_approx(t, TimeOfDay.NIGHT_T) if i == oil else (t < 0.0 or t >= 1.0)
+			if bad:
+				_fail("%s: the host would send time of day %.3f" % [arena_res.display_name, t])
+				return false
+	var dusk: Dictionary = TimeOfDay.KEYFRAMES[3]
+	if TimeOfDay._sample(1.0) != dusk or TimeOfDay._sample(0.5).has("cloud_color"):
+		_fail("time of day: t 1 is no longer exactly dusk, or a day sample sets its own cloud colour")
+		return false
+	var night: Dictionary = TimeOfDay.KEYFRAMES[TimeOfDay.KEYFRAMES.size() - 1]
+	var res := load(OILFIELD_TRES) as ScenarioResource
+	var instance := res.scene.instantiate() as ScenarioBase
+	instance.scenario_resource = res
+	instance.time_of_day = GameManager.roll_time_of_day(oil)
+	add_child(instance)
+	var problem := _night_problem(instance, night)
+	if problem.is_empty():
+		# F3 scrubs past the night point clamp to it, never back into dawn to dusk.
+		instance.apply_time(9.0)
+		if not is_equal_approx(instance.time_of_day, TimeOfDay.T_MAX):
+			problem = "an F3 scrub to 9 left t at %.2f" % instance.time_of_day
+	instance.queue_free()
+	if not problem.is_empty():
+		_fail("oil field night: " + problem)
+		return false
+	print("AUTOTEST: oil field holds its fixed night (t %.2f); every other arena rolls in [0, 1)" % TimeOfDay.NIGHT_T)
+	return true
+
+
+func _night_problem(instance: ScenarioBase, night: Dictionary) -> String:
+	if not is_equal_approx(instance.time_of_day, TimeOfDay.NIGHT_T):
+		return "t %.3f after load" % instance.time_of_day
+	var sun := instance.get_node("Sun") as DirectionalLight3D
+	var toward := sun.global_transform.basis.z
+	var elev := rad_to_deg(asin(clampf(toward.y, -1.0, 1.0)))
+	if absf(elev - TimeOfDay.NIGHT_ELEVATION_DEG) > 0.05 or toward.x > -0.99:
+		return "the key sits at elevation %.2f toward %s, not 1 degree under the -x horizon" % [elev, toward]
+	if sun.shadow_enabled or not sun.light_color.is_equal_approx(night["light_color"]) \
+			or not is_equal_approx(sun.light_energy, night["light_energy"]):
+		return "the key is %s at %.2f, shadows %s" % [sun.light_color, sun.light_energy, sun.shadow_enabled]
+	if not is_equal_approx(BulletTrail.solid, night["trail_solid"]):
+		return "trail_solid %.2f" % BulletTrail.solid
+	var mat := _sky_shader(instance)
+	var env := (instance.get_node("WorldEnvironment") as WorldEnvironment).environment
+	for key: StringName in [&"sky_top", &"sky_horizon", &"ground_bottom", &"ground_horizon", &"cloud_color"]:
+		if not (mat.get_shader_parameter(key) as Color).is_equal_approx(night[key]):
+			return "sky %s is %s" % [key, mat.get_shader_parameter(key)]
+	if not env.fog_light_color.is_equal_approx(night["ground_horizon"]) \
+			or not is_equal_approx(env.fog_sun_scatter, night["fog_sun_scatter"]):
+		return "fog %s scatter %.2f" % [env.fog_light_color, env.fog_sun_scatter]
+	if not is_equal_approx(env.fog_density, 0.006):
+		return "fog density %.4f, not the thin 0.006 of the light tuning" % env.fog_density
+	if not is_equal_approx(float(mat.get_shader_parameter(&"cloud_cover")), 0.4) \
+			or not (mat.get_shader_parameter(&"cloud_offset") as Vector2).is_equal_approx(Vector2(0.37, 0.61)):
+		return "the clouds rolled (cover %.2f, offset %s)" % [
+				mat.get_shader_parameter(&"cloud_cover"), mat.get_shader_parameter(&"cloud_offset")]
+	return ""
+
+
+## The oil field's belt (sheet B, The belt; C step 1): every copy built, every pumpjack with
+## its own `WalkingBeam` at the bearing, no collision left on a copy, and the beam clock
+## rocking them in three phase groups within 12 degrees.
+func _oilfield_belt_ok(arena: Node) -> bool:
+	var belt := arena.get_node_or_null("Scenery")
+	if belt == null or belt.get_child_count() != OILFIELD_BELT_PIECES:
+		_fail("oil field belt built %d pieces, expected %d" % [
+				0 if belt == null else belt.get_child_count(), OILFIELD_BELT_PIECES])
+		return false
+	var beams: Array[Node3D] = []
+	var tiles := 0
+	# The plumes were removed (Roadmap Ideas parks them): no tile or well carries a Plume node.
+	if not belt.find_children("Plume_*", "", true, false).is_empty():
+		_fail("oil field: the belt still carries a Plume node")
+		return false
+	for piece in belt.get_children():
+		if piece.find_child("Flame_1", true, false) != null:
+			tiles += 1
+			for anchor_name in ["Flame_1", "Flame_2", "Flame_3"]:
+				var anchor := piece.find_child(anchor_name, true, false) as Node3D
+				if anchor == null or anchor.get_child_count() > 1 or not anchor.scale.is_equal_approx(Vector3.ONE) 						or anchor.position.y <= 0.0 or anchor.position.y > 6.0:
+					_fail("oil field: horizon tile %s has a bad %s" % [piece.name, anchor_name])
+					return false
+			for part in ["Horizon_Rock", "Horizon_RockDark", "Horizon_Flame", "Horizon_LampGlass"]:
+				if piece.find_child(part, true, false) == null:
+					_fail("oil field: horizon tile %s lacks %s" % [piece.name, part])
+					return false
+		var beam := piece.find_child("WalkingBeam", true, false) as Node3D
+		if beam != null:
+			if not beam.position.is_equal_approx(Vector3(0.0, 4.0, 0.0)):
+				_fail("oil field: %s WalkingBeam sits at %s, not the bearing" % [piece.name, beam.position])
+				return false
+			beams.append(beam)
+		for body in piece.find_children("*", "CollisionObject3D", true, false):
+			if (body as CollisionObject3D).collision_layer != 0:
+				_fail("oil field: belt piece %s keeps collision on %s" % [piece.name, body.name])
+				return false
+	if beams.size() != OILFIELD_PUMPJACKS:
+		_fail("oil field belt has %d walking beams, expected %d" % [beams.size(), OILFIELD_PUMPJACKS])
+		return false
+	# At the cycle's start the groups stand at sin 0, 120 and 240 degrees of the swing.
+	belt.call(&"set_beams", 0.0)
+	var swing := deg_to_rad(12.0)
+	var lift := swing * sin(TAU / 3.0)
+	var angles: Array[float] = [beams[0].rotation.z, beams[1].rotation.z, beams[2].rotation.z]
+	if not is_zero_approx(angles[0]) or absf(angles[1] - lift) > 0.0001 or absf(angles[2] + lift) > 0.0001 \
+			or not is_equal_approx(beams[3].rotation.z, angles[0]):
+		_fail("oil field beams do not nod in three phase groups: %s" % [angles])
+		return false
+	for beam in beams:
+		if absf(beam.rotation.z) > swing + 0.001:
+			_fail("oil field beam %s swings %.1f degrees" % [beam.get_path(), rad_to_deg(beam.rotation.z)])
+			return false
+	if tiles != OILFIELD_TILES:
+		_fail("oil field belt has %d horizon tiles, expected %d" % [tiles, OILFIELD_TILES])
+		return false
+	# The wells check moves the wells, so the mid band is measured first.
+	if not _flame_cues_ok(belt) or not _mid_rigs_ok(belt) or not _wrap_rows_ok(belt) or not _near_dressing_ok(belt):
+		return false
+	if not _burning_wells_ok(arena, belt):
+		return false
+	print("AUTOTEST: oil field belt: %d pieces, %d nodding pumpjacks, %d horizon tiles" % [
+			belt.get_child_count(), beams.size(), tiles])
+	return true
+
+
+## The horizon's flame columns (sheet H, Flame cue and smoke): 12 lit anchors (8 on the left, 4 on the
+## right) each carry one `FlameColumn` of their anchor's size, F3 `flame_columns` 0 hides every column
+## (and 1 brings them back), and the cue is in `VfxCatalog` (so the boot warmup compiles it). The two
+## burning wells' columns are checked in `_burning_wells_ok`.
+func _flame_cues_ok(belt: Node) -> bool:
+	const SIZES := {"Flame_1": Vector2(18.0, 60.0), "Flame_2": Vector2(11.2, 35.0), "Flame_3": Vector2(6.2, 15.0)}
+	var columns: Array[FlameColumn] = []
+	var left := 0
+	var right := 0
+	for piece in belt.get_children():
+		if piece.find_child("Flame_1", true, false) == null:
+			continue
+		var lit := 0
+		for anchor_name: String in SIZES:
+			var anchor := piece.find_child(anchor_name, true, false) as Node3D
+			var cues := anchor.find_children("*", "MeshInstance3D", false, false).filter(func(c: Node) -> bool: return c is FlameColumn)
+			if cues.size() > 1:
+				_fail("oil field: %s %s has %d columns" % [piece.name, anchor_name, cues.size()])
+				return false
+			if cues.size() == 1:
+				var cue := cues[0] as FlameColumn
+				var want: Vector2 = SIZES[anchor_name]
+				if not cue.scale.is_equal_approx(Vector3(want.x * FlameColumn.WIDTH_SLACK, want.y, 1.0)) or cue.position != Vector3.ZERO:
+					_fail("oil field: %s column on %s is scaled %s, wanted %s" % [piece.name, anchor_name, cue.scale, want])
+					return false
+				lit += 1
+				columns.append(cue)
+				if piece.position.x < 0.0:
+					left += 1
+				else:
+					right += 1
+		if lit > 1:
+			_fail("oil field: tile %s burns %d anchors" % [piece.name, lit])
+			return false
+	if columns.size() != 12 or left != 8 or right != 4:
+		_fail("oil field: %d horizon columns (%d left, %d right); expected 12 (8, 4)" % [columns.size(), left, right])
+		return false
+	var saved: float = GameManager.tuning["flame_columns"]
+	GameManager.set_tuning("flame_columns", 0.0)
+	var hidden := columns.all(func(c: FlameColumn) -> bool: return not c.is_visible_in_tree())
+	GameManager.set_tuning("flame_columns", 1.0)
+	var shown := columns.all(func(c: FlameColumn) -> bool: return c.visible)
+	GameManager.set_tuning("flame_columns", saved)
+	if not hidden or not shown:
+		_fail("F3 flame_columns does not hide and show every column (hidden %s, shown %s)" % [hidden, shown])
+		return false
+	var warm := Node3D.new()
+	add_child(warm)
+	VfxCatalog.spawn_for_compile(warm)
+	var warmed := warm.get_children().any(func(c: Node) -> bool: return c is FlameColumn)
+	warm.queue_free()
+	if not VfxCatalog.cues().has(&"flame_column") or not warmed:
+		_fail("flame_column is not in the VfxCatalog warmup")
+		return false
+	print("AUTOTEST: oil field flames: %d horizon columns (%d left, %d right), F3 flame_columns hides them all, in the warmup" % [
+			columns.size(), left, right])
+	return true
+
+
+## The mid belt's derricks and tanks (sheet B; batch 5): 10 derricks (`Derrick_Plank` and `Derrick_Iron`) and
+## 8 tanks (`Tank_Sheet`, `Tank_Iron`, `Tank_Plank`), rolled to x 26 to 45 and 30 to 45 on the right; on the left
+## the whole mid band stays at x 28 or beyond (the pylon line stands at 22). One piece a slot: on each side no
+## two mid pieces (derricks, tanks, pumpjacks, wells) stand closer than 40 m along the 768 m loop, and none of
+## them carries a flame cue but the wells.
+func _mid_rigs_ok(belt: Node) -> bool:
+	var derricks := 0
+	var tanks := 0
+	var mid: Array[Node3D] = []
+	for piece: Node3D in belt.get_children():
+		var is_derrick := piece.find_child("Derrick_Plank", true, false) != null
+		var is_tank := piece.find_child("Tank_Sheet", true, false) != null
+		var is_well := piece.find_child("Flame_Near", true, false) != null
+		var is_mid_jack := piece.find_child("WalkingBeam", true, false) != null and absf(piece.position.x) > 20.0
+		if is_derrick:
+			derricks += 1
+			if piece.find_child("Derrick_Iron", true, false) == null:
+				_fail("oil field: derrick %s lacks Derrick_Iron" % piece.name)
+				return false
+		if is_tank:
+			tanks += 1
+			for part in ["Tank_Iron", "Tank_Plank"]:
+				if piece.find_child(part, true, false) == null:
+					_fail("oil field: tank %s lacks %s" % [piece.name, part])
+					return false
+		if is_derrick or is_tank:
+			var side := signf(piece.position.x)
+			var out := absf(piece.position.x)
+			var lo := 26.0 if is_derrick else 30.0
+			if out < lo or out > 45.0 or (side < 0.0 and out < 28.0):
+				_fail("oil field: %s stands at x %.2f, outside its mid-belt range" % [piece.name, piece.position.x])
+				return false
+			if piece.find_child("Flame_*", true, false) != null:
+				_fail("oil field: %s carries a flame anchor" % piece.name)
+				return false
+		if is_derrick or is_tank or is_well or is_mid_jack:
+			mid.append(piece)
+	if derricks != OILFIELD_DERRICKS or tanks != OILFIELD_TANKS:
+		_fail("oil field belt has %d derricks and %d tanks, expected %d and %d" % [
+				derricks, tanks, OILFIELD_DERRICKS, OILFIELD_TANKS])
+		return false
+	var loop := 48.0 * 16.0
+	for i in mid.size():
+		for j in range(i + 1, mid.size()):
+			if signf(mid[i].position.x) != signf(mid[j].position.x):
+				continue
+			var gap := posmod(mid[i].position.z - mid[j].position.z, loop)
+			gap = minf(gap, loop - gap)
+			if gap < 40.0:
+				_fail("oil field: mid pieces %s and %s stand %.1f m apart along the loop" % [mid[i].name, mid[j].name, gap])
+				return false
+	print("AUTOTEST: oil field mid rigs: %d derricks and %d tanks on free slots, left side at x 28 or beyond, no two mid pieces closer than 40 m" % [
+			derricks, tanks])
+	return true
+
+
+## The pylon line, the pipe runs, and the wrap grow (sheet H, batch 6). Eight towers at x -22 on an exact 96 m
+## pitch, each mesh reaching its wires 96 m along the track; 24 pipe runs 3.6 to 5.0 m out, 12 a side; nothing
+## on the belt that reaches inside x 6 stands over 1.5 m; and the grow: a piece's scale follows `grow_at` of its
+## distance inside the wrap (the tracks stay at 1), a piece out of the ramp is exactly 1 again, and a pumpjack's
+## beam and a well's anchor scale with their piece.
+func _wrap_rows_ok(belt: Node) -> bool:
+	var pylons: Array[Node3D] = []
+	var pipes: Array[Node3D] = []
+	for piece: Node3D in belt.get_children():
+		if piece.find_child("Pylon_Iron", true, false) != null:
+			pylons.append(piece)
+		elif piece.find_child("Pipe_Iron", true, false) != null:
+			pipes.append(piece)
+	if pylons.size() != OILFIELD_PYLONS or pipes.size() != OILFIELD_PIPE_RUNS:
+		return _fail_false("oil field belt has %d pylons and %d pipe runs, expected %d and %d" % [
+				pylons.size(), pipes.size(), OILFIELD_PYLONS, OILFIELD_PIPE_RUNS])
+	var loop := 48.0 * 16.0
+	var zs: Array[float] = []
+	for pylon in pylons:
+		var tower := pylon.find_child("Pylon_Iron", true, false) as MeshInstance3D
+		var reach := tower.get_aabb().end.z
+		if absf(pylon.position.x + 22.0) > 0.0001 or not pylon.rotation.is_zero_approx() or absf(reach - 96.0) > 0.01:
+			return _fail_false("oil field pylon %s at x %.4f, turned %s, wires reach %.3f m: not x -22, unrolled, 96 m" % [
+					pylon.name, pylon.position.x, pylon.rotation, reach])
+		zs.append(pylon.position.z)
+	zs.sort()
+	for i in zs.size():
+		var gap: float = (zs[(i + 1) % zs.size()] - zs[i]) if i < zs.size() - 1 else (zs[0] + loop - zs[i])
+		if absf(gap - 96.0) > 0.01:
+			return _fail_false("oil field pylons stand %.3f m apart, not 96 (the wires would miss the next arms)" % gap)
+	var sides := {-1.0: 0, 1.0: 0}
+	for pipe in pipes:
+		var out := absf(pipe.position.x)
+		if out < 3.6 - 0.0001 or out > 5.0 + 0.0001 or not pipe.rotation.is_zero_approx():
+			return _fail_false("oil field pipe run %s at x %.3f, turned %s" % [pipe.name, pipe.position.x, pipe.rotation])
+		sides[signf(pipe.position.x)] += 1
+	if sides[-1.0] != 12 or sides[1.0] != 12:
+		return _fail_false("oil field pipe runs: %d left, %d right, expected 12 and 12" % [sides[-1.0], sides[1.0]])
+	# Nothing whose body reaches inside x 6 stands over 1.5 m (the death cam swings through that strip).
+	for piece: Node3D in belt.get_children():
+		for mesh: MeshInstance3D in piece.find_children("*", "MeshInstance3D", true, false):
+			var box := mesh.global_transform * mesh.get_aabb()
+			if box.position.x < 6.0 and box.end.x > -6.0 and box.end.y > 1.5:
+				return _fail_false("oil field: %s reaches x %.1f..%.1f and %.2f m high inside the death cam's strip" % [
+						piece.name, box.position.x, box.end.x, box.end.y])
+	return _belt_grow_ok(belt)
+
+
+## The near dressing (sheet B, oil_wellhead and oil_sump; H batch 7): 16 wellheads at x 6 to 12 and 16 sumps at
+## x 7 to 16, 8 a side, unturned, and every near piece's footprint (its meshes' extent in x and z, taken from the
+## piece's home, not the clock) at least 3 m from every other near footprint that overlaps it in x: the wellheads
+## and sumps clear of the pumpjacks, the pipe runs, and each other, across the 720 m wrap too.
+func _near_dressing_ok(belt: Node) -> bool:
+	var nodes: Array = belt.get("_nodes")
+	var homes: PackedFloat32Array = belt.get("_home_z")
+	var loops: PackedFloat32Array = belt.get("_loops")
+	var heads := {-1.0: 0, 1.0: 0}
+	var sumps := {-1.0: 0, 1.0: 0}
+	var feet: Array[Dictionary] = []
+	for i in nodes.size():
+		var piece: Node3D = nodes[i]
+		if loops[i] != 720.0 or piece.scene_file_path.ends_with("env_rail_track_8m.glb"):
+			continue
+		var lo := Vector2(INF, INF)
+		var hi := Vector2(-INF, -INF)
+		for mesh: MeshInstance3D in piece.find_children("*", "MeshInstance3D", true, false):
+			var box := (piece.global_transform.affine_inverse() * mesh.global_transform) * mesh.get_aabb()
+			lo = Vector2(minf(lo.x, box.position.x), minf(lo.y, box.position.z))
+			hi = Vector2(maxf(hi.x, box.end.x), maxf(hi.y, box.end.z))
+		var side := signf(piece.position.x)
+		var out := absf(piece.position.x)
+		if piece.find_child("Wellhead_Iron", true, false) != null:
+			heads[side] += 1
+			if out < 6.0 - 0.0001 or out > 12.0 + 0.0001 or not piece.rotation.is_zero_approx():
+				return _fail_false("oil field wellhead %s at x %.3f, turned %s: not x 6 to 12, unturned" % [piece.name, piece.position.x, piece.rotation])
+			if hi.y - lo.y > 4.2:
+				return _fail_false("oil field wellhead %s is %.2f m along z, expected about 4" % [piece.name, hi.y - lo.y])
+		elif piece.find_child("Sump_Dirt", true, false) != null:
+			sumps[side] += 1
+			if out < 7.0 - 0.0001 or out > 16.0 + 0.0001 or not piece.rotation.is_zero_approx():
+				return _fail_false("oil field sump %s at x %.3f, turned %s: not x 7 to 16, unturned" % [piece.name, piece.position.x, piece.rotation])
+		feet.append({"name": piece.name, "x0": piece.position.x + lo.x, "x1": piece.position.x + hi.x,
+				"z0": homes[i] + lo.y, "z1": homes[i] + hi.y})
+	if heads[-1.0] != 8 or heads[1.0] != 8 or sumps[-1.0] != 8 or sumps[1.0] != 8:
+		return _fail_false("oil field near dressing: wellheads %s, sumps %s, expected 8 a side" % [heads, sumps])
+	var worst := INF
+	for a in feet.size():
+		for b in range(a + 1, feet.size()):
+			var fa: Dictionary = feet[a]
+			var fb: Dictionary = feet[b]
+			if fa["x0"] > fb["x1"] or fb["x0"] > fa["x1"]:
+				continue
+			for shift in [-720.0, 0.0, 720.0]:
+				var gap := maxf(float(fb["z0"]) + shift - float(fa["z1"]), float(fa["z0"]) - float(fb["z1"]) - shift)
+				worst = minf(worst, gap)
+				if gap < 3.0:
+					return _fail_false("oil field near footprints %s and %s are %.2f m apart along z (3 m wanted)" % [fa["name"], fb["name"], gap])
+	print("AUTOTEST: oil field near dressing: %d wellheads and %d sumps, 8 a side, every near footprint at least %.1f m from the next along z" % [
+			OILFIELD_WELLHEADS, OILFIELD_SUMPS, worst])
+	return true
+
+
+func _belt_grow_ok(belt: Node) -> bool:
+	if absf(float(belt.call(&"grow_at", 0.0)) - 0.001) > 0.0001 or absf(float(belt.call(&"grow_at", 20.0)) - 0.5) > 0.0001 \
+			or float(belt.call(&"grow_at", 40.0)) != 1.0 or float(belt.call(&"grow_at", 400.0)) != 1.0 \
+			or float(belt.call(&"grow_at", -3.0)) > 0.0011:
+		return _fail_false("oil field wrap grow: grow_at is not 0 at the wrap, 0.5 at 20 m, and 1 from 40 m")
+	var nodes: Array = belt.get("_nodes")
+	var homes: PackedFloat32Array = belt.get("_home_z")
+	var loops: PackedFloat32Array = belt.get("_loops")
+	var kinds := {
+		"track": func(p: Node3D) -> bool: return p.scene_file_path.ends_with("env_rail_track_8m.glb"),
+		"near pumpjack": func(p: Node3D) -> bool: return p.find_child("WalkingBeam", true, false) != null and absf(p.position.x) < 20.0,
+		"mid pumpjack": func(p: Node3D) -> bool: return p.find_child("WalkingBeam", true, false) != null and absf(p.position.x) > 20.0,
+		"burning well": func(p: Node3D) -> bool: return p.find_child("Flame_Near", true, false) != null,
+		"pylon": func(p: Node3D) -> bool: return p.find_child("Pylon_Iron", true, false) != null,
+		"pipe run": func(p: Node3D) -> bool: return p.find_child("Pipe_Iron", true, false) != null,
+		"wellhead": func(p: Node3D) -> bool: return p.find_child("Wellhead_Iron", true, false) != null,
+		"sump": func(p: Node3D) -> bool: return p.find_child("Sump_Dirt", true, false) != null,
+		"derrick": func(p: Node3D) -> bool: return p.find_child("Derrick_Plank", true, false) != null,
+		"tank": func(p: Node3D) -> bool: return p.find_child("Tank_Sheet", true, false) != null,
+		"horizon tile": func(p: Node3D) -> bool: return p.find_child("Horizon_Rock", true, false) != null,
+	}
+	var picked := {}
+	for i in nodes.size():
+		for kind: String in kinds:
+			if not picked.has(kind) and (kinds[kind] as Callable).call(nodes[i]):
+				picked[kind] = i
+	for kind: String in kinds:
+		if not picked.has(kind):
+			return _fail_false("oil field wrap grow: no %s on the belt" % kind)
+	var old_speed: float = belt.get("speed_mps")
+	var moved := homes.duplicate()
+	belt.set("speed_mps", 0.0)
+	var ok := true
+	for kind: String in picked:
+		var i: int = picked[kind]
+		var piece: Node3D = nodes[i]
+		var half: float = loops[i] * 0.5
+		for entering in [true, false]:
+			for edge: float in [0.0, 10.0, 20.0, 39.0]:
+				moved[i] = -half + edge if entering else half - edge - 0.01
+				belt.set("_home_z", moved)
+				belt.call(&"_process", 0.0)
+				var want := 1.0 if kind == "track" else float(belt.call(&"grow_at", edge if entering else edge + 0.01))
+				if absf(piece.scale.x - want) > 0.0005 or not piece.scale.is_equal_approx(Vector3.ONE * piece.scale.x):
+					ok = false
+					_fail("oil field wrap grow: %s %s at %.0f m inside the wrap has scale %s, expected %.4f" % [
+							kind, "entering" if entering else "leaving", edge, piece.scale, want])
+				var beam := piece.find_child("WalkingBeam", true, false) as Node3D
+				var anchor := piece.find_child("Flame_Near", true, false) as Node3D
+				for child: Node3D in [beam, anchor]:
+					if child != null and absf(child.global_transform.basis.get_scale().x - want) > 0.0005:
+						ok = false
+						_fail("oil field wrap grow: %s's %s does not scale with its piece" % [kind, child.name])
+		moved[i] = 0.0
+		belt.set("_home_z", moved)
+		belt.call(&"_process", 0.0)
+		if piece.scale != Vector3.ONE:
+			ok = false
+			_fail("oil field wrap grow: %s is %s mid-loop, not exactly 1" % [kind, piece.scale])
+		moved[i] = homes[i]
+	belt.set("_home_z", homes)
+	belt.set("speed_mps", old_speed)
+	belt.call(&"_process", 0.0)
+	if not ok:
+		return false
+	print("AUTOTEST: oil field wrap rows: 8 pylons at x -22 on a 96 m pitch with 96 m of wire each, 24 pipe runs 12 a side, nothing over 1.5 m inside x 6; wrap grow 0 to 1 over 40 m on %d kinds, the tracks exempt, beams and anchors scale with their piece" % [
+			picked.size() - 1])
+	return true
+
+
+func _fail_false(message: String) -> bool:
+	_fail(message)
+	return false
+
+
+## The burning wells (sheet B, `oil_burning_well`; F10): two copies on the mid belt's left, 384 m apart
+## in the 768 m loop, each with its five objects and no plume, the anchor 42 to 45 m out, and
+## `Flame_Near` at the casing's top centre (unit scale, no child but its column) always burning a 35 m
+## column on an 11.2 m base. The lane glow's swell is the squared cosine of the nearer anchor's z
+## offset: 1 abeam (+60% of the light), 0 from 60 m on either side, driven by the nearer of the two.
+func _burning_wells_ok(arena: Node, belt: Node) -> bool:
+	var wells: Array[Node3D] = []
+	for piece in belt.get_children():
+		if piece.find_child("Flame_Near", true, false) != null:
+			wells.append(piece)
+	if wells.size() != OILFIELD_WELLS:
+		_fail("oil field: %d burning wells on the belt, expected %d" % [wells.size(), OILFIELD_WELLS])
+		return false
+	for well in wells:
+		if well.position.x > -42.0 or well.position.x < -45.0:
+			_fail("oil field: burning well %s stands at x %.2f, expected -42 to -45" % [well.name, well.position.x])
+			return false
+		for part in ["Well_Rock", "Well_Dirt", "Well_Iron", "Well_Flame", "Well_LampGlass"]:
+			if well.find_child(part, true, false) == null:
+				_fail("oil field: burning well %s lacks %s" % [well.name, part])
+				return false
+		var anchor := well.find_child("Flame_Near", true, false) as Node3D
+		if not anchor.position.is_equal_approx(Vector3(0.0, 3.0, 0.0)) or not anchor.scale.is_equal_approx(Vector3.ONE) \
+				or not anchor.rotation.is_zero_approx():
+			_fail("oil field: Flame_Near on %s sits at %s (scale %s)" % [well.name, anchor.position, anchor.scale])
+			return false
+		var cues := anchor.get_children().filter(func(c: Node) -> bool: return c is FlameColumn)
+		if cues.size() != 1 or anchor.get_child_count() != 1:
+			_fail("oil field: Flame_Near on %s has %d columns among %d children" % [well.name, cues.size(), anchor.get_child_count()])
+			return false
+		var cue := cues[0] as FlameColumn
+		if not cue.scale.is_equal_approx(Vector3(11.2 * FlameColumn.WIDTH_SLACK, 35.0, 1.0)) or cue.position != Vector3.ZERO:
+			_fail("oil field: the column on %s is scaled %s, wanted 11.2 x 35 m" % [well.name, cue.scale])
+			return false
+	var gap := wrapf(wells[0].position.z - wells[1].position.z, 0.0, 768.0)
+	if not is_equal_approx(gap, 384.0):
+		_fail("oil field: the burning wells stand %.1f m apart in the loop, expected 384" % gap)
+		return false
+	# The swell: a pure function of the offset, then driven from the belt by the nearer well.
+	var glow := arena.get_node("LaneGlow") as LaneGlow
+	var shape_ok := is_equal_approx(LaneGlow.swell_at(0.0), 1.0) and is_equal_approx(LaneGlow.swell_at(30.0), 0.5) \
+			and is_equal_approx(LaneGlow.swell_at(-30.0), 0.5) and LaneGlow.swell_at(60.0) == 0.0 \
+			and LaneGlow.swell_at(61.0) == 0.0 and LaneGlow.swell_at(-400.0) == 0.0 \
+			and LaneGlow.swell_at(10.0) > LaneGlow.swell_at(20.0) and LaneGlow.swell_at(20.0) > LaneGlow.swell_at(59.0)
+	if not shape_ok:
+		_fail("the lane glow's swell is not a squared cosine to 0 at 60 m")
+		return false
+	# (first well's z from the light, second well's z from the light, the swell the nearer one gives)
+	var plan := [[0.0, 192.0, 1.0], [-100.0, 20.0, LaneGlow.swell_at(20.0)], [59.0, -180.0, LaneGlow.swell_at(59.0)],
+			[-60.0, 324.0, 0.0], [90.0, -294.0, 0.0]]
+	for step: Array in plan:
+		wells[0].position.z = glow.global_position.z + float(step[0])
+		wells[1].position.z = glow.global_position.z + float(step[1])
+		belt.call(&"update_swell")
+		var want: float = step[2]
+		if absf(glow.swell - want) > 0.0001:
+			_fail("oil field: with the wells at %s the swell is %.4f, expected %.4f" % [step, glow.swell, want])
+			return false
+		glow._process(0.0)
+		var factor := 1.0 + LaneGlow.SWELL_MAX * want
+		var energy := glow.light_energy / glow.base_energy
+		if energy < factor * (1.0 - LaneGlow.FLICKER) - 0.001 or energy > factor * (1.0 + LaneGlow.FLICKER) + 0.001:
+			_fail("oil field: the lane glow's energy is %.3f of its base with a swell of %.3f" % [energy, want])
+			return false
+	print("AUTOTEST: oil field burning wells: %d copies 384 m apart at x -42 to -45, Flame_Near at (0, 3, 0) with a 35 m column each, no plumes; lane glow swell 1 abeam (+60%%), 0 from 60 m on" % wells.size())
+	return true
+
+
 func _horizon_snapshot(root: Node) -> Dictionary:
 	var env := (root.get_node("WorldEnvironment") as WorldEnvironment).environment
-	var mat := env.sky.sky_material as ProceduralSkyMaterial
+	var mat := _sky_shader(root)
 	var sun := root.get_node("Sun") as DirectionalLight3D
 	var toward_sun := sun.global_transform.basis.z
 	return {
@@ -5563,8 +7773,8 @@ func _horizon_snapshot(root: Node) -> Dictionary:
 		"fog_depth_curve": env.fog_depth_curve,
 		"fog_aerial_perspective": env.fog_aerial_perspective,
 		"fog_sky_affect": env.fog_sky_affect,
-		"sky_curve": mat.sky_curve,
-		"ground_curve": mat.ground_curve,
+		"sky_curve": mat.get_shader_parameter(&"sky_curve"),
+		"ground_curve": mat.get_shader_parameter(&"ground_curve"),
 		"shadow_max": sun.directional_shadow_max_distance,
 		"shadow_fade": sun.directional_shadow_fade_start,
 		"split1": sun.directional_shadow_split_1,
@@ -5591,7 +7801,7 @@ func _horizon_unchanged(root: Node, snap: Dictionary, path: String) -> bool:
 
 
 ## Proximity voice plumbing: the bus layout, the mute-X on the avatar, and the
-## codec round trip. Headless CI has no mic, so capture itself is not asserted —
+## codec round trip. Headless CI has no mic, so capture itself is not asserted â€”
 ## only that everything downstream of it is wired and that voice stays off.
 func _voice_ok() -> bool:
 	for bus_name in ["Master", "Voice", "Mic"]:
@@ -5872,7 +8082,7 @@ func _main_menu_split_ok() -> bool:
 	for mode in [["%GauntletModeButton", "%GauntletPage"], ["%DuelModeButton", "%DuelPage"],
 			["%HordeModeButton", "%HordePage"]]:
 		menu.get_node(mode[0]).pressed.emit()
-		if not menu.get_node(mode[1]).visible or menu.get_node("%SingleplayerPage").visible:
+		if not menu.get_node(mode[1]).visible:
 			menu.queue_free()
 			_fail("%s did not open %s" % mode)
 			return false
@@ -5938,7 +8148,7 @@ func _main_menu_split_ok() -> bool:
 	return true
 
 
-## Radial wedge picking plus the cigarette's hold → throw → catch cycle.
+## Radial wedge picking plus the cigarette's hold â†’ throw â†’ catch cycle.
 func _props_ok() -> bool:
 	var wheel_font: Font = preload("res://ui/theme_duello.tres").default_font
 	if wheel_font == null:
@@ -5980,7 +8190,7 @@ func _props_ok() -> bool:
 	if cig.is_flying():
 		_fail("charging should keep the cigarette in hand")
 		return false
-	var started := Time.get_ticks_msec()
+	var started := _clock_msec()
 	cig.release_charge(self, Vector3.FORWARD)
 	if not cig.is_flying():
 		_fail("cigarette did not launch on release")
@@ -5994,7 +8204,7 @@ func _props_ok() -> bool:
 		return false
 	# A tap covers `cig_min_range` but must still hover out the rest of
 	# `cig_flight_time`, so every throw reads at the same pace.
-	var tap_flight := float(Time.get_ticks_msec() - started) / 1000.0
+	var tap_flight := float(_clock_msec() - started) / 1000.0
 	var want: float = float(GameManager.tuning["cig_flight_time"])
 	if absf(tap_flight - want) > 0.3:
 		_fail("tap throw took %.2fs, expected ~%.2fs" % [tap_flight, want])
@@ -6006,12 +8216,12 @@ func _props_ok() -> bool:
 	if cig.charge_ratio() < 1.0:
 		_fail("holding past cig_charge_time did not reach full charge")
 		return false
-	started = Time.get_ticks_msec()
+	started = _clock_msec()
 	cig.release_charge(self, Vector3.FORWARD)
 	if not await _wait_for(func() -> bool: return not cig.is_flying(), 10.0):
 		_fail("charged cigarette never came back to the hand")
 		return false
-	var full_flight := float(Time.get_ticks_msec() - started) / 1000.0
+	var full_flight := float(_clock_msec() - started) / 1000.0
 	if absf(full_flight - tap_flight) > 0.25:
 		_fail("tap took %.2fs but a full throw took %.2fs" % [tap_flight, full_flight])
 		return false
@@ -6021,13 +8231,13 @@ func _props_ok() -> bool:
 	# A wall on the outbound path skips the hover and comes home early.
 	var wall := _make_prop_wall(Vector3(0.0, 1.2, -0.45))
 	await _sleep(0.05)
-	started = Time.get_ticks_msec()
+	started = _clock_msec()
 	cig.begin_charge()
 	cig.release_charge(self, Vector3.FORWARD)
 	if not await _wait_for(func() -> bool: return not cig.is_flying(), 4.0):
 		_fail("cigarette that hit a wall never came home")
 		return false
-	var wall_flight := float(Time.get_ticks_msec() - started) / 1000.0
+	var wall_flight := float(_clock_msec() - started) / 1000.0
 	if wall_flight > 0.8:
 		_fail("wall throw took %.2fs, should have skipped the hover" % wall_flight)
 		return false
@@ -6605,6 +8815,12 @@ func _binds_ok() -> bool:
 	if PlayerSettings.flat_event_label(PlayerSettings.get_flat_bind_event(&"prop_fire")) != "G":
 		_fail("default flat prop_fire should be G")
 		return false
+	if PlayerSettings.flat_event_label(PlayerSettings.get_flat_bind_event(&"flat_twirl")) != "T":
+		_fail("default flat flat_twirl should be T")
+		return false
+	if tr("BIND_FLAT_TWIRL") == "BIND_FLAT_TWIRL" or tr("BOARD_FLAT_TWIRL") == "BOARD_FLAT_TWIRL":
+		_fail("flat twirl bind and board strings are not translated")
+		return false
 	var key_f := InputEventKey.new()
 	key_f.physical_keycode = KEY_F
 	PlayerSettings.set_flat_bind(&"cock_hammer", key_f)
@@ -6644,7 +8860,7 @@ func _test_steam() -> void:
 	_pass()
 
 
-## BUG-009: create → leave → create and join-failure recovery against a real
+## BUG-009: create â†’ leave â†’ create and join-failure recovery against a real
 ## Steam client. Every step has to work in one process; before the fix the
 ## second HOST silently never produced a lobby. No-op without Steam (CI).
 func _test_steam_cycle() -> void:
@@ -6758,6 +8974,397 @@ func _steam_transport_ok() -> bool:
 	return true
 
 
+# -- Duel title cards ---------------------------------------------------------------
+
+## Display name the `intro` suites run under (the Steam persona wins when Steam is up).
+const INTRO_NAME := "Autotest Kid"
+const INTRO_HOST_NAME := "Intro Host"
+const INTRO_JOIN_NAME := "Intro Joiner"
+
+## The real duel-intro toggle and display name, put back on disk if a suite changed them.
+var _saved_intro: Array = []
+## States `DuelManager.state_changed` reported since `_record_intro_states`.
+var _intro_states: Array = []
+
+
+func _restore_intro_settings() -> void:
+	if _saved_intro.is_empty() or (PlayerSettings.duel_intro_enabled == _saved_intro[0]
+			and PlayerSettings.display_name == _saved_intro[1]):
+		return
+	PlayerSettings.duel_intro_enabled = _saved_intro[0]
+	PlayerSettings.display_name = _saved_intro[1]
+	PlayerSettings._save_config()
+
+
+func _record_intro_states() -> void:
+	_intro_states.clear()
+	if not GameManager.duel.state_changed.is_connected(_on_intro_state):
+		GameManager.duel.state_changed.connect(_on_intro_state)
+
+
+func _on_intro_state(state: int) -> void:
+	_intro_states.append(state)
+
+
+## The `intro` suite: single player (free duel, skip, Reset Duel, several NPCs, the toggle,
+## Horde, the gauntlet's retry), the display name, then a lobby host alone (slot order,
+## rematch detection, a leaver mid-intro).
+func _test_intro() -> void:
+	await _sleep(1.0)
+	PlayerSettings.duel_intro_enabled = true
+	PlayerSettings.display_name = INTRO_NAME
+	var ok: bool = await _intro_free_duel_ok() and _intro_skip_ok() and _intro_reset_ok() \
+			and await _intro_multi_ok() and _intro_toggle_ok() and await _intro_horde_ok() \
+			and _intro_gauntlet_ok() and _intro_name_ok() and _intro_lobby_ok()
+	if ok:
+		NetworkManager.leave("autotest")
+		_pass()
+
+
+## A free duel from the menu: the NPC's card, then the player's (mirrored), each on its own
+## camera, the HUD hidden and the lineup held, then the standoff with the camera back.
+func _intro_free_duel_ok() -> bool:
+	var duel := GameManager.duel
+	var intro := duel.intro
+	var local := GameManager.local_player
+	var hud := GameManager.hud
+	_record_intro_states()
+	GameManager.start_free_duel(0, 0)
+	var ai := GameManager.current_ais[0]
+	var npc := ai.archetype.display_name
+	var want := PackedStringArray([npc, NetworkManager.local_player_name()])
+	if duel.state != DuelManager.State.INTRO or not intro.is_active() or intro.card_names() != want \
+			or intro.shown_names != PackedStringArray([npc]):
+		_fail("intro: a free duel should open on the NPC's card (state %d, cards %s, shown %s)" % [
+				duel.state, intro.card_names(), intro.shown_names])
+		return false
+	if NetworkManager.local_player_name() != INTRO_NAME and not NetworkManager.steam_names_player():
+		_fail("intro: the player's card should carry the Settings name, not '%s'" % NetworkManager.local_player_name())
+		return false
+	var camera := local.get_viewport().get_camera_3d()
+	var spawn := ai.global_transform
+	var eye := spawn.origin - spawn.basis.z * DuelIntro.CAM_DISTANCE + Vector3.UP * DuelIntro.CAM_HEIGHT
+	if camera == null or camera.name != "DuelIntroCamera" or camera.global_position.distance_to(eye) > 0.1:
+		_fail("intro: the first card's camera should stand ahead of the NPC (%s)" % [camera])
+		return false
+	if intro.card()._mirrored or intro.card().lettered_text() != npc.to_upper() or not intro.card().is_playing():
+		_fail("intro: the first card should be the drawn layout, the NPC lettered at runtime ('%s')" % intro.card().lettered_text())
+		return false
+	if hud.reload_status.modulate.a != 0.0 or hud.health_status.modulate.a != 0.0 or not local._intro_view \
+			or not local.corpse_body()._head_mesh.visible:
+		_fail("intro: the HUD should hide and the player's whole body show while the cards play")
+		return false
+	if not GameManager._holding_messages or not GameManager._held_messages.has(npc) \
+			or hud.message_label.text.contains(tr("MSG_HOLSTER")):
+		_fail("intro: the lineup line should wait for the standoff (%s)" % [GameManager._held_messages])
+		return false
+	if not await _wait_for(func() -> bool: return intro.shown_names.size() == 2, TitleCard.DURATION + 2.0):
+		_fail("intro: the player's card never came")
+		return false
+	if not intro.card()._mirrored or intro.card().lettered_text() != want[1].to_upper():
+		_fail("intro: the second card should be mirrored and name the player")
+		return false
+	if not await _wait_for_state(DuelManager.State.STANDOFF, TitleCard.DURATION + 2.0):
+		_fail("intro: the cards never handed over to the standoff")
+		return false
+	camera = local.get_viewport().get_camera_3d()
+	if _intro_states != [DuelManager.State.INTRO, DuelManager.State.STANDOFF] or intro.is_active() \
+			or camera != (local.rig as FlatRig).camera:
+		_fail("intro: after the cards the standoff should follow with the player's camera (%s, %s)" % [_intro_states, camera])
+		return false
+	if hud.reload_status.modulate.a != 1.0 or local._intro_view or local.corpse_body()._head_mesh.visible \
+			or GameManager._holding_messages:
+		_fail("intro: the HUD and the first-person body should come back at the standoff")
+		return false
+	if not hud.message_label.text.contains(npc) or not hud.message_label.text.contains(tr("MSG_HOLSTER")):
+		_fail("intro: the standoff line should carry the held lineup ('%s')" % hud.message_label.text)
+		return false
+	print("AUTOTEST: intro free duel ok (%s)" % ", ".join(want))
+	return true
+
+
+## Fire during the cards skips them and fires nothing; the gun may be drawn meanwhile.
+func _intro_skip_ok() -> bool:
+	var duel := GameManager.duel
+	var local := GameManager.local_player
+	GameManager.start_free_duel(0, 0)
+	if duel.state != DuelManager.State.INTRO:
+		_fail("intro skip: a menu free duel should play the cards")
+		return false
+	local._draw_gun()
+	var rounds := local.revolver.rounds
+	if not local.revolver.held:
+		_fail("intro skip: the gun should draw during the cards")
+		return false
+	local._on_trigger_changed(&"right_hand", true)
+	local._on_trigger_changed(&"right_hand", false)
+	var skipped := duel.state == DuelManager.State.STANDOFF and not duel.intro.is_active()
+	var fired := local.revolver.rounds != rounds
+	local._holster_gun()
+	if not skipped or fired:
+		_fail("intro skip: fire should skip to the standoff without a shot (state %d, fired %s)" % [duel.state, fired])
+		return false
+	print("AUTOTEST: intro fire skip ok (no shot)")
+	return true
+
+
+func _intro_reset_ok() -> bool:
+	_record_intro_states()
+	GameManager.reset_current_duel()
+	if GameManager.duel.state != DuelManager.State.STANDOFF or _intro_states.has(DuelManager.State.INTRO):
+		_fail("intro: Reset Duel should go straight to the standoff (%s)" % [_intro_states])
+		return false
+	print("AUTOTEST: intro skipped on Reset Duel")
+	return true
+
+
+## Three Mixed NPCs: a card each in lineup order, then the player, sides alternating.
+func _intro_multi_ok() -> bool:
+	var duel := GameManager.duel
+	var intro := duel.intro
+	GameManager.start_free_duel(0, GameManager.ARCHETYPES.size(), 3)
+	var want := PackedStringArray()
+	for ai in GameManager.current_ais:
+		want.append(ai.archetype.display_name)
+	want.append(NetworkManager.local_player_name())
+	if duel.state != DuelManager.State.INTRO or intro.card_names() != want:
+		_fail("intro multi: want cards %s, got %s" % [want, intro.card_names()])
+		return false
+	for card in range(1, want.size()):
+		duel._timer = card * TitleCard.DURATION + 0.01
+		await get_tree().process_frame
+		if intro.shown_names.size() != card + 1 or intro.card()._mirrored != (card % 2 == 1):
+			_fail("intro multi: card %d did not come up on its side (%s)" % [card, intro.shown_names])
+			return false
+	duel._timer = want.size() * TitleCard.DURATION
+	await get_tree().process_frame
+	if duel.state != DuelManager.State.STANDOFF or intro.shown_names != want:
+		_fail("intro multi: the standoff should follow the last card (state %d)" % duel.state)
+		return false
+	print("AUTOTEST: intro multi ok (%s)" % ", ".join(want))
+	return true
+
+
+func _intro_toggle_ok() -> bool:
+	PlayerSettings.duel_intro_enabled = false
+	_record_intro_states()
+	GameManager.start_free_duel(0, 0)
+	var skipped := GameManager.duel.state == DuelManager.State.STANDOFF and not _intro_states.has(DuelManager.State.INTRO)
+	PlayerSettings.duel_intro_enabled = true
+	if not skipped:
+		_fail("intro: the Settings toggle off should skip the cards")
+		return false
+	print("AUTOTEST: intro toggle off ok")
+	return true
+
+
+func _intro_horde_ok() -> bool:
+	_record_intro_states()
+	GameManager.start_horde(0)
+	var started := await _wait_for_state(DuelManager.State.STANDOFF, 10.0)
+	GameManager.go_to_menu()
+	if not started or _intro_states.has(DuelManager.State.INTRO):
+		_fail("intro: Horde should have no cards (%s)" % [_intro_states])
+		return false
+	print("AUTOTEST: Horde has no intro")
+	return true
+
+
+## A new rung plays the cards and holds its progress line; a retry after a loss and Reset
+## Duel do not.
+func _intro_gauntlet_ok() -> bool:
+	var duel := GameManager.duel
+	var gauntlet := GameManager.gauntlet
+	GameManager.start_gauntlet()
+	var encounter := gauntlet.ladder.encounters[0]
+	var progress := tr("MSG_DUEL_PROGRESS") % [1, gauntlet.ladder.encounters.size(), encounter.label]
+	if duel.state != DuelManager.State.INTRO or not GameManager._held_messages.has(progress):
+		_fail("intro gauntlet: the first rung should play the cards and hold its progress line")
+		return false
+	duel.request_intro_skip()
+	if duel.state != DuelManager.State.STANDOFF or not GameManager.hud.message_label.text.contains(progress):
+		_fail("intro gauntlet: the standoff should carry the progress line ('%s')" % GameManager.hud.message_label.text)
+		return false
+	_record_intro_states()
+	gauntlet.on_duel_finished(false)
+	if duel.state != DuelManager.State.STANDOFF or _intro_states.has(DuelManager.State.INTRO) \
+			or gauntlet.encounter_index != 0:
+		_fail("intro gauntlet: a retry after a loss should skip the cards (%s)" % [_intro_states])
+		return false
+	gauntlet.on_duel_finished(true)
+	if duel.state != DuelManager.State.INTRO or gauntlet.encounter_index != 1:
+		_fail("intro gauntlet: the next rung should play the cards")
+		return false
+	duel.request_intro_skip()
+	_record_intro_states()
+	GameManager.reset_current_duel()
+	var reset_ok := duel.state == DuelManager.State.STANDOFF and not _intro_states.has(DuelManager.State.INTRO)
+	GameManager.go_to_menu()
+	if not reset_ok:
+		_fail("intro gauntlet: Reset Duel on a rung should skip the cards")
+		return false
+	print("AUTOTEST: intro gauntlet ok (new rung plays, retry and reset skip)")
+	return true
+
+
+## Empty is the device name; a name is trimmed to one line of NAME_MAX.
+func _intro_name_ok() -> bool:
+	var net := NetworkManager
+	PlayerSettings.display_name = ""
+	var fallback := net.local_player_name()
+	PlayerSettings.display_name = INTRO_NAME
+	if not net.steam_names_player() and fallback != net.device_name():
+		_fail("intro name: an empty display name should fall back to the device name ('%s')" % fallback)
+		return false
+	var long := LobbyRoster.clean_name("  %s\n" % "x".repeat(LobbyRoster.NAME_MAX + 9))
+	if long.length() != LobbyRoster.NAME_MAX or LobbyRoster.clean_name(" Doc ") != "Doc":
+		_fail("intro name: names should be trimmed to %d ('%s')" % [LobbyRoster.NAME_MAX, long])
+		return false
+	var lettering := TitleCardLettering.new()
+	lettering.set_name_text(long, false)
+	var fits := lettering.get_font_size() < TitleCardLettering.FONT_SIZE_MAX
+	lettering.free()
+	if not fits:
+		_fail("intro name: a long name should shrink to fit the card")
+		return false
+	print("AUTOTEST: intro names ok")
+	return true
+
+
+## A lobby host alone: the cards in slot order with the NPC slot, the rematch with the same
+## occupants skipping them, the waiting room always playing them, a leaver mid-intro, and a
+## 1v1 leaver ending the duel during them.
+func _intro_lobby_ok() -> bool:
+	var duel := GameManager.duel
+	var net := NetworkManager
+	if net.host_lan() != OK:
+		_fail("intro lobby: could not host LAN")
+		return false
+	if not _lobby_fill(3, {2: LOBBY_NPC_ARCHETYPE}):
+		return false
+	if not net.host_start() or duel.state != DuelManager.State.INTRO:
+		_fail("intro lobby: a start from the waiting room should play the cards (state %d)" % duel.state)
+		return false
+	var want := PackedStringArray([duel.slot_name(0), LOBBY_FAKE_NAMES[0],
+			GameManager.archetype_at(LOBBY_NPC_ARCHETYPE).display_name])
+	if duel.intro.card_names() != want:
+		_fail("intro lobby: want cards %s in slot order, got %s" % [want, duel.intro.card_names()])
+		return false
+	duel._holstered.fill(true)
+	duel.request_intro_skip()
+	if duel.state != DuelManager.State.STANDOFF or duel.intro.is_active():
+		_fail("intro lobby: the host's fire should skip the cards")
+		return false
+	_record_intro_states()
+	GameManager._mp_rematch()
+	if duel.state != DuelManager.State.STANDOFF or _intro_states.has(DuelManager.State.INTRO):
+		_fail("intro lobby: a rematch with the same occupants should skip the cards (%s)" % [_intro_states])
+		return false
+	if not net.host_back_to_lobby() or not net.host_start() or duel.state != DuelManager.State.INTRO:
+		_fail("intro lobby: a waiting-room start should always play the cards")
+		return false
+	duel._holstered.fill(true)
+	net._verified_peers[LOBBY_FAKE_PEERS[0]] = LOBBY_FAKE_NAMES[0]
+	net._on_peer_disconnected(LOBBY_FAKE_PEERS[0])
+	if duel.state != DuelManager.State.INTRO or not duel.intro.is_active() or duel.slot_alive(1) \
+			or GameManager.avatars.has(1) or not GameManager._holding_messages:
+		_fail("intro lobby: a leaver mid-intro should drop out while the cards run on (state %d)" % duel.state)
+		return false
+	duel.request_intro_skip()
+	if duel.state != DuelManager.State.STANDOFF or not GameManager.hud.message_label.text.contains(LOBBY_FAKE_NAMES[0]):
+		_fail("intro lobby: the leaver's line should show at the standoff ('%s')" % GameManager.hud.message_label.text)
+		return false
+	GameManager._mp_rematch()
+	if duel.state != DuelManager.State.INTRO:
+		_fail("intro lobby: a rematch with the leaver's slot as an NPC should play the cards")
+		return false
+	if not _lobby_fill(2) or not net.host_start() or duel.state != DuelManager.State.INTRO:
+		_fail("intro lobby: the 1v1 should open on the cards")
+		return false
+	var result := _arm_duel_listener()
+	net._verified_peers[LOBBY_FAKE_PEERS[0]] = LOBBY_FAKE_NAMES[0]
+	net._on_peer_disconnected(LOBBY_FAKE_PEERS[0])
+	var camera := GameManager.local_player.get_viewport().get_camera_3d()
+	if result != [true, "MSG_OPPONENT_LEFT"] or duel.state != DuelManager.State.RESOLUTION or duel.intro.is_active() \
+			or GameManager._holding_messages or camera != (GameManager.local_player.rig as FlatRig).camera \
+			or not GameManager.hud.message_label.text.contains(tr("MSG_YOU_WIN")):
+		_fail("intro lobby: a 1v1 leaver during the cards should end the duel with the view back (%s, '%s')" % [
+				result, GameManager.hud.message_label.text])
+		return false
+	print("AUTOTEST: intro lobby ok (slot order, rematch skip, room start plays, leavers)")
+	return true
+
+
+## `introhost` / `introjoin`: a real 1v1. The joiner's fire skips the cards on both peers,
+## and an auto-rematch with the same two skips them.
+func _test_intro_host() -> void:
+	await _sleep(0.5)
+	PlayerSettings.duel_intro_enabled = true
+	PlayerSettings.display_name = INTRO_HOST_NAME
+	if NetworkManager.host_lan() != OK:
+		return _fail("introhost: could not host LAN")
+	if not await _wait_for(func() -> bool: return NetworkManager.roster.can_start(), 40.0):
+		return _fail("introhost: no peer joined")
+	await _sleep(1.0)
+	var duel := GameManager.duel
+	if not NetworkManager.host_start() or duel.state != DuelManager.State.INTRO:
+		return _fail("introhost: START should open on the cards (state %d)" % duel.state)
+	var want := PackedStringArray([duel.slot_name(0), duel.slot_name(1)])
+	if duel.intro.card_names() != want:
+		return _fail("introhost: want cards %s, got %s" % [want, duel.intro.card_names()])
+	print("AUTOTEST: introhost cards %s, waiting for the joiner's skip" % ", ".join(want))
+	if not await _wait_for_state(DuelManager.State.STANDOFF, TitleCard.DURATION * 2.0 + 5.0):
+		return _fail("introhost: the cards never ended")
+	if duel.intro.shown_names.size() != 1:
+		return _fail("introhost: the joiner's skip should end the cards on the first one (%s)" % duel.intro.shown_names)
+	print("AUTOTEST: introhost got the joiner's skip")
+	await _sleep(1.0)
+	_record_intro_states()
+	GameManager._mp_rematch()
+	if duel.state != DuelManager.State.STANDOFF or _intro_states.has(DuelManager.State.INTRO):
+		return _fail("introhost: the rematch should skip the cards (%s)" % [_intro_states])
+	await _sleep(3.0)  # let the joiner see the rematch before the link goes
+	_pass()
+
+
+func _test_intro_join() -> void:
+	await _sleep(2.0)
+	PlayerSettings.display_name = INTRO_JOIN_NAME
+	if NetworkManager.join_lan("127.0.0.1") != OK:
+		return _fail("introjoin: could not start joining")
+	if not await _wait_for(func() -> bool: return NetworkManager.is_active() and GameManager.in_mp_lobby(), 30.0):
+		return _fail("introjoin: never reached the waiting room")
+	_record_intro_states()
+	var duel := GameManager.duel
+	if not await _wait_for_state(DuelManager.State.INTRO, 30.0):
+		return _fail("introjoin: the host's START never showed the cards")
+	var want := PackedStringArray([duel.slot_name(0), duel.slot_name(1)])
+	if duel.intro.card_names() != want or not duel.intro.is_active() or duel.intro.shown_names.size() != 1:
+		return _fail("introjoin: want the first of cards %s, got %s" % [want, duel.intro.card_names()])
+	await _sleep(0.5)
+	var local := GameManager.local_player
+	local._draw_gun()
+	var rounds := local.revolver.rounds
+	local._on_trigger_changed(&"right_hand", true)
+	local._on_trigger_changed(&"right_hand", false)
+	if local.revolver.rounds != rounds:
+		return _fail("introjoin: fire during the cards should not shoot")
+	local._holster_gun()
+	if not await _wait_for_state(DuelManager.State.STANDOFF, 5.0):
+		return _fail("introjoin: the skip never came back from the host")
+	if duel.intro.is_active() or duel.intro.shown_names.size() != 1:
+		return _fail("introjoin: the host's skip should end the cards here too")
+	print("AUTOTEST: introjoin skipped the cards for both")
+	var rematched := func() -> bool:
+		return _intro_states.count(DuelManager.State.STANDOFF) >= 2
+	if not await _wait_for(rematched, 20.0):
+		return _fail("introjoin: no rematch arrived (%s)" % [_intro_states])
+	if _intro_states.count(DuelManager.State.INTRO) != 1:
+		return _fail("introjoin: the rematch should skip the cards (%s)" % [_intro_states])
+	print("AUTOTEST: introjoin rematch skipped the cards")
+	_pass()
+
+
 # -- Helpers ---------------------------------------------------------------------
 
 func _wait_for_state(state: int, timeout: float) -> bool:
@@ -6765,12 +9372,16 @@ func _wait_for_state(state: int, timeout: float) -> bool:
 
 
 func _wait_for(predicate: Callable, timeout: float) -> bool:
-	var deadline := Time.get_ticks_msec() + int(timeout * 1000)
-	while Time.get_ticks_msec() < deadline:
+	var deadline := _clock_msec() + int(timeout * 1000)
+	while _clock_msec() < deadline:
 		if predicate.call():
 			return true
 		await get_tree().process_frame
 	return false
+
+
+func _clock_msec() -> int:
+	return int(_clock * 1000.0)
 
 
 func _wait_freed(ref: WeakRef, timeout: float) -> bool:
@@ -6817,11 +9428,15 @@ func _sleep(seconds: float) -> void:
 func _fail(message: String) -> void:
 	print("AUTOTEST FAIL: %s" % message)
 	_apply_lobby_snapshot(_saved_lobby_setup)
+	_restore_offhand_item()
+	_restore_intro_settings()
 	get_tree().quit(1)
 
 
 func _pass() -> void:
 	_apply_lobby_snapshot(_saved_lobby_setup)
+	_restore_offhand_item()
+	_restore_intro_settings()
 	print("AUTOTEST PASS")
 	get_tree().quit(0)
 

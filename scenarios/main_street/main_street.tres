@@ -9,3 +9,7 @@ display_name = "Main Street"
 description = "Classic high-noon showdown down the middle of town."
 scene = ExtResource("2")
 duel_distance = 16.0
+wind_volume_db = -26.0
+gust_interval_min = 18.0
+gust_interval_max = 40.0
+gust_strength = 0.7

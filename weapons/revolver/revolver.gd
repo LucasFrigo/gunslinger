@@ -25,6 +25,8 @@ const GATE_HINGE := Vector3(0.030, 0.004, 0.0)
 @onready var _model: Node3D = $Model
 @onready var _cylinder_pivot: Node3D = $Model/WPN_PSX_Blaster/CylinderPivot
 @onready var _cylinder: MeshInstance3D = $Model/WPN_PSX_Blaster/CylinderPivot/Cylinder
+@onready var _blaster: Node3D = $Model/WPN_PSX_Blaster
+@onready var _spin_pivot: Marker3D = $SpinPivot
 @onready var _chamber: Marker3D = $Chamber
 @onready var chamber_area: Area3D = $Chamber/ChamberArea
 @onready var bump_area: Area3D = $BumpArea
@@ -33,6 +35,7 @@ var _pivot_rest: Basis
 var _pivot_origin: Vector3
 var _cylinder_rest: Basis
 var _model_rest: Transform3D
+var _blaster_rest: Transform3D
 var _chamber_index := 0
 var _gate_tween: Tween
 var _spin_tween: Tween
@@ -44,8 +47,11 @@ func _ready() -> void:
 	_pivot_origin = _cylinder_pivot.transform.origin
 	_cylinder_rest = _cylinder.transform.basis
 	_model_rest = _model.transform
+	_blaster_rest = _blaster.transform
 	fired.connect(_on_fired)
 	_apply_cylinder_pose(true)
+	# The drum's line is a child of its mesh, so it turns with `CylinderPivot`.
+	OutlineHull.attach_model(_model)
 
 
 func get_chamber_point() -> Vector3:
@@ -145,6 +151,16 @@ func _kick_barrel() -> void:
 	_kick_tween.tween_property(_model, "transform", _model_rest, KICK_IN).set_trans(
 		Tween.TRANS_QUAD
 	).set_ease(Tween.EASE_IN)
+
+
+## Turns the blaster about SpinPivot on local X. Model (barrel kick) and the
+## root-level markers stay put.
+func _apply_twirl_pose() -> void:
+	if _blaster == null:
+		return
+	var pivot := _model_rest.affine_inverse() * _spin_pivot.position
+	var turn := Basis(Vector3.RIGHT, twirl_angle)
+	_blaster.transform = Transform3D(turn, pivot - turn * pivot) * _blaster_rest
 
 
 func _apply_cylinder_pose(snap: bool) -> void:

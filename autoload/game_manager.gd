@@ -10,6 +10,11 @@ signal tuning_changed(key: String, value: Variant)
 enum GameMode { BOOT, MENU, FREE_DUEL, GAUNTLET, MULTIPLAYER, PRACTICE, MESH_LAB, HORDE }
 
 const TUNING_PATH := "user://tuning.cfg"
+## Tuning keys that are also `[shader_globals]` in project.godot: skin, cavity, and world
+## surfaces read them, so one F3 value covers every banded shader.
+const WORLD_GLOBALS: Array[StringName] = [
+	&"band_low", &"band_soft", &"grain_strength_mult", &"grain_scale_mult",
+	&"sheet_mix"]
 
 ## Scenario registry -- add new scenarios here and they appear in every menu.
 const SCENARIOS: Array[String] = [
@@ -17,6 +22,7 @@ const SCENARIOS: Array[String] = [
 	"res://scenarios/saloon/saloon.tres",
 	"res://scenarios/train_rooftop/train_rooftop.tres",
 	"res://scenarios/canyon/canyon.tres",
+	"res://scenarios/oilfield_train/oilfield_train.tres",
 ]
 
 ## Local warmup lot. Deliberately not in SCENARIOS, so no menu offers it as a duel.
@@ -82,6 +88,17 @@ var tuning := {
 	"leg_slow_duration": 2.5,
 	## Move-speed multiplier while limping (1 = no penalty).
 	"leg_speed_mult": 0.45,
+	## Barrel smoke wisp length multiplier (1 = ~2.4 s). 0 turns the wisp off.
+	"barrel_smoke_lifetime": 1.0,
+	## Bullet trail ribbon width (m) and the share of its length the tail takes to thin out.
+	"trail_width": 0.035,
+	"trail_tail_share": 0.35,
+	## Hurt vignette peak (0..1) on the local player: arm or leg hit, torso hit, kill.
+	"hurt_limb": 0.3,
+	"hurt_torso": 0.6,
+	"hurt_kill": 0.9,
+	## Seconds the kill-cam iris takes to close, and to open on the next view.
+	"iris_time": 0.3,
 	## Flat jam: shots slower than this add no heat (seconds).
 	"jam_safe_interval": 0.35,
 	"jam_heat_per_shot": 0.45,
@@ -112,6 +129,13 @@ var tuning := {
 	"spin_coupling": 3.0,
 	## Seconds to tween back to the locked pose after stick-up.
 	"spin_relock_time": 0.12,
+	## Cartoon spin: the blaster mesh turns this many times faster than the real
+	## hinge. Visual only; catch, throw, and fire still use the real hinge.
+	"spin_visual_mult": 3.0,
+	## Flat twirl flourish (rad/s) while the twirl key is held.
+	"twirl_rate": 25.0,
+	## Spin effect (smear wedge + ink arcs): 0 off, 1 on.
+	"spin_fx_mode": 1,
 	## Cigarette boomerang: flight speed (m/s), same outbound and homing.
 	"cig_speed": 9.0,
 	## Range of a tap (m): zero charge still throws this far.
@@ -196,6 +220,32 @@ var tuning := {
 	"gib_speed": 3.5,
 	## Gibs alive at once. The oldest is freed past this.
 	"gib_cap": 16.0,
+	## Banded body light: share the first band passes, and the step softness.
+	"band_low": 0.65,
+	"band_soft": 0.03,
+	## World surface shader: grain strength and tile scale multipliers, how far the trim sheet
+	## replaces the flat color (0 is the old look), and the share of the wind that moves
+	## plants, hay, signs, and awnings (0 holds them still).
+	"grain_strength_mult": 1.0,
+	"grain_scale_mult": 1.0,
+	"sheet_mix": 1.0,
+	"sway_scale": 1.0,
+	## Train Rooftop engine smoke: 1 is the default plume, 0 turns it off, 3 is thrice the
+	## particles. Length, speed, and puff size do not change.
+	"engine_smoke_density": 1.0,
+	## Oil field flame columns (`FlameColumn`): 1 shows them, 0 hides every one. The dark
+	## plume meshes stay.
+	"flame_columns": 1.0,
+	## Skin silhouette rim: strength and falloff exponent (hands get none).
+	"edge_strength": 0.35,
+	"edge_power": 3.0,
+	## Ink outline around every duelist: 1 on, 0 off. Width is metres of line per metre of
+	## view distance (held between 1 m and 14 m).
+	"outline_enabled": 1.0,
+	"outline_width": 0.004,
+	## Same line on the revolver, offhand props, and brass: metres per metre of view
+	## distance (held between 0.3 m and 6 m). `outline_enabled` hides these too.
+	"object_outline_width": 0.0015,
 }
 
 var mode: int = GameMode.BOOT
@@ -208,6 +258,9 @@ var local_player: Player
 var avatars := {}
 var current_scenario: ScenarioBase
 var current_scenario_index := 0
+## Flat main-menu backdrop: a fixed camera on one of the scenario's MenuCameras
+## markers, with the player (and its shadow) hidden. Torn down by the next real spawn.
+var _menu_backdrop_camera: Camera3D
 ## The free-duel lineup the restart replays.
 var current_lineup: Array[AIArchetype] = []
 var current_ais: Array[DuelistAI] = []
@@ -226,6 +279,9 @@ var _lobby_ring := 0
 var _lobby_humans := {}
 ## The join announcement the host's "everyone is here" line carries with it.
 var _join_line := ""
+## While the title cards play: `show_message` lines wait here for the standoff.
+var _holding_messages := false
+var _held_messages: PackedStringArray = []
 var _mesh_lab_open := false
 var _mesh_lab_puppet: MeshLabPuppet
 var _mesh_lab_flycam: MeshLabFlycam
@@ -243,6 +299,8 @@ func _ready() -> void:
 	horde.name = "HordeController"
 	add_child(horde)
 	_load_tuning()
+	for key in WORLD_GLOBALS:
+		RenderingServer.global_shader_parameter_set(key, float(tuning[key]))
 
 	NetworkManager.session_started.connect(_on_session_started)
 	NetworkManager.session_ended.connect(_on_session_ended)
@@ -328,6 +386,8 @@ func go_to_menu() -> void:
 		_instance_scenario(load(SCENARIOS[randi() % SCENARIOS.size()]))
 		current_scenario.process_mode = Node.PROCESS_MODE_DISABLED
 	_place_local_player(current_scenario.get_player_spawn())
+	if not is_vr:
+		_show_menu_backdrop_camera()
 	hud.show_menu(is_vr)
 	if is_vr:
 		_spawn_vr_menu_panel()
@@ -468,7 +528,7 @@ func start_free_duel(scenario_index: int, archetype_index: int, count := 1) -> v
 	hud.hide_menu()
 	_remove_vr_menu_panel()
 	current_lineup = _roll_lineup(archetype_index, count)
-	_begin_ai_duel(scenario_index, current_lineup, 1.0)
+	_begin_ai_duel(scenario_index, current_lineup, 1.0, duel.intro_enabled())
 
 
 func _roll_lineup(archetype_index: int, count: int) -> Array[AIArchetype]:
@@ -543,12 +603,18 @@ func reset_current_duel() -> void:
 			show_message(tr("MSG_NO_ACTIVE_DUEL"), 1.5)
 
 
-## Called by the gauntlet controller for each rung of the ladder.
-func begin_gauntlet_encounter(encounter: DuelEncounter) -> void:
-	_begin_ai_duel(encounter.scenario_index, encounter.lineup(), encounter.health_mult)
+## Called by the gauntlet controller for each rung of the ladder. `play_intro` for a new
+## rung; a retry after a loss and Reset Duel go straight to the standoff.
+func begin_gauntlet_encounter(encounter: DuelEncounter, play_intro := false) -> void:
+	_begin_ai_duel(encounter.scenario_index, encounter.lineup(), encounter.health_mult, play_intro)
 
 
-func _begin_ai_duel(scenario_index: int, lineup: Array[AIArchetype], health_mult: float) -> void:
+## `play_intro`: the title cards first (a free duel from the menu, a new gauntlet rung).
+## Their messages wait for the standoff.
+func _begin_ai_duel(scenario_index: int, lineup: Array[AIArchetype], health_mult: float,
+		play_intro := false) -> void:
+	if play_intro:
+		hold_messages()
 	_clear_combatants()
 	_load_scenario(scenario_index)
 	_place_local_player(current_scenario.get_player_spawn())
@@ -561,7 +627,7 @@ func _begin_ai_duel(scenario_index: int, lineup: Array[AIArchetype], health_mult
 		current_ais[0].set_target(local_player)
 	var text := lineup_text(lineup)
 	show_message(text, 2.0)
-	duel.start_ai_duel(current_ais, text if lineup.size() >= 2 else "")
+	duel.start_ai_duel(current_ais, text if lineup.size() >= 2 else "", true, play_intro)
 
 
 ## Spawns `lineup` on `spawns` (actor ids, tint shades for repeated archetypes,
@@ -722,6 +788,7 @@ func _on_peer_left(peer_id: int) -> void:
 
 
 func _on_session_ended(reason: String) -> void:
+	drop_held_messages()
 	_lobby_humans.clear()
 	_join_line = ""
 	if is_instance_valid(local_player):
@@ -767,6 +834,11 @@ func setup_mp_lobby(scenario_index: int, time_of_day: float) -> void:
 ## (the waiting room).
 func _mp_roster() -> LobbyRoster:
 	return duel.snapshot if duel.snapshot != null else NetworkManager.roster
+
+
+## Slot -> spawn on the loaded arena for a duel on `roster` (the title-card cameras).
+func slot_spawns(roster: LobbyRoster) -> Dictionary:
+	return _mp_spawns(roster)
 
 
 ## Slot -> spawn on the loaded arena. A duel hands the ring points (`get_duel_spawns`) out
@@ -1073,6 +1145,7 @@ func _after_delay(seconds: float, callable: Callable) -> void:
 
 func _bump_action_generation() -> void:
 	_action_generation += 1
+	drop_held_messages()
 
 
 func _set_mode(new_mode: int) -> void:
@@ -1081,6 +1154,12 @@ func _set_mode(new_mode: int) -> void:
 
 
 # -- Scenario / player helpers -------------------------------------------------
+
+## The t the MP host sends for a fresh load of arena `index`: its fixed time, or a roll.
+func roll_time_of_day(index: int) -> float:
+	var resource := load(SCENARIOS[clampi(index, 0, SCENARIOS.size() - 1)]) as ScenarioResource
+	return resource.roll_time_of_day()
+
 
 func _load_scenario(index: int, time_of_day := -1.0) -> void:
 	current_scenario_index = clampi(index, 0, SCENARIOS.size() - 1)
@@ -1095,17 +1174,42 @@ func _instance_scenario(resource: ScenarioResource, time_of_day := -1.0) -> void
 		current_scenario = null
 	current_scenario = resource.scene.instantiate()
 	current_scenario.scenario_resource = resource
-	# Negative means this load picks its own time (SP, menu, host waiting).
-	# MP passes the host's roll so the client does not roll again.
+	# Negative means this load picks its own time (SP, menu, host waiting): the arena's
+	# fixed one, or a roll. MP passes the host's pick so the client does not roll again.
 	if time_of_day < 0.0:
-		time_of_day = randf()
+		time_of_day = resource.roll_time_of_day()
 	current_scenario.time_of_day = time_of_day
 	world_root.add_child(current_scenario)
 
 
 func _place_local_player(spawn: Transform3D) -> void:
+	_teardown_menu_backdrop()
 	local_player.reset_for_duel(spawn)
 	_capture_flat_mouse()
+
+
+## Flat only: a fixed camera on a random `MenuCameras` marker (falls back to the player
+## spawn when the scenario has none authored yet), with the player hidden so no one
+## (and no shadow) stands in the shot. Torn down by the next real `_place_local_player`.
+func _show_menu_backdrop_camera() -> void:
+	var cameras := current_scenario.get_menu_cameras()
+	var eye := cameras[randi() % cameras.size()] if not cameras.is_empty() \
+			else current_scenario.get_player_spawn()
+	_menu_backdrop_camera = Camera3D.new()
+	_menu_backdrop_camera.name = "MenuBackdropCamera"
+	main_root.add_child(_menu_backdrop_camera)
+	_menu_backdrop_camera.global_transform = eye
+	_menu_backdrop_camera.current = true
+	local_player.set_backdrop_hidden(true)
+
+
+func _teardown_menu_backdrop() -> void:
+	if is_instance_valid(_menu_backdrop_camera):
+		_menu_backdrop_camera.current = false
+		_menu_backdrop_camera.queue_free()
+	_menu_backdrop_camera = null
+	if is_instance_valid(local_player):
+		local_player.set_backdrop_hidden(false)
 
 
 ## Flat play owns the cursor from the first frame of a match or wave, so look
@@ -1145,15 +1249,39 @@ func _remove_vr_menu_panel() -> void:
 
 
 func show_message(text: String, duration := 2.5) -> void:
+	if _holding_messages:
+		if not _held_messages.has(text):
+			_held_messages.append(text)
+		return
 	hud.show_message(text, duration)
 	if is_vr and is_instance_valid(local_player):
 		local_player.show_vr_message(text, duration)
+
+
+## Title cards ahead: `show_message` keeps its lines for the standoff line
+## (`DuelManager._show_standoff_message`) instead of showing them over the cards.
+func hold_messages() -> void:
+	_holding_messages = true
+
+
+## The held lines, oldest first; showing resumes.
+func take_held_messages() -> PackedStringArray:
+	var lines := _held_messages
+	drop_held_messages()
+	return lines
+
+
+func drop_held_messages() -> void:
+	_holding_messages = false
+	_held_messages = PackedStringArray()
 
 
 # -- Tuning -------------------------------------------------------------------
 
 func set_tuning(key: String, value: Variant) -> void:
 	tuning[key] = value
+	if WORLD_GLOBALS.has(key):
+		RenderingServer.global_shader_parameter_set(key, float(value))
 	tuning_changed.emit(key, value)
 	_save_tuning()
 

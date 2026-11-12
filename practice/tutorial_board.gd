@@ -59,6 +59,7 @@ func _flat_copy() -> String:
 		tr("BOARD_FLAT_COCK") % cock,
 		tr("BOARD_FLAT_RELOAD") % reload,
 		tr("BOARD_FLAT_JAM") % cock,
+		tr("BOARD_FLAT_TWIRL") % _flat(&"flat_twirl"),
 		tr("BOARD_FLAT_PROPS") % [wheel, throw],
 		tr("BOARD_FLAT_BOTTLES") % [use, use],
 		tr("BOARD_FLAT_SLOTS") % use,

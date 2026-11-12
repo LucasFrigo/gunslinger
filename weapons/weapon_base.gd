@@ -12,6 +12,8 @@ signal shells_ejected(ejected: int)
 ## Empty cylinder, open gate, uncocked hammer, or jam — trigger pulled with no shot.
 signal dry_fired(reason: StringName)
 
+const MUZZLE_FLASH_SHADER := preload("res://weapons/muzzle_flash.gdshader")
+const MUZZLE_FLASH_SIZE := 0.3
 const COLLISION_LAYER_WORLD := 1
 const COLLISION_LAYER_WEAPON := 32  # physics layer 6
 ## Local COM for hang gravity (barrel/cylinder), not the trigger pivot.
@@ -28,6 +30,9 @@ const SPIN_BREAKAWAY_WHIP := 1.55
 const AIM_STEADY_SLOW_DEG := 25.0
 const AIM_STEADY_FAST_DEG := 150.0
 const AIM_STEADY_MAX_TAU := 0.12
+## Flat twirl: ramp to full rate, and ease-out to a whole turn on release.
+const TWIRL_ACCEL := 140.0
+const TWIRL_EASE_TIME := 0.25
 
 @export var max_rounds := 6
 ## Single-action: must cock the hammer before each shot.
@@ -63,6 +68,19 @@ var _relock_elapsed := 0.0
 var _spin_motion_init := false
 ## Tossed off a hinge spin and still airborne: a catch resumes the hinge at this speed.
 var carrying_spin := false
+## Cosmetic twirl: only the blaster mesh turns (see `_apply_twirl_pose`). Fire,
+## muzzle, chamber, and the grip anchor never read it.
+var twirl_angle := 0.0
+## Visual turn rate (rad/s) of the blaster in the world, for the spin effect.
+var twirl_speed := 0.0
+var _twirl_posed := false
+var _twirl_holding := false
+var _twirl_omega := 0.0
+var _twirl_easing := false
+var _twirl_ease_from := 0.0
+var _twirl_ease_to := 0.0
+var _twirl_ease_t := 0.0
+var _twirl_ease_dur := TWIRL_EASE_TIME
 var _prev_parent_basis := Basis.IDENTITY
 var _prev_pivot_world := Vector3.ZERO
 var _prev_pivot_vel := Vector3.ZERO
@@ -73,6 +91,9 @@ var _steady_raw_basis := Basis.IDENTITY
 var _steady_drop_frame := false
 var _steady_last_usec := 0
 var _steady_integrate_frame := -1
+var _flash_light: OmniLight3D
+var _flash_quad: MeshInstance3D
+var _flash_tween: Tween
 
 @onready var _shot_audio: AudioStreamPlayer3D = _make_audio()
 
@@ -94,6 +115,7 @@ func reset() -> void:
 	_jam_last_shot_s = -1.0
 	carrying_spin = false
 	reset_spin()
+	_reset_twirl()
 	_on_gate_changed()
 	state_changed.emit()
 
@@ -182,6 +204,9 @@ func attach_to(hand_attach: Node3D, rumble_hand: StringName = &"right_hand") -> 
 	var carried := _caught_spin_omega(hand_attach)
 	carrying_spin = false
 	reset_spin()
+	_twirl_holding = false
+	if carried == 0.0:
+		_reset_twirl()
 	_freeze_attached()
 	follow_parent = true
 	shooting_hand = rumble_hand
@@ -201,6 +226,9 @@ func release_into_world(parent: Node, velocity: Vector3, spin: Vector3, keep_hin
 	carrying_spin = keep_hinge and spinning and not relocking
 	var xf := global_transform
 	reset_spin()
+	_twirl_holding = false
+	if not carrying_spin:
+		_reset_twirl()
 	reparent(parent, true)
 	global_transform = xf
 	held = false
@@ -250,6 +278,7 @@ func pain_jerk_into_world(parent: Node) -> void:
 func holster_to(holster: Node3D) -> void:
 	carrying_spin = false
 	reset_spin()
+	_reset_twirl()
 	_freeze_attached()
 	follow_parent = true
 	reparent(holster, false)
@@ -317,6 +346,7 @@ func _spin_start_kick() -> float:
 func end_spin(snap: bool) -> void:
 	if snap:
 		reset_spin()
+		_reset_twirl()
 		_sync_follow_parent()
 		return
 	if not spinning and not relocking:
@@ -330,12 +360,14 @@ func end_spin(snap: bool) -> void:
 	spin_omega = 0.0
 	_spin_world_omega = 0.0
 	_relock_elapsed = 0.0
+	_begin_twirl_ease(true, maxf(_tune("spin_relock_time", 0.12), 0.01))
 
 
 ## Pin the mesh to a recorded world pose. Physics must not keep a toss going.
 func hold_for_replay(world_xf: Transform3D) -> void:
 	carrying_spin = false
 	reset_spin()
+	_reset_twirl()
 	follow_parent = false
 	visible = true
 	_freeze_attached()
@@ -457,8 +489,101 @@ func _apply_steady_pose(p: Node3D, integrate: bool) -> void:
 	global_transform = Transform3D(_steady_basis, origin)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_sync_follow_parent(false)
+	_update_twirl(delta)
+
+
+func is_twirling() -> bool:
+	return twirl_angle != 0.0 or _twirl_holding or spinning or carrying_spin
+
+
+## Flat flourish: hold to keep the blaster turning at `twirl_rate`. The caller gates it;
+## a remote avatar's gun is never `held` but twirls from the pose flag.
+func begin_twirl() -> void:
+	_twirl_holding = true
+	_twirl_easing = false
+
+
+## Release: the blaster eases forward to a whole turn so it lands on its rest pose.
+func end_twirl() -> void:
+	if not _twirl_holding:
+		return
+	_twirl_holding = false
+	if not spinning and not carrying_spin:
+		_begin_twirl_ease(false, TWIRL_EASE_TIME)
+
+
+## Subclasses move their mesh; the base has none.
+func _apply_twirl_pose() -> void:
+	pass
+
+
+func _reset_twirl() -> void:
+	twirl_angle = 0.0
+	twirl_speed = 0.0
+	_twirl_omega = 0.0
+	_twirl_holding = false
+	_twirl_easing = false
+	if _twirl_posed:
+		_twirl_posed = false
+		_apply_twirl_pose()
+
+
+## `nearest` picks the closest whole turn; otherwise the next one in the turn direction.
+func _begin_twirl_ease(nearest: bool, duration: float) -> void:
+	if absf(twirl_angle) < 0.001:
+		_reset_twirl()
+		return
+	var turns := twirl_angle / TAU
+	if nearest or absf(_twirl_omega) < 0.01:
+		turns = roundf(turns)
+	elif _twirl_omega > 0.0:
+		turns = ceilf(turns)
+	else:
+		turns = floorf(turns)
+	_twirl_ease_from = twirl_angle
+	_twirl_ease_to = turns * TAU
+	_twirl_ease_t = 0.0
+	_twirl_ease_dur = duration
+	_twirl_easing = true
+
+
+func _update_twirl(delta: float) -> void:
+	if twirl_angle == 0.0 and not _twirl_holding and not spinning and not carrying_spin:
+		twirl_speed = 0.0
+		return
+	var real_delta := delta / maxf(Engine.time_scale, 0.001)
+	if real_delta <= 0.0:
+		return
+	var prev := twirl_angle
+	if spinning or carrying_spin:
+		_twirl_easing = false
+		var real_omega := spin_omega
+		if not spinning:
+			real_omega = angular_velocity.dot(global_basis.x.normalized())
+		_twirl_omega = (_tune("spin_visual_mult", 3.0) - 1.0) * real_omega
+		twirl_angle = fmod(twirl_angle + _twirl_omega * real_delta, TAU)
+		twirl_speed = _twirl_omega + real_omega
+	elif _twirl_holding:
+		_twirl_omega = move_toward(_twirl_omega, _tune("twirl_rate", 25.0), TWIRL_ACCEL * real_delta)
+		twirl_angle = fmod(twirl_angle + _twirl_omega * real_delta, TAU)
+		twirl_speed = _twirl_omega
+	elif _twirl_easing:
+		_twirl_ease_t = minf(_twirl_ease_t + real_delta / _twirl_ease_dur, 1.0)
+		var inv := 1.0 - _twirl_ease_t
+		twirl_angle = lerpf(_twirl_ease_from, _twirl_ease_to, 1.0 - inv * inv)
+		_twirl_omega = (twirl_angle - prev) / real_delta
+		twirl_speed = _twirl_omega
+		if _twirl_ease_t >= 1.0:
+			_reset_twirl()
+			return
+	else:
+		# Carry ended (a bounce) or the hold lapsed: land on the next whole turn.
+		_begin_twirl_ease(false, TWIRL_EASE_TIME)
+		return
+	_twirl_posed = true
+	_apply_twirl_pose()
 
 
 func _physics_process(delta: float) -> void:
@@ -623,7 +748,7 @@ func try_fire(auto_cock: bool, override_direction := Vector3.ZERO) -> bool:
 		direction = -muzzle.global_transform.basis.z
 	_play(AudioCatalog.get_stream(&"gunshot"))
 	_muzzle_flash()
-	ImpactFeedback.shot_fired(muzzle.global_transform, shooting_hand)
+	ImpactFeedback.shot_fired(muzzle.global_transform, shooting_hand, muzzle)
 	fired.emit(muzzle.global_position, direction.normalized())
 	state_changed.emit()
 	return true
@@ -656,16 +781,51 @@ func _on_gate_changed() -> void:
 	pass
 
 
+## The light and quad are built on the first shot and only hidden between shots, so a
+## shot allocates no GPU nodes or materials.
 func _muzzle_flash() -> void:
-	var light := OmniLight3D.new()
-	light.light_color = Color(1.0, 0.8, 0.4)
-	light.light_energy = 3.0
-	light.omni_range = 3.0
-	add_child(light)
-	light.position = get_muzzle().position
-	var tween := create_tween()
-	tween.tween_property(light, "light_energy", 0.0, 0.08)
-	tween.tween_callback(light.queue_free)
+	if _flash_light == null:
+		_flash_light = OmniLight3D.new()
+		_flash_light.light_color = Color(1.0, 0.8, 0.4)
+		_flash_light.omni_range = 3.0
+		add_child(_flash_light)
+		_flash_quad = make_muzzle_flash_quad()
+		add_child(_flash_quad)
+	_flash_light.position = get_muzzle().position
+	_flash_quad.position = get_muzzle().position
+	_flash_light.light_energy = 3.0
+	_flash_light.visible = true
+	_flash_quad.visible = true
+	var mat := _flash_quad.material_override as ShaderMaterial
+	mat.set_shader_parameter("seed", randf() * TAU)
+	if _flash_tween != null:
+		_flash_tween.kill()
+	_flash_tween = create_tween()
+	_flash_tween.set_parallel(true)
+	_flash_tween.tween_property(_flash_light, "light_energy", 0.0, 0.08)
+	_flash_tween.tween_method(func(v: float) -> void: mat.set_shader_parameter("life", v),
+			1.0, 0.0, 0.08)
+	_flash_tween.chain().tween_callback(_end_muzzle_flash)
+
+
+func _end_muzzle_flash() -> void:
+	_flash_light.visible = false
+	_flash_quad.visible = false
+
+
+## Billboarded star quad for the muzzle flash. Shared with the boot warmup.
+static func make_muzzle_flash_quad() -> MeshInstance3D:
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(MUZZLE_FLASH_SIZE, MUZZLE_FLASH_SIZE)
+	var mat := ShaderMaterial.new()
+	mat.shader = MUZZLE_FLASH_SHADER
+	mat.set_shader_parameter("seed", randf() * TAU)
+	mat.set_shader_parameter("life", 1.0)
+	var quad := MeshInstance3D.new()
+	quad.mesh = mesh
+	quad.material_override = mat
+	quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return quad
 
 
 func _make_audio() -> AudioStreamPlayer3D:

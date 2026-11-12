@@ -21,7 +21,8 @@ const BIG_BUTTON_FONT_VR := 28
 @onready var steam_list: ItemList = %SteamList
 @onready var status_label: Label = %StatusLabel
 @onready var lobby_setup: LobbyPanel = %LobbySetup
-@onready var settings_menu: SettingsMenu = $Center/Panel/Margin/SettingsMenu
+@onready var settings_menu: SettingsMenu = %SettingsMenu
+@onready var menu_dialog: MenuDialog = %MenuDialog
 
 var _lan_hosts: Array = []
 var _steam_lobbies: Array = []
@@ -31,7 +32,6 @@ var _steam_setup_pending := false
 
 
 func _ready() -> void:
-	%VersionLabel.text = "v%s" % str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
 	for path in GameManager.SCENARIOS:
 		scenario_option.add_item((load(path) as ScenarioResource).display_name)
 	for path in GameManager.ARCHETYPES:
@@ -58,12 +58,10 @@ func _ready() -> void:
 	%MultiplayerButton.pressed.connect(_show_multiplayer)
 	%PracticeButton.pressed.connect(GameManager.start_practice)
 	%SpBackButton.pressed.connect(show_mode_select)
-	%MpBackButton.pressed.connect(show_mode_select)
-	%GauntletModeButton.pressed.connect(_show_page.bind(%GauntletPage))
-	%DuelModeButton.pressed.connect(_show_page.bind(%DuelPage))
-	%HordeModeButton.pressed.connect(_show_page.bind(%HordePage))
-	for back in [%GauntletBackButton, %DuelBackButton, %HordeBackButton]:
-		(back as Button).pressed.connect(_show_singleplayer)
+	%GauntletModeButton.pressed.connect(_open_dialog.bind(%GauntletPage, "MENU_GAUNTLET_TITLE"))
+	%DuelModeButton.pressed.connect(_open_dialog.bind(%DuelPage, "MENU_DUEL_TITLE"))
+	%HordeModeButton.pressed.connect(_open_dialog.bind(%HordePage, "MENU_HORDE_TITLE"))
+	menu_dialog.back_pressed.connect(_close_dialog)
 	%GauntletButton.pressed.connect(GameManager.start_gauntlet)
 	%FreeDuelButton.pressed.connect(_start_free_duel)
 	%HordeButton.pressed.connect(_start_horde)
@@ -76,8 +74,10 @@ func _ready() -> void:
 	%JoinSteamButton.pressed.connect(_join_selected_steam)
 	steam_list.item_activated.connect(_join_steam_at)
 	%SettingsButton.pressed.connect(_show_settings)
-	settings_menu.back_pressed.connect(show_mode_select)
 	%QuitButton.pressed.connect(func() -> void: get_tree().quit())
+	for b: Button in find_children("*", "Button", true, false):
+		if b.theme_type_variation == &"MenuListButton":
+			MenuSfx.wire(b, self)
 
 	NetworkManager.lan_hosts_updated.connect(_on_lan_hosts)
 	NetworkManager.steam_lobbies_updated.connect(_on_steam_lobbies)
@@ -153,48 +153,64 @@ func set_vr_layout(vr: bool) -> void:
 
 
 func show_mode_select() -> void:
-	_show_page(%Landing)
+	_close_dialog()
+	_show_list(%Landing)
 
 
 ## Flat shows the frozen arena through a light tint; the VR quad keeps its
 ## solid backing so it reads against the hub.
 func set_backdrop_dim(solid: bool) -> void:
 	$Background.color.a = BACKDROP_SOLID_ALPHA if solid else BACKDROP_FLAT_ALPHA
+	menu_dialog.set_dim(solid)
 
 
-## True when a sub-page was closed. A mode page steps back to the SP list;
-## SP, MP, and Settings step back to landing. Landing is a no-op.
+## True when a sub-page was closed. A dialog closes back to whatever list was
+## showing behind it; the SP list steps back to landing. Landing is a no-op.
 func go_back() -> bool:
-	if %GauntletPage.visible or %DuelPage.visible or %HordePage.visible:
-		_show_singleplayer()
+	if menu_dialog.is_open():
+		_close_dialog()
 		return true
-	if settings_menu.visible or %SingleplayerPage.visible or %MultiplayerPage.visible:
+	if %SingleplayerPage.visible:
 		show_mode_select()
 		return true
 	return false
 
 
 func is_settings_open() -> bool:
-	return settings_menu.visible
+	return menu_dialog.is_open() and settings_menu.visible
 
 
 func _show_singleplayer() -> void:
-	_show_page(%SingleplayerPage)
+	_show_list(%SingleplayerPage)
 
 
 func _show_multiplayer() -> void:
-	_show_page(%MultiplayerPage)
+	_open_dialog(%MultiplayerPage, "MENU_MP_TITLE")
 
 
 func _show_settings() -> void:
-	_show_page(settings_menu)
+	_open_dialog(settings_menu, "MENU_SETTINGS")
 	settings_menu.refresh()
 
 
-func _show_page(page: Control) -> void:
-	for p: Control in [%Landing, %SingleplayerPage, %GauntletPage, %DuelPage, %HordePage,
-			%MultiplayerPage, settings_menu]:
+## Tier 1: swap which lower-left list is showing (Landing <-> SingleplayerPage).
+func _show_list(page: Control) -> void:
+	for p: Control in [%Landing, %SingleplayerPage]:
 		p.visible = p == page
+
+
+## Tier 2: open a titled dialog over the backdrop; the list stays visible behind it.
+func _open_dialog(content: Control, title_key: String) -> void:
+	for c: Control in [%GauntletPage, %DuelPage, %HordePage, %MultiplayerPage, settings_menu]:
+		c.visible = c == content
+	menu_dialog.open(tr(title_key))
+	_sync_browse()
+
+
+func _close_dialog() -> void:
+	menu_dialog.close()
+	for c: Control in [%GauntletPage, %DuelPage, %HordePage, %MultiplayerPage, settings_menu]:
+		c.visible = false
 	_sync_browse()
 
 

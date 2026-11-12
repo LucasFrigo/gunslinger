@@ -1,0 +1,65 @@
+{
+ "atlas": {
+  "w": 512,
+  "h": 1024
+ },
+ "cells": {
+  "door": {
+   "slot": 0,
+   "present": true
+  },
+  "door_swing": {
+   "slot": 1,
+   "present": false
+  },
+  "window": {
+   "slot": 2,
+   "present": false
+  },
+  "window_barred": {
+   "slot": 3,
+   "present": false
+  },
+  "sign_saloon": {
+   "slot": 4,
+   "present": false
+  },
+  "sign_porch": {
+   "slot": 5,
+   "present": false
+  },
+  "sign_blank": {
+   "slot": 6,
+   "present": false
+  },
+  "poster": {
+   "slot": 7,
+   "present": false
+  },
+  "barrel": {
+   "slot": 8,
+   "present": false
+  },
+  "crate": {
+   "slot": 9,
+   "present": false
+  },
+  "trough": {
+   "slot": 10,
+   "present": false
+  },
+  "tank": {
+   "slot": 11,
+   "present": false
+  },
+  "tabletop": {
+   "slot": 12,
+   "present": false
+  },
+  "counter_front": {
+   "slot": 13,
+   "present": false
+  }
+ },
+ "overrides": []
+}

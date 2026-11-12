@@ -29,6 +29,9 @@ const POSE_FLAG_GUN_STEADIED := 128
 const POSE_FLAG_GATE_OPEN := 256
 ## Chamber 0–5 lives in the next three bits. Bit 16 is the replay present flag.
 const POSE_FLAG_CHAMBER_SHIFT := 9
+## The gun is mid-twirl (flat flourish or VR cartoon spin). Peers turn the blaster locally;
+## no phase rides the wire.
+const POSE_FLAG_GUN_TWIRL := 4096
 const STEAM_REFRESH_SEC := 4.0
 const VERSION_HANDSHAKE_TIMEOUT := 3.0
 ## A refused peer is dropped this long after the RPC that says why, and never in the
@@ -67,7 +70,7 @@ func _ready() -> void:
 	discovery.hosts_updated.connect(func(hosts: Array) -> void: lan_hosts_updated.emit(hosts))
 
 	multiplayer.peer_connected.connect(_on_peer_connected)
-	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	multiplayer.peer_disconnected.connect(_queue_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
@@ -131,14 +134,27 @@ func transport_kind() -> String:
 	return transport.kind() if transport != null else "none"
 
 
-## Steam persona on the Steam transport, the device name on LAN.
+## The Steam persona whenever Steam is up (any transport, single player too), else the
+## Settings display name, else the device name.
 func local_player_name() -> String:
 	var player_name := ""
-	if _steam != null and transport == _steam:
+	if _steam != null and _steam.is_ready():
 		player_name = _steam.persona_name()
-	if player_name.is_empty():
+	if player_name.strip_edges().is_empty():
+		player_name = PlayerSettings.display_name
+	if player_name.strip_edges().is_empty():
 		player_name = _local_host_name()
 	return _clean_name(player_name)
+
+
+## True when the Steam client is up, so its persona names this player everywhere.
+func steam_names_player() -> bool:
+	return _steam != null and _steam.is_ready() and not _steam.persona_name().strip_edges().is_empty()
+
+
+## What an empty display name falls back to.
+func device_name() -> String:
+	return _clean_name(_local_host_name())
 
 
 ## Human slots a new player could take right now. None while a duel runs: the
@@ -178,7 +194,7 @@ func host_lan() -> Error:
 		network_error.emit(tr("NET_HOST_FAILED") % hint)
 		transport = null
 		return err
-	discovery.start_beacon(_local_host_name(), game_version())
+	discovery.start_beacon(local_player_name(), game_version())
 	_begin_session(true)
 	return OK
 
@@ -356,6 +372,13 @@ func _on_peer_connected(peer_id: int) -> void:
 	_pending_peers[peer_id] = VERSION_HANDSHAKE_TIMEOUT
 
 
+## BUG-022: two peers that quit together reach the host in one poll. ENet marks both dead
+## before the first signal fires, so a broadcast from that handler hit the second one
+## ("Unable to send packet on channel 0"). Handle it after the poll, once both are gone.
+func _queue_peer_disconnected(peer_id: int) -> void:
+	_on_peer_disconnected.call_deferred(peer_id)
+
+
 func _on_peer_disconnected(peer_id: int) -> void:
 	_pending_peers.erase(peer_id)
 	_kick_peers.erase(peer_id)
@@ -455,7 +478,7 @@ func _refuse(peer_id: int, reason_key: String) -> void:
 
 
 func _clean_name(player_name: String) -> String:
-	return player_name.strip_escapes().strip_edges().left(LobbyRoster.NAME_MAX)
+	return LobbyRoster.clean_name(player_name)
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -525,8 +548,11 @@ func _is_lobby_host() -> bool:
 ## Host: push the roster to every verified peer and tell local listeners.
 func _sync_roster() -> void:
 	var data := roster.pack()
+	var linked := multiplayer.get_peers()
 	for peer_id: int in _verified_peers:
-		_roster_sync.rpc_id(peer_id, data)
+		# Gone from the engine, its own disconnect still queued: its roster is moot.
+		if linked.has(peer_id):
+			_roster_sync.rpc_id(peer_id, data)
 	roster_changed.emit()
 
 

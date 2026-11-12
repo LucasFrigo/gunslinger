@@ -6,6 +6,7 @@ const LIFETIME := 2.0
 
 
 func _ready() -> void:
+	OutlineHull.attach_model(self, true)
 	var tween := create_tween()
 	tween.tween_interval(LIFETIME)
 	tween.tween_callback(queue_free)

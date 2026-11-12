@@ -14,6 +14,15 @@ signal voice_changed
 signal audio_devices_changed
 signal eye_height_changed
 signal gore_changed
+signal screen_effects_changed
+signal display_name_changed
+
+## VR display-name picker: "" (the device name) first, then western names. Proper names,
+## not translated.
+const DISPLAY_NAME_PRESETS: Array[String] = [
+	"", "Doc", "Kid", "Slim", "Dusty", "Hank", "Belle", "Jesse", "Calamity", "Wyatt",
+	"Ringo", "Sundance", "Butch", "Annie", "Laredo", "Tex",
+]
 
 ## Name AudioServer uses for "follow the OS default".
 const DEFAULT_DEVICE := "Default"
@@ -39,7 +48,7 @@ const VR_ACTIONS: Array[StringName] = [
 ## VR voice stays on the Settings toggles and always-on transmission.
 const FLAT_ACTIONS: Array[StringName] = [
 	&"fire", &"draw_toggle", &"cock_hammer", &"reload", &"prop_radial", &"prop_fire",
-	&"voice_mute", &"voice_ptt",
+	&"voice_mute", &"voice_ptt", &"flat_twirl",
 ]
 
 const VR_SOURCES: Array[String] = [
@@ -84,6 +93,7 @@ const FLAT_ACTION_LABELS := {
 	"prop_fire": "BIND_PROP_FIRE",
 	"voice_mute": "BIND_VOICE_MUTE",
 	"voice_ptt": "BIND_VOICE_PTT",
+	"flat_twirl": "BIND_FLAT_TWIRL",
 }
 
 const VR_ACTION_LABELS := {
@@ -116,6 +126,13 @@ var window_width := 1280
 var window_height := 720
 ## Hit chunks: craters, gibs, and the chunk sound. Local to this viewer.
 var gore_enabled := true
+## Iris wipe on the kill cam and the red hurt vignette (`ScreenOverlay`). Off is a hard cut.
+var screen_effects_enabled := true
+## Duel title cards before the standoff (`DuelIntro`). In multiplayer the host's value decides.
+var duel_intro_enabled := true
+## The single-player card and the LAN lobby name. Empty is the device name; a running Steam
+## client's persona wins over both (`NetworkManager.local_player_name`).
+var display_name := ""
 
 ## Headset height above the player root, in centimeters. Not stature.
 ## `eye_height_set` stays false until Calibrate or an edit, so a fresh install
@@ -128,6 +145,9 @@ var eye_height_set := false
 var eye_height_imperial := false
 ## 0 is raw wrist tracking. 1 is full slow-hand damping. Same default on Quest and PCVR.
 var aim_steady := 0.5
+## Last off-hand wheel pick (`[props]`), put back in the hand each duel. Kept as the raw
+## string so an id that was removed from `PropController.ITEMS` survives in the file.
+var offhand_item := "none"
 ## Last free-duel pick: arena index, enemy index (ARCHETYPES.size() is Mixed), opponent count.
 var free_duel_scenario := 0
 var free_duel_enemy := 0
@@ -209,6 +229,13 @@ func set_eye_height_imperial(enabled: bool) -> void:
 
 func set_aim_steady(value: float) -> void:
 	aim_steady = clampf(value, 0.0, 1.0)
+	_save_config()
+
+
+func set_offhand_item(id: StringName) -> void:
+	if offhand_item == String(id):
+		return
+	offhand_item = String(id)
 	_save_config()
 
 
@@ -345,6 +372,30 @@ func set_gore_enabled(value: bool) -> void:
 	gore_enabled = value
 	_save_config()
 	gore_changed.emit()
+
+
+func set_screen_effects_enabled(value: bool) -> void:
+	if screen_effects_enabled == value:
+		return
+	screen_effects_enabled = value
+	_save_config()
+	screen_effects_changed.emit()
+
+
+func set_duel_intro_enabled(value: bool) -> void:
+	if duel_intro_enabled == value:
+		return
+	duel_intro_enabled = value
+	_save_config()
+
+
+func set_display_name(value: String) -> void:
+	var cleaned := LobbyRoster.clean_name(value)
+	if display_name == cleaned:
+		return
+	display_name = cleaned
+	_save_config()
+	display_name_changed.emit()
 
 
 func set_voice_gate_cutoff(value: float) -> void:
@@ -718,6 +769,10 @@ func _default_flat_event(action: StringName) -> InputEvent:
 			var key6 := InputEventKey.new()
 			key6.physical_keycode = KEY_V
 			return key6
+		&"flat_twirl":
+			var key7 := InputEventKey.new()
+			key7.physical_keycode = KEY_T
+			return key7
 	return null
 
 
@@ -795,6 +850,9 @@ func _save_config(path := CONFIG_PATH) -> void:
 	if not language.is_empty():
 		cfg.set_value("general", "language", language)
 	cfg.set_value("general", "gore", gore_enabled)
+	cfg.set_value("general", "screen_effects", screen_effects_enabled)
+	cfg.set_value("general", "duel_intro", duel_intro_enabled)
+	cfg.set_value("general", "display_name", display_name)
 	cfg.set_value("audio", "master_volume", master_volume)
 	cfg.set_value("audio", "voice_volume", voice_volume)
 	cfg.set_value("audio", "voice_muted", voice_muted)
@@ -809,6 +867,7 @@ func _save_config(path := CONFIG_PATH) -> void:
 	cfg.set_value("vr", "eye_height_set", eye_height_set)
 	cfg.set_value("vr", "eye_height_imperial", eye_height_imperial)
 	cfg.set_value("vr", "aim_steady", aim_steady)
+	cfg.set_value("props", "item", offhand_item)
 	cfg.set_value("free_duel", "scenario", free_duel_scenario)
 	cfg.set_value("free_duel", "enemy", free_duel_enemy)
 	cfg.set_value("free_duel", "count", free_duel_count)
@@ -841,6 +900,9 @@ func _load_config(path := CONFIG_PATH) -> void:
 	if not language.is_empty():
 		TranslationServer.set_locale(language)
 	gore_enabled = bool(cfg.get_value("general", "gore", gore_enabled))
+	screen_effects_enabled = bool(cfg.get_value("general", "screen_effects", screen_effects_enabled))
+	duel_intro_enabled = bool(cfg.get_value("general", "duel_intro", duel_intro_enabled))
+	display_name = LobbyRoster.clean_name(str(cfg.get_value("general", "display_name", display_name)))
 	master_volume = clampf(float(cfg.get_value("audio", "master_volume", master_volume)), 0.0, 1.0)
 	voice_volume = clampf(float(cfg.get_value("audio", "voice_volume", voice_volume)), 0.0, 1.0)
 	voice_muted = bool(cfg.get_value("audio", "voice_muted", voice_muted))
@@ -857,6 +919,7 @@ func _load_config(path := CONFIG_PATH) -> void:
 		eye_height_cm = clampi(int(cfg.get_value("vr", "eye_height_cm", eye_height_cm)),
 				EYE_HEIGHT_CM_MIN, EYE_HEIGHT_CM_MAX)
 	aim_steady = clampf(float(cfg.get_value("vr", "aim_steady", aim_steady)), 0.0, 1.0)
+	offhand_item = str(cfg.get_value("props", "item", offhand_item))
 	free_duel_scenario = _clamp_duel_scenario(int(cfg.get_value("free_duel", "scenario", free_duel_scenario)))
 	free_duel_enemy = _clamp_duel_enemy(int(cfg.get_value("free_duel", "enemy", free_duel_enemy)))
 	free_duel_count = _clamp_duel_count(int(cfg.get_value("free_duel", "count", free_duel_count)))

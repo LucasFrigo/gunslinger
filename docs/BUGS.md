@@ -11,49 +11,278 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 
 ## Open
 
-### BUG-022 — Host logs ENet `Unable to send packet on channel 0` when two clients quit at the same moment
+### BUG-034 — NPCs start duels with the gun already drawn, not holstered on the hip
 
 | | |
 |---|---|
 | Status | `open` |
 | Severity | `minor` |
-| Filed | 2026-10-11 |
-| Platforms | Windows, Godot 4.7. Seen in the headless harness (`lobbyhost` + two `lobbyjoin`); not seen in play. |
-| Areas | `autoload/network_manager.gd` (`_on_peer_disconnected` → `_sync_roster`), `gauntlet/duel_manager.gd` (`host_peer_left`) |
+| Filed | 2026-10-27 |
+| Platforms | Seen in a Canyon duel (`The Drunk`); platform not recorded. |
+| Areas | `ai/duelist_ai.gd`, `weapons/weapon_base.gd`, `gauntlet/duel_manager.gd` |
 
-**What:** In the three-process lobby tests the host prints the engine error `Unable to send packet on channel 0` when both joiners exit together at the end of the run. The suites still print `AUTOTEST PASS`. It was seen during the tests of the mixed-lobbies work; how many runs showed it was not counted.
+**What:** At the start of a duel the NPC already holds the gun in its hand, pointed forward, instead of having it holstered on its hip until the draw.
+
+**Repro:**
+1. Start a duel against an NPC (The Drunk on Canyon seen; other archetypes untested).
+2. Look at the NPC during the countdown, before the draw signal.
+3. The gun is in its hand, not on its hip.
+
+**Notes:** Not yet investigated. Check whether this is the same for every archetype and arena, and whether it relates to BUG-028 (holstered gun rotation) or BUG-029 (replay NPC draw animation).
+
+---
+
+### BUG-033 — Train Rooftop: bullets hit the invisible walls
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `minor` |
+| Filed | 2026-10-27 |
+| Platforms | Train Rooftop; platform not recorded. |
+| Areas | `scenarios/scenario_base.gd` (`Guard*` collision boxes), `scenarios/train_rooftop/train_rooftop.tscn` |
+
+**What:** Bullets stop against the invisible `Guard*` walls around the rooftop instead of flying on.
+
+**Repro:**
+1. Free duel on Train Rooftop.
+2. Shoot toward a side or end of the roof, or at an angle that crosses a guard box.
+3. The bullet hits the invisible wall.
+
+**Notes:** Not yet investigated. BUG-019 left bullets colliding with the `Guard*` boxes on purpose (only ragdolls ignore them), so the bullet's collision mask likely needs the same exception, or the guards should leave the bullet layer. Walkers and props should still be blocked.
+
+---
+
+### BUG-030 — Replay: off-hand props can be misplaced (cigarette floats ahead of the hand)
+
+| | |
+|---|---|
+| Status | `open` |
+| Severity | `minor` |
+| Filed | 2026-10-19 |
+| Platforms | Seen in the kill replay; platform not recorded. |
+| Areas | `autoload/replay_buffer.gd` (`prop` pose, `PROP_PLACE_HAND`), `player/replay_objects.gd` |
+
+**What:** In the replay, off-hand props are sometimes not where the hand is. The cigarette was seen floating ahead of the hand.
+
+**Repro:**
+1. Hold an off-hand prop (cigarette seen; others untested) during a duel.
+2. Finish the duel and watch the replay.
+3. Look at the prop relative to the hand.
+
+**Notes:** Not yet investigated. Check whether the other props (coin, ace, bottle) are also offset, and whether the recorded `prop` transform is hand-relative or world-space when replayed.
+
+---
+
+## Fixed
+
+### BUG-032 — Flat: the gun twirl is dead after a win, once the replay ends or is skipped
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-26 |
+| Fixed | 2026-10-26 |
+| Platforms | Flat (the twirl is flat-only). VR hinge spin was checked and is not affected. |
+| Areas | `player/player.gd` (`twirl_allowed`) |
+
+**What:** After winning a duel, holding the twirl bind (T) did nothing once the replay finished or was skipped, although the gun was back in hand.
+
+**Repro:**
+1. Flat run, free duel, draw and shoot the NPC.
+2. Let the replay play out (or skip it with fire), then hold the twirl bind.
+
+**Cause:** `twirl_allowed()` only allowed `DuelManager.State.DRAW` (or the practice hub). A kill moves the duel to `RESOLUTION`, so the twirl stayed refused for the rest of the round. `_combat_blocked()` already keeps the fly-along and the clip itself locked.
+
+**Fix:** `twirl_allowed()` also allows `RESOLUTION` while the player is alive and `DeathCam.blocks_combat()` is false. A loser is dead and the fly-along and replay still block. `--autotest=duel` (`_spin_after_replay_ok`) holds the bind right after a win's replay, checks that a dead player may not twirl, and checks spin and twirl in the next duel. It failed before the fix. Roadmap 1.4.
+
+### BUG-031 — Canyon: the desert plain draws a line behind the enemy instead of fading into the fog
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-23 |
+| Fixed | 2026-10-23 |
+| Platforms | All (seen in a flat run; the fog is the same in VR). |
+| Areas | `scenarios/canyon/canyon.tscn` (`Environment` depth fog) |
+
+**What:** From `PlayerSpawn` the 6 km plain under the butte drew as its own darker band, behind the enemy from the shins to the chest, with a bright edge line where it met the sky. The distant mesas drew almost unfogged.
+
+**Repro:**
+1. Load the Canyon (any time of day) in a flat run.
+2. Stand at `PlayerSpawn` and look down the lane past `EnemySpawn`.
+
+**Cause:** In depth mode `fog_density` is the fog's maximum opacity (Godot's Environment reference), and the Compatibility shader multiplies the depth fog by it. At 0.012 the fog never passed 1.2%, so begin 60 m and end 220 m did almost nothing.
+
+**Fix:** `fog_density` 1.0 in `canyon.tscn`, with `fog_depth_begin` 80 and `fog_depth_end` 400. The user found 60 and 220 at full density too strong, since the far mesas washed out. Curve 1.4 stays. The fog now takes about 0.2% at 100 m, 28% at 220 m, and all of it from about 390 m, where the plain lies. A flat capture of Lane P before the fix showed the plain at (204, 94, 55) at dusk under a bright line (242, 140, 71), against a sky of (240, 128, 64) at the horizon. After it, the plain draws (243, 140, 71), the horizon's own colour, at dusk and (237, 153, 112) at dawn, with no line, and Mesa5 keeps its colour ((255, 140, 62) at dusk). `--autotest=load` (its time-of-day horizon contract) passes. Design: `docs/design/scenarios/canyon.md` F1 and H.
+
+### BUG-029 — Kill replay: the NPC's hand stays at its side, no draw animation
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-15 |
+| Fixed | 2026-10-15 |
+| Platforms | Single player (flat seen; VR shares the path). |
+| Areas | `ai/duelist_ai.gd` (`apply_replay_pose`, `_aim_replay_hand`) |
+
+**What:** In the replay after an NPC died mid-draw, its arm and gun swung up but the mannequin's hand stayed by its side, so it looked shot without drawing.
+
+**Repro:**
+1. Play a duel and kill the NPC while it is drawing.
+2. Watch the replay and look at the NPC's gun hand.
+
+**Cause:** The pose was recorded and replayed correctly (`arm`, `gun`, flags). The gun-arm IK aims at the revolver's `GripAnchor` through a relative `target_path`. The lethal hit flings the revolver into the scene root (`release_into_world`), so the path resolved to nothing and the IK wrote no hand pose for the whole clip.
+
+**Fix:** `DuelistAI.apply_replay_pose` retargets the IK each frame (`_aim_replay_hand`): the `GripAnchor` while the recorded flags have the gun drawn and held, else the arm's grip target, with the pistol or open hand curl. `--autotest=duel` kills an NPC mid-draw and checks the hand stays within 0.2 m of its gun in the replay.
+
+### BUG-022 — Host logs ENet `Unable to send packet on channel 0` when two clients quit at the same moment
+
+| | |
+|---|---|
+| Status | `fixed` (one engine-side line accepted) |
+| Severity | `minor` |
+| Filed | 2026-10-11 |
+| Fixed | 2026-10-15 |
+| Platforms | Windows, Godot 4.7. Seen in the headless harness (`lobbyhost` + two `lobbyjoin`); not seen in play. |
+| Areas | `autoload/network_manager.gd` (`_queue_peer_disconnected`, `_sync_roster`), `gauntlet/duel_manager.gd` (`host_peer_left`) |
+
+**What:** In the three-process lobby tests the host prints the engine error `Unable to send packet on channel 0, max channels: 0` when both joiners exit together at the end of the run. The suites still print `AUTOTEST PASS`.
 
 **Repro:**
 1. Start `--autotest=lobbyhost`, then two `--autotest=lobbyjoin` processes.
-2. Read the host's output after the joiners quit.
+2. Search the host's `stderr` for `Unable to send packet` (before the fix: 3 errors in 6 of 8 runs).
 
-**Notes:** The cause is not established. It appears around teardown: when a peer disconnects, `NetworkManager._on_peer_disconnected` calls `host_peer_left` and `_sync_roster`, and the host sends reliable RPCs (`_roster_sync`, `_mp_down`) to peers it still lists as verified, one of which may already be gone. That is a guess, not a finding. Nothing was seen to break because of it.
+**Cause:** Two peers that quit together reach the host in one poll. ENet marks both dead before the first `peer_disconnected` fires, so the sends made from that handler, `_mp_down.rpc` in `host_peer_left` and `_roster_sync.rpc_id` in `_sync_roster`, hit the second one.
+
+**Fix:** `NetworkManager` handles the engine's `peer_disconnected` after the poll (`_queue_peer_disconnected` defers `_on_peer_disconnected`), and `_sync_roster` skips ids no longer in `multiplayer.get_peers()`. Both script-side errors are gone.
+
+**Accepted:** one error remains, with no GDScript frame, in 5 of 5 passing runs after the fix, at the end of the host's run. It is raised inside the engine, not from a script call. Probably the engine's relay notification to the other quitting peer, but unconfirmed: turning `multiplayer.server_relay` off ended the runs early at the voice step, so it proved nothing. Nothing breaks because of it, and the owner accepted it on 2026-10-15.
 
 ### BUG-023 — `Basis must be normalized` error from `ai/duelist_ai.gd` in the DRAWING branch
 
 | | |
 |---|---|
-| Status | `open` |
+| Status | `fixed` |
 | Severity | `minor` |
 | Filed | 2026-10-11 |
+| Fixed | 2026-10-15 |
 | Platforms | Windows, Godot 4.7. Seen in the headless harness (the host of `lobbyhost` + two `lobbyjoin`, which runs a Sheriff NPC); not seen in play. |
-| Areas | `ai/duelist_ai.gd` (`AIState.DRAWING` branch of `_process`) |
+| Areas | `ai/duelist_ai.gd` (`_animate_arm`, called from the `AIState.DRAWING` branch of `_process`) |
 
-**What:** The host printed the engine error `Basis must be normalized` from the NPC's DRAWING branch in 2 of 6 trio runs (`lobbyhost` + two `lobbyjoin`). Every run still printed `AUTOTEST PASS` on all three processes. It was not seen in the single-player suites, but it was not looked for there.
+**What:** The host printed the engine error `Basis must be normalized in order to be casted to a Quaternion` from the NPC's DRAWING branch, once per frame for ~50 frames in a run. Every run still printed `AUTOTEST PASS`.
 
 **Repro:**
 1. Start `--autotest=lobbyhost`, then two `--autotest=lobbyjoin` processes.
-2. Search the host's output for `Basis must be normalized` (intermittent; repeat the trio).
+2. Search the host's `stderr` for `must be normalized` (intermittent; 1 of 9 runs showed it, 51 times).
 
-**Notes:** The cause is not established. The NPC runs on the host in a lobby (`GameManager.setup_mp_duel`), and the DRAWING branch also runs in single player, so it is not known whether the mixed-lobbies work caused it.
+**Cause:** `_animate_arm` slerps `global_transform.basis * _rest_arm_basis`. The logged basis was a clean rotation to six digits, but its columns were about 0.999995 long, so the NPC node carries a hair of non-unit scale (a spawn point's rounded basis, set through `global_transform = spawns[slot]`). `Basis.slerp` rejects that once the error passes its 1e-5 tolerance, which happens only for some spawn points and yaws, hence the intermittence. That the scale comes from the spawn marker is inferred from the logged basis, not traced to a marker.
+
+**Fix:** `_animate_arm` orthonormalizes both bases before the slerp. Only the orientation matters there. After the change 0 of 16 trio runs printed it.
+
+### BUG-028 — Holstered gun has the wrong rotation (barrel not pointing down)
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-14 |
+| Fixed | 2026-10-15 |
+| Platforms | Arena, mode and VR / flat not recorded. |
+| Areas | `player/player.gd` (holster placement after `# Holster rides the chosen hip`), `player/remote_avatar.gd` (holster placement, `_apply_gun_parent`), `weapons/weapon_base.gd` (`holster_to`) |
+
+**What:** While the gun is in the holster, it does not hang with the tip of the barrel pointing down, as a holstered revolver should.
+
+**Repro:**
+1. Start any mode with the gun holstered.
+2. Look at the gun on the hip.
+
+**Fix:** `Player` and `RemoteAvatar` now pitch the holster basis -90° about X after the yaw, so the gun's -Z barrel points down.
+
+### BUG-027 — Main Street: a killed NPC jumps into the air the moment it ragdolls
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `major` |
+| Filed | 2026-10-13 |
+| Fixed | 2026-10-14 |
+| Platforms | Main Street, every mode, VR and flat. NPCs, the player's own body, and remote avatars all stood on the same markers. Other arenas were already flush. |
+| Areas | `scenarios/main_street/main_street.tscn` (spawn markers), `dev/autotest.gd` (`_spawn_floors_ok`, `_ragdoll_npc_floor_ok`) |
+
+**What:** On the Main Street map, when an NPC is killed it launches upward at the instant it switches to ragdoll, instead of dropping.
+
+**Repro:**
+1. Start a duel against an NPC on Main Street.
+2. Kill the NPC.
+3. At the moment the body ragdolls it jumps into the air.
+
+**Fix:** The reporter's lead was right. The `env_terrain` collider's top is at y=+0.12 (`dev/build_main_street_blender.py`, so building feet sink into the dirt), but all 7 Main Street spawn markers sat at y=0. The shin capsules that `BodyRagdoll._build` makes reach down to the sole, so they started 12 cm inside the ground, and the solver threw the body out (the hips rose 0.163 m in a gravity-only collapse).
+- The markers (`PlayerSpawn`, `EnemySpawn`, `EnemySpawns2/*`, `EnemySpawns3/*`) are now at y=0.12. Lobby rings, horde spawns, and gusts read the markers, so they follow.
+- `--autotest=multi` (`_spawn_floors_ok`) now fails if any marker on any arena has its floor above it, or more than 5 cm below it.
+- `--autotest=ragdoll` (`_ragdoll_npc_floor_ok`) collapses an NPC on Main Street and fails if its hips rise more than 3 cm.
+
+### BUG-026 — Flat draw: the hand animates slower than the gun
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `minor` |
+| Filed | 2026-10-12 |
+| Fixed | 2026-10-14 |
+| Platforms | Flat (local player), and how other players see a draw in multiplayer. VR keeps its catch ease. |
+| Areas | `player/player.gd` (`_place_wrist`, `_snap_wrist`, `_attach_gun_to_hand`, `_holster_gun`), `player/remote_avatar.gd` (`_apply_gun_parent`, `_place_snap`) |
+
+**What:** In flat mode the draw animation of the hand runs slower than the gun's, so the two are out of sync during the draw. They should move together.
+
+**Repro:**
+1. Start a duel in flat mode.
+2. Draw and watch the hand and the gun.
+
+**Fix:** The revolver teleports between the hip and `GunAttach` in one frame, but the mannequin wrist eased onto the grip over `DummyBody.WRIST_BLEND_SEC` (0.1 s) on scaled time. Under the on-draw slow-mo (×0.25) the hand trailed the gun by about 0.4 s.
+- A flat draw, a flat pickup of a loose gun, and a flat holster now call `Player._snap_wrist`, so the wrist lands on the grip (or back at the hang) in the same frame as the gun. Tosses still ease, because the gun leaves from the hand.
+- `RemoteAvatar` snaps both wrists on the frame its gun-drawn flag flips between the hip and the hand. A catch of a loose gun still eases.
+- The finger curl keeps its 0.1 s blend.
+
+Covered by `--autotest=gauntlet` (`_assert_flat_draw_snap`).
+
+### BUG-025 — Shot in the non-gun arm still disarms the player
+
+| | |
+|---|---|
+| Status | `fixed` |
+| Severity | `major` |
+| Filed | 2026-10-12 |
+| Fixed | 2026-10-14 |
+| Platforms | All: VR, flat, NPCs, multiplayer. |
+| Areas | `combat/combat_rules.gd` (`resolve`, `is_gun_arm`), `player/hitbox.gd` (`side`), `player/player.gd` (`_apply_nonfatal`), `ai/duelist_ai.gd`, `gauntlet/duel_manager.gd` (`mp_report_hit`, `_mp_wound`) |
+
+**What:** A hit on the arm that is not holding the gun still disarms the player, as if the gun arm had been hit.
+
+**Repro:**
+1. Start a duel and let the opponent shoot your arm on the side that is not holding the gun.
+2. You are disarmed.
+
+**Fix:** Both arm hitboxes had only `region = &"arm"`, so `CombatRules.resolve` and `Player._apply_nonfatal` disarmed on either arm.
+- `Hitbox.side` (`&"L"` / `&"R"`, set on `ArmHitboxL` / `ArmHitboxR` in `player.tscn`, `duelist.tscn` and `remote_avatar.tscn`) now rides `take_bullet_hit(..., side)`. In MP it also rides `mp_report_hit` and `_mp_wound`, so the victim's own peer decides.
+- `CombatRules.is_gun_arm` compares the side with the victim's gun side:
+  - Player: `draw_hand_name()`, the holding hand, or the holster side when no gun is held.
+  - NPC: the right arm. A left-arm hit no longer stops its draw either.
+- A player's off-arm hit instead drops the off-hand coin / ace / longneck loose (`PropController.drop_from_hand`), then the VR belt round. The cigarette stays.
+
+Covered by `--autotest=gauntlet` (`_assert_pain_jerk`).
 
 ### BUG-024 — VR player spawns off the Train Rooftop, past the invisible wall
 
 | | |
 |---|---|
-| Status | `open` |
+| Status | `fixed` |
 | Severity | `major` |
 | Filed | 2026-10-12 |
+| Fixed | 2026-10-14 |
 | Platforms | VR. Train Rooftop. Flat appears correct. Headset / runtime and game mode not recorded. |
 | Areas | `player/player.gd` `reset_for_duel`, `player/vr_rig.gd` `reset_locomotion`, `scenarios/scenario_base.gd` (`Guard*` walls, `get_player_spawn`), `scenarios/train_rooftop/train_rooftop.tscn` |
 
@@ -63,11 +292,14 @@ How to file: next unused `BUG-NNN`, repro steps, arena/mode if known, screenshot
 1. Start a duel on Train Rooftop in VR.
 2. At spawn the player is off the rooftop, outside the invisible wall.
 
-**Notes:** The cause is not established. One lead, not checked: `reset_for_duel` puts the Player root on the marker and `VRRig.reset_locomotion` zeroes the origin and yaws it around the HMD, but nothing moves the origin so the headset lands on the marker. A player standing away from the centre of their playspace would then start that far from the spawn, and a spawn-time placement is not a walk into the wall. Flat has no playspace offset (`rig.position = Vector3.ZERO`). Other arenas would shift the same way; only the narrow roof would show it.
+**Fix:** `reset_for_duel` put the Player root on the marker, and `VRRig.reset_locomotion` zeroed the origin and yawed it around the HMD. Nothing removed the HMD's offset from the playspace centre. A player standing about 1.75 m off centre therefore started outside the roof's 3.5 m guard walls, and other arenas shifted the same way.
+- `reset_locomotion` now also shifts the origin in XZ so the head stands on the spawn. Height is kept, and every arena gets this.
+- If the headset is still on the identity pose (not tracking yet), the alignment waits in `_process` until `headset_height_ready()`, the same way the saved eye height waits.
+- Second gap found while fixing this: VR stick walking had no collision and passed through every `Guard*` wall and building. `VRRig.collide_stick_motion` now shape-casts a capsule against world layer 1 and slides along whatever it hits, like flat's `move_and_slide`.
+  - The capsule has flat's 0.28 m radius and sits at the head's XZ. It spans floor + 0.35 m to floor + 1.6 m, so ground lips don't snag it.
+  - Walking in your room is not checked. If your head is already inside a wall, only the part of the step leading out is kept.
 
----
-
-## Fixed
+Covered by `--autotest=load` (`_vr_rig_ok`).
 
 ### BUG-021 — Multiplayer process crashes when a remote avatar is freed (seen as `join` / `lobbyjoin` exiting with an access violation after AUTOTEST PASS)
 

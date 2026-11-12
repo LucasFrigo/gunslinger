@@ -49,6 +49,11 @@ func reset(host_name := "") -> void:
 	slots[0]["name"] = host_name
 
 
+## A player name as a slot and the card show it: one line, trimmed, NAME_MAX long.
+static func clean_name(player_name: String) -> String:
+	return player_name.strip_escapes().strip_edges().left(NAME_MAX)
+
+
 static func max_slots() -> int:
 	return QUEST_MAX_SLOTS if OS.has_feature("android") else MAX_SLOTS
 

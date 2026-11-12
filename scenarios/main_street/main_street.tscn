@@ -19,13 +19,25 @@
 [ext_resource type="PackedScene" uid="uid://bc0hp44nv237a" path="res://assets/models/scenarios/main_street/prp_barrels.glb" id="16"]
 [ext_resource type="PackedScene" uid="uid://cx1uk146m2625" path="res://assets/models/scenarios/main_street/prp_hitching_rail.glb" id="17"]
 [ext_resource type="PackedScene" uid="uid://bimj4uhhrnpri" path="res://assets/models/scenarios/main_street/prp_cow.glb" id="18"]
+[ext_resource type="Shader" path="res://scenarios/sky_western.gdshader" id="sky_shader"]
+[ext_resource type="Texture2D" path="res://scenarios/sky_clouds.tres" id="sky_clouds"]
 
-[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
-sky_top_color = Color(0.28, 0.55, 0.92, 1)
-sky_horizon_color = Color(0.7, 0.84, 0.98, 1)
-sky_curve = 0.08
-ground_bottom_color = Color(0.4, 0.32, 0.22, 1)
-ground_horizon_color = Color(0.58, 0.52, 0.4, 1)
+[sub_resource type="ShaderMaterial" id="sky_mat"]
+shader = ExtResource("sky_shader")
+shader_parameter/sky_top = Color(0.28, 0.55, 0.92, 1)
+shader_parameter/sky_horizon = Color(0.7, 0.84, 0.98, 1)
+shader_parameter/sky_curve = 0.08
+shader_parameter/ground_bottom = Color(0.4, 0.32, 0.22, 1)
+shader_parameter/ground_horizon = Color(0.58, 0.52, 0.4, 1)
+shader_parameter/ground_curve = 0.02
+shader_parameter/bands = 0.0
+shader_parameter/sun_radius = 0.015
+shader_parameter/sun_halo = 0.35
+shader_parameter/cloud_tex = ExtResource("sky_clouds")
+shader_parameter/cloud_cover = 0.35
+shader_parameter/cloud_scale = 0.25
+shader_parameter/cloud_offset = Vector2(0, 0)
+shader_parameter/cloud_color = Color(1, 0.96, 0.89, 1)
 
 [sub_resource type="Sky" id="sky"]
 sky_material = SubResource("sky_mat")
@@ -48,29 +60,40 @@ fog_sky_affect = 0.45
 script = ExtResource("1")
 
 [node name="PlayerSpawn" type="Marker3D" parent="." unique_id=1385432040]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 8)
 
 [node name="EnemySpawn" type="Marker3D" parent="." unique_id=1701695076]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, -8)
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0.12, -8)
+
+[node name="MenuCameras" type="Node3D" parent="."]
+
+[node name="A" type="Marker3D" parent="MenuCameras"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 2.2, 0)
+
+[node name="B" type="Marker3D" parent="MenuCameras"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 1.8, 6)
+
+[node name="C" type="Marker3D" parent="MenuCameras"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 1.8, -7)
 
 [node name="EnemySpawns2" type="Node3D" parent="."]
 
 [node name="A" type="Marker3D" parent="EnemySpawns2"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.9, 0, -4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.9, 0.12, -4)
 
 [node name="B" type="Marker3D" parent="EnemySpawns2"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.9, 0, -4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.9, 0.12, -4)
 
 [node name="EnemySpawns3" type="Node3D" parent="."]
 
 [node name="A" type="Marker3D" parent="EnemySpawns3"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.5, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.5, 0.12, 0)
 
 [node name="B" type="Marker3D" parent="EnemySpawns3"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, -8)
 
 [node name="C" type="Marker3D" parent="EnemySpawns3"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.5, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.5, 0.12, 0)
 
 [node name="Sun" type="DirectionalLight3D" parent="." unique_id=793511931]
 transform = Transform3D(0.766044, -0.430109, 0.477684, 0, 0.743145, 0.669131, -0.642788, -0.512584, 0.569282, 0, 18, 0)
@@ -168,40 +191,28 @@ transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 10.75, 0, 14)
 transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 10.75, 0, 18)
 
 [node name="WestPost_A" parent="Boardwalks" unique_id=1346028839 instance=ExtResource("12")]
-transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -9.6, 0, -12)
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -9.6, 0, -12)
 
 [node name="WestPost_B" parent="Boardwalks" unique_id=1522249355 instance=ExtResource("12")]
-transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -9.6, 0, -6)
-
-[node name="WestPost_C" parent="Boardwalks" unique_id=1566208507 instance=ExtResource("12")]
-transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -9.6, 0, 0)
-
-[node name="WestPost_D" parent="Boardwalks" unique_id=733945094 instance=ExtResource("12")]
-transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -9.6, 0, 6)
-
-[node name="WestPost_E" parent="Boardwalks" unique_id=1113384167 instance=ExtResource("12")]
-transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -9.6, 0, 12)
-
-[node name="WestPost_F" parent="Boardwalks" unique_id=1725057987 instance=ExtResource("12")]
-transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -9.6, 0, 18)
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -9.6, 0, -6)
 
 [node name="EastPost_A" parent="Boardwalks" unique_id=243548272 instance=ExtResource("12")]
-transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 9.6, 0, -12)
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 9.6, 0, -12)
 
 [node name="EastPost_B" parent="Boardwalks" unique_id=590993081 instance=ExtResource("12")]
-transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 9.6, 0, -6)
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 9.6, 0, -6)
 
 [node name="EastPost_C" parent="Boardwalks" unique_id=128778563 instance=ExtResource("12")]
-transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 9.6, 0, 0)
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 9.6, 0, 0)
 
 [node name="EastPost_D" parent="Boardwalks" unique_id=1588306927 instance=ExtResource("12")]
-transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 9.6, 0, 6)
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 9.6, 0, 6)
 
 [node name="EastPost_E" parent="Boardwalks" unique_id=932139673 instance=ExtResource("12")]
-transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 9.6, 0, 12)
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 9.6, 0, 12)
 
 [node name="EastPost_F" parent="Boardwalks" unique_id=2129298050 instance=ExtResource("12")]
-transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 9.6, 0, 18)
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 9.6, 0, 18)
 
 [node name="Ends" type="Node3D" parent="." unique_id=609588544]
 
@@ -211,49 +222,49 @@ transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, -38)
 [node name="Railroad" type="Node3D" parent="Ends" unique_id=898084309]
 
 [node name="Track_-56" parent="Ends/Railroad" unique_id=1579688560 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -56, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -56, 0, -45)
 
 [node name="Track_-48" parent="Ends/Railroad" unique_id=1803255586 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -48, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -48, 0, -45)
 
 [node name="Track_-40" parent="Ends/Railroad" unique_id=377173858 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, -45)
 
 [node name="Track_-32" parent="Ends/Railroad" unique_id=1598108645 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -32, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -32, 0, -45)
 
 [node name="Track_-24" parent="Ends/Railroad" unique_id=1535083282 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -24, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -24, 0, -45)
 
 [node name="Track_-16" parent="Ends/Railroad" unique_id=1667477353 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16, 0, -45)
 
 [node name="Track_-8" parent="Ends/Railroad" unique_id=1928451068 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 0, -45)
 
 [node name="Track_0" parent="Ends/Railroad" unique_id=564336440 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -45)
 
 [node name="Track_8" parent="Ends/Railroad" unique_id=269091255 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, -45)
 
 [node name="Track_16" parent="Ends/Railroad" unique_id=1949206060 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, -45)
 
 [node name="Track_24" parent="Ends/Railroad" unique_id=372664198 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, -45)
 
 [node name="Track_32" parent="Ends/Railroad" unique_id=553436243 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32, 0, -45)
 
 [node name="Track_40" parent="Ends/Railroad" unique_id=27784742 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, -45)
 
 [node name="Track_48" parent="Ends/Railroad" unique_id=1905900255 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 48, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 48, 0, -45)
 
 [node name="Track_56" parent="Ends/Railroad" unique_id=1812582355 instance=ExtResource("13")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 56, 0, -34)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 56, 0, -45)
 
 [node name="StockPens" type="Node3D" parent="Ends" unique_id=1188426421]
 

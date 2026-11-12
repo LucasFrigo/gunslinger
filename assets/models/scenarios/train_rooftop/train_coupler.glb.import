@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://2t4ug6arw3h4"
-path="res://.godot/imported/saloon_interior.glb-a9d28505fb645ecb1b7854319246bc23.scn"
+uid="uid://yqh7nt8xglhu"
+path="res://.godot/imported/train_coupler.glb-d6977c0864efac2be3d23ef73a4c03a9.scn"
 
 [deps]
 
-source_file="res://assets/models/scenarios/saloon/saloon_interior.glb"
-dest_files=["res://.godot/imported/saloon_interior.glb-a9d28505fb645ecb1b7854319246bc23.scn"]
+source_file="res://assets/models/scenarios/train_rooftop/train_coupler.glb"
+dest_files=["res://.godot/imported/train_coupler.glb-d6977c0864efac2be3d23ef73a4c03a9.scn"]
 
 [params]
 
@@ -35,11 +35,11 @@ animation/fps=30
 animation/trimming=false
 animation/remove_immutable_tracks=true
 animation/import_rest_as_RESET=false
-import_script/path=""
+import_script/path="res://assets/shaders/world_surface_import.gd"
 materials/extract=0
 materials/extract_format=0
 materials/extract_path=""
 _subresources={}
 gltf/naming_version=2
-gltf/embedded_image_handling=1
+gltf/embedded_image_handling=3
 gltf/texture_map_mode=1

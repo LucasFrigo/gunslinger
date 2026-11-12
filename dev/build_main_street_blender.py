@@ -19,6 +19,7 @@ import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import scenery_uv  # noqa: E402
 from blender_kit import (  # noqa: E402
     assign,
     box,
@@ -102,16 +103,6 @@ def _collect_meshes(root):
 # ---------------------------------------------------------------------------
 # Builders — origin at ground, centred on width (X), facade toward +Y.
 # ---------------------------------------------------------------------------
-
-def build_env_street_ground(mats):
-    root = empty("env_street_ground")
-    # Town dirt strip only — surrounding desert is env_terrain.
-    ground = box("Street", (0, 0, -0.5), (28, 90, 1), root)
-    assign(ground, mats["dirt"])
-    flat_shade(ground)
-    convcol("Street", (0, 0, -0.5), (28, 90, 1), root)
-    return root
-
 
 def build_env_terrain(mats):
     """Large flat desert apron. Top slightly above y=0 so building feet bury into dirt."""
@@ -771,7 +762,6 @@ def build_env_desert_scatter(mats):
 
 
 PIECES = [
-    ("env_street_ground", build_env_street_ground),
     ("env_terrain", build_env_terrain),
     ("env_desert_scatter", build_env_desert_scatter),
     ("bld_saloon", build_bld_saloon),
@@ -793,27 +783,8 @@ PIECES = [
 ]
 
 
-def select_hierarchy(root):
-    bpy.ops.object.select_all(action="DESELECT")
-
-    def _sel(o):
-        o.select_set(True)
-        for c in o.children:
-            _sel(c)
-
-    _sel(root)
-    bpy.context.view_layer.objects.active = root
-
-
 def export_glb(root, path):
-    select_hierarchy(root)
-    bpy.ops.export_scene.gltf(
-        filepath=path,
-        export_format="GLB",
-        export_yup=True,
-        use_selection=True,
-        export_apply=True,
-    )
+    scenery_uv.export_glb(root, path)
 
 
 def setup_world():
@@ -846,6 +817,7 @@ def main():
         print(f"built {name}: tris≈{tris} (excl. colliders)")
 
     purge_unused()
+    scenery_uv.process_scene()
     bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
     print(f"saved {OUT_BLEND}")
 

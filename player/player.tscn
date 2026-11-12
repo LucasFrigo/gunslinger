@@ -42,11 +42,13 @@ script = ExtResource("2")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.32, 1.32, 0)
 script = ExtResource("2")
 region = &"arm"
+side = &"L"
 
 [node name="ArmHitboxR" type="Area3D" parent="." unique_id=797992227]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.32, 1.32, 0)
 script = ExtResource("2")
 region = &"arm"
+side = &"R"
 
 [node name="LegHitboxL" type="Area3D" parent="." unique_id=864601599]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)

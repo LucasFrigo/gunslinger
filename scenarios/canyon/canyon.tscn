@@ -2,13 +2,25 @@
 
 [ext_resource type="Script" uid="uid://rqeigq13k8h7" path="res://scenarios/scenario_base.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://d2mq1t0ld1b6w" path="res://assets/models/scenarios/canyon/canyon.glb" id="2"]
+[ext_resource type="Shader" path="res://scenarios/sky_western.gdshader" id="sky_shader"]
+[ext_resource type="Texture2D" path="res://scenarios/sky_clouds.tres" id="sky_clouds"]
 
-[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
-sky_top_color = Color(0.25, 0.15, 0.3, 1)
-sky_horizon_color = Color(0.95, 0.5, 0.25, 1)
-ground_bottom_color = Color(0.72, 0.4, 0.2, 1)
-ground_horizon_color = Color(0.95, 0.55, 0.28, 1)
-ground_curve = 0.12
+[sub_resource type="ShaderMaterial" id="sky_mat"]
+shader = ExtResource("sky_shader")
+shader_parameter/sky_top = Color(0.25, 0.15, 0.3, 1)
+shader_parameter/sky_horizon = Color(0.95, 0.5, 0.25, 1)
+shader_parameter/sky_curve = 0.15
+shader_parameter/ground_bottom = Color(0.72, 0.4, 0.2, 1)
+shader_parameter/ground_horizon = Color(0.95, 0.55, 0.28, 1)
+shader_parameter/ground_curve = 0.12
+shader_parameter/bands = 0.0
+shader_parameter/sun_radius = 0.015
+shader_parameter/sun_halo = 0.35
+shader_parameter/cloud_tex = ExtResource("sky_clouds")
+shader_parameter/cloud_cover = 0.35
+shader_parameter/cloud_scale = 0.25
+shader_parameter/cloud_offset = Vector2(0, 0)
+shader_parameter/cloud_color = Color(1, 0.76, 0.61, 1)
 
 [sub_resource type="Sky" id="sky"]
 sky_material = SubResource("sky_mat")
@@ -22,12 +34,12 @@ fog_enabled = true
 fog_mode = 1
 fog_light_color = Color(0.95, 0.55, 0.28, 1)
 fog_sun_scatter = 0.35
-fog_density = 0.012
+fog_density = 1.0
 fog_aerial_perspective = 0.9
 fog_sky_affect = 0.85
 fog_depth_curve = 1.4
-fog_depth_begin = 60.0
-fog_depth_end = 220.0
+fog_depth_begin = 80.0
+fog_depth_end = 400.0
 
 [node name="CanyonAtDusk" type="Node3D" unique_id=748255427]
 script = ExtResource("1")
@@ -37,6 +49,17 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 11)
 
 [node name="EnemySpawn" type="Marker3D" parent="." unique_id=425122107]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, -11)
+
+[node name="MenuCameras" type="Node3D" parent="."]
+
+[node name="A" type="Marker3D" parent="MenuCameras"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 2.5, 0)
+
+[node name="B" type="Marker3D" parent="MenuCameras"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 1.8, 7)
+
+[node name="C" type="Marker3D" parent="MenuCameras"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 1.8, -7)
 
 [node name="EnemySpawns2" type="Node3D" parent="."]
 

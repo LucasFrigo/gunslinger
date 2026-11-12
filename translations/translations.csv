@@ -95,6 +95,11 @@ SETTINGS_OUTPUT_DEVICE,Output Device
 SETTINGS_DEVICE_HINT,"Output device applies to all game audio, not just voice."
 SETTINGS_HOLSTER_SIDE,Holster Side
 SETTINGS_GORE,Gore
+SETTINGS_SCREEN_EFFECTS,Screen effects
+SETTINGS_DUEL_INTRO,Duel intro
+SETTINGS_DISPLAY_NAME,Your Name
+SETTINGS_NAME_DEVICE,Device name (%s)
+SETTINGS_NAME_STEAM,"Steam is running, so duels use your Steam name: %s"
 SETTINGS_HEIGHT,Height
 SETTINGS_STANDING_HEIGHT,Standing Height
 SETTINGS_UNIT_FT,ft
@@ -142,6 +147,7 @@ BIND_PROP_RADIAL,Prop Radial
 BIND_PROP_FIRE,Cigarette / Prop
 BIND_VOICE_MUTE,Mute Mic
 BIND_VOICE_PTT,Push To Talk
+BIND_FLAT_TWIRL,Gun Twirl
 BIND_GRIP,Grip
 BIND_TRICK_SHOT,Trick Shot
 BIND_GATE,Gate
@@ -275,6 +281,7 @@ BOARD_FLAT_FIRE,FIRE — %s
 BOARD_FLAT_COCK,COCK — %s
 BOARD_FLAT_RELOAD,RELOAD — %s
 BOARD_FLAT_JAM,"JAM — look down, hold %s"
+BOARD_FLAT_TWIRL,TWIRL — hold %s with the gun drawn
 BOARD_FLAT_PROPS,PROPS — %s for the wheel; hold %s to throw
 BOARD_FLAT_BOTTLES,"BOTTLES — %s to grab, %s again to throw"
 BOARD_FLAT_SLOTS,SLOTS — %s while looking at the lever

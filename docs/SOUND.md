@@ -58,6 +58,8 @@ Flesh vs world is the only material split today. Head/torso/arm/leg share `impac
 |---|---|---|---|
 | [ ] | `bell` | `bell.ogg` | Draw signal (`DuelManager._ring_bell`) |
 | [x] | `duel_end` | `duel_end.wav` | Lethal hit / kill-cam start (`notify_kill_shot`). Not on fouls. Pitch stays concert under slow-mo |
+| [ ] | `title_whoosh` | `title_whoosh.ogg` | A duel title card's layers slide in, once per card (`gauntlet/duel_intro.gd` `show_card`, 2D) |
+| [ ] | `title_sting` | `title_sting.ogg` | The card's name lands, once per card (`TitleCard.landed`, 2D) |
 
 `duel_end` is the only real file in the folder. Revisit if the sting should change with a full mix pass.
 
@@ -69,6 +71,20 @@ Flesh vs world is the only material split today. Head/torso/arm/leg share `impac
 | [ ] | `slot_pull` | `slot_pull.ogg` | Slot lever pulled (`practice/slot_machine.gd` `pull`) |
 | [ ] | `slot_stop` | `slot_stop.ogg` | Each reel lands, −4 dB (`slot_machine.gd`) |
 | [ ] | `slot_win` | `slot_win.ogg` | Three of a kind, with the coin burst (`ImpactFeedback.slot_win`) |
+
+### Ambience
+
+| Done | Cue | File | Plays when |
+|---|---|---|---|
+| [ ] | Wind bed | `wind_bed.ogg` (seamless loop) | Procedural placeholder plays today (`scenario_base.gd`, 2D). Per-arena level is `ScenarioResource.wind_volume_db`; `ambience` overrides it. Saloon silent |
+| [ ] | Wind gust | `wind_gust.ogg` | Procedural placeholder plays today, 3D one-shot, only when a visual gust spawns (`VfxCatalog` `wind_gust`). Not a second loop |
+
+### UI
+
+| Done | Cue | File | Plays when |
+|---|---|---|---|
+| [ ] | `ui_hover` | `ui_hover.ogg` | Mouse/laser/focus enters a menu list or dialog button (`ui/menu_sfx.gd`) |
+| [ ] | `ui_click` | `ui_click.ogg` | A menu list or dialog button is pressed (`ui/menu_sfx.gd`) |
 
 ## Silent (code, no cue)
 
@@ -86,7 +102,6 @@ These already happen in gameplay with haptics or VFX but no `AudioCatalog` key. 
 | [ ] | Cigarette catch | `cig_catch.ogg` | Return to hand |
 | [ ] | Foul | `foul.ogg` | Early draw DQ (message only today) |
 | [ ] | Gauntlet cleared / over | `gauntlet_win.ogg` / `gauntlet_lose.ogg` | End-of-run HUD lines |
-| [ ] | UI confirm / back | `ui_click.ogg` | Menu / pause / settings |
 | [ ] | Footsteps | `footstep_dirt.ogg` (variants) | Locomotion. XR Tools has a footstep player; not wired on the rigs |
 
 ## Planned (no feature yet)
@@ -95,8 +110,6 @@ Do not produce files until the feature exists. Tracked in [`FEATURES.md`](FEATUR
 
 | Cue | Depends on |
 |---|---|
-| Scenario wind bed (loop) | Roadmap **Wind bed + gusts**. Slot is `ScenarioResource.ambience` (`scenario_base.gd`); no `.tres` assigns a stream. Mix per outdoor arena: still Main Street, drier Canyon, more air on Train Rooftop. Saloon is interior — do not use the outdoor bed |
-| `wind_gust` | Same item. One-shot that plays **only** when a visual gust spawns (`VfxCatalog`). Not a second loop |
 | Menu / standoff music | No music player |
 | Extra props | Radial has cigarette, coin, ace, and bottle; bottle reuses `glass_break`, no new cue |
 
@@ -120,6 +133,7 @@ Do **not** record live gunfire for `gunshot`. Build it from a licensed crack (li
 | `whizz` / `near_miss_whoosh` | Stick or jacket swung past the phone, then pitch/stretch. Ableton noise is also fine |
 | `bell` | Small bell, glass + spoon, bicycle bell. One clean note, long tail |
 | `ui_click` | Same metal-click pile as `click`, quieter / shorter |
+| `ui_hover` | Same pile again, lighter touch and pitched up — a tick, not a click |
 | `cig_throw` / `cig_catch` | Light whoosh + a small object landing in the palm |
 | `glass_break` | Drop a cheap glass bottle into a cardboard box lined with a towel (safety glasses); layer a jar lid rattle for shards |
 | `slot_pull` / `slot_stop` / `slot_win` | Ratchet or bike lever for the pull; stapler thunks for reels; coins poured onto a plate plus a small bell for the win |

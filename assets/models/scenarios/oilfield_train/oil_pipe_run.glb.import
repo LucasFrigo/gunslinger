@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://camex6g05gipa"
-path="res://.godot/imported/env_street_ground.glb-28346cf18c1618e8da591823a48983ed.scn"
+uid="uid://twmq6g6rli00"
+path="res://.godot/imported/oil_pipe_run.glb-875ae7588c0202761983988b1658ef83.scn"
 
 [deps]
 
-source_file="res://assets/models/scenarios/main_street/env_street_ground.glb"
-dest_files=["res://.godot/imported/env_street_ground.glb-28346cf18c1618e8da591823a48983ed.scn"]
+source_file="res://assets/models/scenarios/oilfield_train/oil_pipe_run.glb"
+dest_files=["res://.godot/imported/oil_pipe_run.glb-875ae7588c0202761983988b1658ef83.scn"]
 
 [params]
 
@@ -35,11 +35,11 @@ animation/fps=30
 animation/trimming=false
 animation/remove_immutable_tracks=true
 animation/import_rest_as_RESET=false
-import_script/path=""
+import_script/path="res://assets/shaders/world_surface_import.gd"
 materials/extract=0
 materials/extract_format=0
 materials/extract_path=""
 _subresources={}
 gltf/naming_version=2
-gltf/embedded_image_handling=1
+gltf/embedded_image_handling=3
 gltf/texture_map_mode=1

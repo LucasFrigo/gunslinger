@@ -14,7 +14,6 @@ signal message_shown(text: String)
 @onready var version_tag: Label = $VersionTag
 @onready var replay_tag: Label = $ReplayTag
 @onready var spectate_tag: Label = $SpectateTag
-@onready var red_flash: ColorRect = $RedFlash
 @onready var prop_radial: PropRadialOverlay = $PropRadial
 @onready var menu_holder: Control = $MenuHolder
 @onready var pause_holder: Control = $PauseHolder
@@ -37,7 +36,6 @@ func _ready() -> void:
 	health_status.visible = false
 	practice_status.visible = false
 	horde_status.visible = false
-	red_flash.modulate.a = 0.0
 	prop_radial.visible = false
 	menu_holder.visible = false
 	pause_holder.visible = false
@@ -76,6 +74,12 @@ func show_menu(is_vr: bool) -> void:
 		_menu.show_mode_select()
 	_menu.set_backdrop_dim(is_vr)
 	_menu.set_vr_layout(is_vr)
+	# The frozen backdrop still has a live Player underneath; its persistent
+	# combat readouts would otherwise bleed through the menu's corner list.
+	reload_status.visible = false
+	health_status.visible = false
+	practice_status.visible = false
+	horde_status.visible = false
 	if is_vr:
 		menu_holder.visible = false
 		return
@@ -130,6 +134,14 @@ func show_message(text: String, duration := 2.5) -> void:
 	timer.timeout.connect(func() -> void:
 		if _message_timer == timer:
 			message_label.visible = false)
+
+
+## Duel title cards: the play labels fade out without touching who shows them (each keeps
+## its own `visible`), and come back as they are.
+func set_intro_hidden(hidden: bool) -> void:
+	for node: Control in [message_label, reload_status, health_status, practice_status, horde_status,
+			replay_tag, spectate_tag, prop_radial]:
+		node.modulate.a = 0.0 if hidden else 1.0
 
 
 ## Corner badge while the duel clip is playing.
@@ -191,12 +203,6 @@ func set_prop_radial_highlight(index: int) -> void:
 
 func hide_prop_radial() -> void:
 	prop_radial.hide_wheel()
-
-
-func flash_red() -> void:
-	red_flash.modulate.a = 0.55
-	var tween := create_tween()
-	tween.tween_property(red_flash, "modulate:a", 0.0, 0.6)
 
 
 func _unhandled_input(event: InputEvent) -> void:

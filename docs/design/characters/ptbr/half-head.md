@@ -57,9 +57,9 @@ O aviso é a cor da arma que sobe. Nenhum valor de atributo está definido, e ne
 
 ## Onde
 
-A ideia **Oil-field train** no [`Roadmap.md`](../../../../Roadmap.md): um trem cruza a pista em pleno deserto aberto, bombas cavalo de pau dos dois lados do trilho, colunas de chama no horizonte. O petróleo está debaixo dos quadrados dele e o trem é dele. As chamas são a única cor na luta dele.
+O mapa **Oil-field Train** no [`Roadmap.md`](../../../../Roadmap.md) (seção 3, planejado): o trem do Train Rooftop parado num campo de petróleo ao anoitecer, bombas cavalo de pau dos dois lados do trilho, poços em chamas no horizonte. O petróleo está debaixo dos quadrados dele e o trem é dele. As chamas são a única cor na luta dele.
 
-Esta página não acrescenta nada a essa ideia. Ela depende do trem que cruza a pista (**Train Map Concept**), que também ainda é uma ideia.
+Esta página não acrescenta nada a esse mapa. Ele não espera o trem que cruza a pista (**Train Map Concept**, ainda uma ideia). Até ele chegar, o mapa é uma rodada final temporária da gauntlet.
 
 ## Referências
 
@@ -67,4 +67,4 @@ Esta página não acrescenta nada a essa ideia. Ela depende do trem que cruza a 
 - Moodboard #09 (esboço de Araki): um chapéu com pedaços recortados.
 - Moodboard #27: um cavaleiro atirando com uma pistola em cada mão.
 - Concessões de terra em xadrez: o Pacific Railway Act de 1862 deu à ferrovia as seções de uma milha quadrada de número ímpar ao lado do trilho, cinco por milha de cada lado, e a emenda de 1864 dobrou isso para dez, dentro de vinte milhas. As seções pares continuaram públicas, então terra da companhia e terra pública se alternavam como em um tabuleiro. <https://www.govinfo.gov/content/pkg/CRPT-108srpt305/html/CRPT-108srpt305.htm> · <https://www.law.cornell.edu/supremecourt/text/440/668>
-- Fatos do jogo: a ferrovia como o poder por trás das páginas do Xerife, do Fantasma e do Bêbado; as entradas Oil-field train e Train Map Concept no `Roadmap.md`.
+- Fatos do jogo: a ferrovia como o poder por trás das páginas do Xerife, do Fantasma e do Bêbado; as entradas Oil-field Train (seção 3) e Train Map Concept (Ideias) no `Roadmap.md`.

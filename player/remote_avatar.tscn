@@ -100,11 +100,13 @@ surface_material_override/0 = SubResource("mat_body")
 top_level = true
 script = ExtResource("2")
 region = &"arm"
+side = &"L"
 
 [node name="ArmHitboxR" type="Area3D" parent="."]
 top_level = true
 script = ExtResource("2")
 region = &"arm"
+side = &"R"
 
 [node name="TorsoHitbox" type="Area3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)

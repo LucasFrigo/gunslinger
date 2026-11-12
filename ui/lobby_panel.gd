@@ -231,8 +231,8 @@ func _build_row(roster: LobbyRoster, slot: int, host: bool, local: int) -> void:
 		if host and kind == LobbyRoster.Kind.HUMAN and slot > 0:
 			var kick := Button.new()
 			kick.text = tr("LOBBY_KICK")
-			# Between duels only: the host refuses it from the standoff to the draw.
-			kick.disabled = GameManager.duel.state in [DuelManager.State.STANDOFF,
+			# Between duels only: the host refuses it from the title cards to the draw.
+			kick.disabled = GameManager.duel.state in [DuelManager.State.INTRO, DuelManager.State.STANDOFF,
 					DuelManager.State.WAIT_SIGNAL, DuelManager.State.DRAW]
 			kick.pressed.connect(_on_kick.bind(slot))
 			line.add_child(kick)

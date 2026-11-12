@@ -14,6 +14,8 @@ const TORSO_BELOW_HEAD := 0.55
 const HOLSTER_LOCAL := Vector3(0.25, 0.0, 0.05)
 ## A resting hand, from the feet: by the hip on +X (mirrored for the left).
 const HIP_HAND_LOCAL := Vector3(0.25, 1.15, 0.05)
+## The objects word minus the held round: a remote avatar draws the off-hand prop only.
+const PROP_WORD_MASK := ReplayBuffer.PROP_ID_MASK | (ReplayBuffer.PROP_PLACE_MASK << ReplayBuffer.PROP_PLACE_SHIFT)
 
 @onready var head: Node3D = $Head
 ## Proximity voice comes out of the mouth, so falloff is plain 3D attenuation.
@@ -40,6 +42,9 @@ var _has_pose := false
 var _gun_drawn := false
 var _gun_free := false
 var _gun_spinning := false
+## Peer-local cosmetic: the blaster turns on its own. A VR hinge spin then stays in the
+## hand, since the 30 Hz streamed world rotation would alias at this speed.
+var _gun_twirling := false
 var _gun_steadied := false
 var _gun_held_left := false
 var _holster_left := false
@@ -49,6 +54,8 @@ var _snap_r: Marker3D
 var _snap_lock: Dictionary = {}
 var _snap_from_local: Dictionary = {}
 var _snap_blend: Dictionary = {}
+## A draw or holster teleports the gun, so the wrists jump with it next frame (BUG-026).
+var _snap_hands := false
 var replay_locked := false
 ## Lobby slot this avatar stands for (= ReplayBuffer actor id). Set before add_child.
 var slot := -1
@@ -135,6 +142,8 @@ func collapse(trail: PackedVector3Array) -> void:
 	if _dummy == null or _collapsed or not DummyBody.ragdoll_on():
 		return
 	_collapsed = true
+	if _replay_objects != null:
+		_replay_objects.dismiss()
 	_dummy.collapse(trail)
 	if gun is Revolver:
 		(gun as Revolver).release_into_world(get_tree().current_scene, DummyBody.gun_fling(trail),
@@ -238,6 +247,7 @@ func apply_pose(head_t: Transform3D, left_t: Transform3D, right_t: Transform3D, 
 	_round_xf = round_t
 	_gun_free = flags & NetworkManager.POSE_FLAG_GUN_FREE != 0
 	_gun_spinning = flags & NetworkManager.POSE_FLAG_GUN_SPINNING != 0
+	_gun_twirling = flags & NetworkManager.POSE_FLAG_GUN_TWIRL != 0
 	_gun_steadied = flags & NetworkManager.POSE_FLAG_GUN_STEADIED != 0
 	_gun_held_left = flags & NetworkManager.POSE_FLAG_GUN_HELD_LEFT != 0
 	_holster_left = flags & NetworkManager.POSE_FLAG_HOLSTER_LEFT != 0
@@ -301,6 +311,12 @@ func _freeze_gun() -> void:
 		body.collision_mask = 0
 
 
+## A held gun follows the streamed world transform while spinning or steadied. Not when the
+## spin is the cosmetic twirl: that stays in the hand and turns locally.
+func _streams_gun_pose() -> bool:
+	return (_gun_spinning and not _gun_twirling) or _gun_steadied
+
+
 func _apply_gun_parent(drawn: bool) -> void:
 	_freeze_gun()
 	gun.visible = true
@@ -314,7 +330,7 @@ func _apply_gun_parent(drawn: bool) -> void:
 	var attach: Node3D = holster
 	if drawn:
 		attach = left_hand if _gun_held_left else right_hand
-	if _gun_spinning or _gun_steadied:
+	if _streams_gun_pose():
 		if gun is WeaponBase:
 			(gun as WeaponBase).follow_parent = false
 		if gun.get_parent() != attach:
@@ -326,6 +342,8 @@ func _apply_gun_parent(drawn: bool) -> void:
 	if gun.get_parent() != attach:
 		gun.reparent(attach)
 	gun.transform = Transform3D.IDENTITY
+	if drawn != _gun_drawn:
+		_snap_hands = true
 	_gun_drawn = drawn
 
 
@@ -352,8 +370,9 @@ func _process(delta: float) -> void:
 	var head_pos := head.global_position
 	var hip := HOLSTER_LOCAL
 	hip.x = -absf(hip.x) if _holster_left else absf(hip.x)
+	# Barrel hangs down: the gun's -Z is pitched to -Y (BUG-028).
 	holster.global_transform = Transform3D(
-		yaw, Vector3(head_pos.x, global_position.y + 1.0, head_pos.z) + yaw * hip)
+		yaw * Basis(Vector3.RIGHT, -PI * 0.5), Vector3(head_pos.x, global_position.y + 1.0, head_pos.z) + yaw * hip)
 	var torso_pos := head_pos + Vector3.DOWN * TORSO_BELOW_HEAD
 	var left_shoulder := torso_pos + yaw * Vector3(-SHOULDER_LOCAL.x, SHOULDER_LOCAL.y, 0.0)
 	var right_shoulder := torso_pos + yaw * Vector3(SHOULDER_LOCAL.x, SHOULDER_LOCAL.y, 0.0)
@@ -363,11 +382,28 @@ func _process(delta: float) -> void:
 	var gun_right := _gun_drawn and not _gun_free and not _gun_held_left
 	if _dummy != null:
 		_dummy.set_gun_arm(&"L" if gun_left else (&"R" if gun_right else &""))
-	if _gun_free or _gun_spinning or _gun_steadied:
+	if _gun_free or _streams_gun_pose():
 		gun.global_transform = gun.global_transform.interpolate_with(_target_gun, weight)
 	if replay_locked:
 		gun.global_transform = _target_gun
+	if gun is WeaponBase and not replay_locked:
+		if _gun_twirling and _gun_drawn:
+			(gun as WeaponBase).begin_twirl()
+		else:
+			(gun as WeaponBase).end_twirl()
 	_drive_remote_hands(delta)
+	_drive_prop()
+
+
+## The carried off-hand prop (held, in flight, or loose) from the streamed objects word.
+## A replay owns the node while it is locked.
+func _drive_prop() -> void:
+	if replay_locked or npc_proxy:
+		return
+	var word := _objects & PROP_WORD_MASK
+	if word == 0 and _replay_objects == null:
+		return
+	_replay_objects_node().show_snapshot(word, _prop_xf, Transform3D.IDENTITY)
 
 
 func _drive_remote_hands(delta: float) -> void:
@@ -375,8 +411,9 @@ func _drive_remote_hands(delta: float) -> void:
 		return
 	var gun_left := _gun_drawn and not _gun_free and not _gun_spinning and _gun_held_left
 	var gun_right := _gun_drawn and not _gun_free and not _gun_spinning and not _gun_held_left
-	_place_snap(_snap_l, _wrist_goal(left_hand, gun_left), delta, "gun" if gun_left else "hand")
-	_place_snap(_snap_r, _wrist_goal(right_hand, gun_right), delta, "gun" if gun_right else "hand")
+	_place_snap(_snap_l, _wrist_goal(left_hand, gun_left), delta, "gun" if gun_left else "hand", _snap_hands)
+	_place_snap(_snap_r, _wrist_goal(right_hand, gun_right), delta, "gun" if gun_right else "hand", _snap_hands)
+	_snap_hands = false
 	_dummy.set_hand_curl(false, HandFingers.unpack_pose(_hands, false), HandFingers.unpack_trigger(_hands, false))
 	_dummy.set_hand_curl(true, HandFingers.unpack_pose(_hands, true), HandFingers.unpack_trigger(_hands, true))
 
@@ -389,11 +426,11 @@ func _wrist_goal(hand_node: Node3D, on_gun: bool) -> Transform3D:
 	return hand_node.global_transform
 
 
-func _place_snap(marker: Marker3D, goal: Transform3D, delta: float, lock_id: String) -> void:
+func _place_snap(marker: Marker3D, goal: Transform3D, delta: float, lock_id: String, snap := false) -> void:
 	var prev := str(_snap_lock.get(marker.name, ""))
 	if prev != lock_id:
 		_snap_from_local[marker.name] = global_transform.affine_inverse() * marker.global_transform
-		_snap_blend[marker.name] = 0.0
+		_snap_blend[marker.name] = 1.0 if snap else 0.0
 		_snap_lock[marker.name] = lock_id
 	var t := float(_snap_blend.get(marker.name, 1.0))
 	if t >= 1.0:
@@ -421,9 +458,9 @@ func _place_limb(node: Node3D, from: Vector3, to: Vector3) -> void:
 
 func take_bullet_hit(damage_mult: float, trail_points: PackedVector3Array,
 		region: StringName = CombatRules.REGION_TORSO, _self_inflicted := false,
-		_shooter_is_local := false, shooter := -1, cut := {}) -> void:
+		_shooter_is_local := false, shooter := -1, cut := {}, side := &"") -> void:
 	if NetworkManager.is_host():
-		GameManager.duel.mp_report_hit(slot, trail_points, region, damage_mult, shooter, cut)
+		GameManager.duel.mp_report_hit(slot, trail_points, region, damage_mult, shooter, cut, side)
 
 
 func hitbox_rids() -> Array[RID]:
